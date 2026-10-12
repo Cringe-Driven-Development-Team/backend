@@ -1,0 +1,35 @@
+name: TG test
+
+on:
+  push:
+    branches:
+      - api-10
+
+permissions: {}
+
+jobs:
+  send:
+    name: send
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Send to tg
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID: ${{ vars.TELEGRAM_RELEASES_TOPIC_ID || vars.TELEGRAM_TOPIC_ID }}
+        run: |
+          [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]]
+          echo "topic: $TELEGRAM_TOPIC_ID"
+          text="Тест уведомлений о выкатке. PR #38
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          args=(--data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=$text")
+          if [[ -n "$TELEGRAM_TOPIC_ID" ]]; then
+            args+=(--data-urlencode "message_thread_id=$TELEGRAM_TOPIC_ID")
+          fi
+          curl --silent --show-error --fail \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            "${args[@]}" | jq -e '.ok == true' > /dev/null
