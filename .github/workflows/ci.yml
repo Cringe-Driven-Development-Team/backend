@@ -96,6 +96,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify private package
+        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          metadata=$(gh api orgs/Cringe-Driven-Development-Team/packages/container/backend)
+          jq -e --arg repository "$EXPECTED_REPOSITORY" \
+            '.visibility == "private" and .repository.full_name == $repository' <<< "$metadata" > /dev/null
+          jq '{visibility, repository: .repository.full_name}' <<< "$metadata"
+
   deploy:
     name: deploy
     needs: docker

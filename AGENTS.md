@@ -94,10 +94,10 @@ request ID был на всех ответах, включая CSRF-отказы
 - Файлы блокнотов хранятся в S3: нужен `S3_NOTEBOOKS_BUCKET` и параметры `AWS_*`.
   Локально Compose использует SeaweedFS, production — Selectel.
 - `ci.yml` проверяет код и публикует образ, затем вызывает `cd.yml` через
-  `workflow_call` с SHA-тегом из job `docker`. CD после approval `production`
+  `workflow_call` с SHA-тегом из job `docker`. CD в environment `production`
   запускает `deploy-backend.yml` из `infra/main`. Inventory статический;
   Selectel credentials и Pulumi в CI не используются.
-- Reviewers production: `blackHATred`, `YarikMix`; достаточно одного одобрения.
+- Merge в `main` требует review ментора; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
 - API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
