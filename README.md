@@ -1,6 +1,6 @@
 # 2026_2_Cringe_Driven_Development
 
-[![CI](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/actions/workflows/ci.yml)
+[![CI](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml)
 
 Backend-репозиторий проекта «Colab» команды «Cringe Driven Development»
 
@@ -13,7 +13,7 @@ Backend-репозиторий проекта «Colab» команды «Cringe 
 друг друга; выкатки сериализуются отдельно и требуют ручного approval.
 
 После push в `main`, если все проверки прошли, образ публикуется в
-`ghcr.io/go-park-mail-ru/2026_2_cringe_driven_development`:
+`ghcr.io/cringe-driven-development-team/backend`:
 
 - `sha-<short>` — тег конкретного коммита для выбора версии при деплое;
 - `main` — последняя успешно опубликованная сборка основной ветки.
@@ -63,8 +63,8 @@ curl -i -X OPTIONS http://localhost:8080/api/v1/users/me \
 CORS-заголовки приходят и на ошибках API. Политика cookie (`SameSite`/`Secure`)
 настраивается отдельно и этим изменением не расширяется.
 
-Пакет GHCR остаётся приватным: организация `go-park-mail-ru` запрещает публичные
-пакеты. CI публикует его с `GITHUB_TOKEN`; job выкатки получает `packages: read`
+Пакет GHCR остаётся приватным. При первом publishing проверить связь package с
+командным репозиторием и права Actions. CI публикует его с `GITHUB_TOKEN`; job выкатки получает `packages: read`
 и передаёт собственный временный `GITHUB_TOKEN` в Ansible через окружение.
 Постоянный PAT для production и отдельный GHCR secret не нужны. Для `main`
 администратор включает обязательные проверки `lint`, `test`, `docker`.
@@ -72,6 +72,23 @@ CORS-заголовки приходят и на ошибках API. Полит�
 Если публикация завершается с 403, передайте ментору ссылку на запуск для
 проверки прав организации и пакета. Личные токены для обхода ограничений
 не используются; CI работает с `GITHUB_TOKEN`.
+
+## Рабочий репозиторий и синхронизация
+
+Разработка и review ментора — в командном репозитории.
+[Учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development)
+получает те же коммиты main; Actions там выключены, новые PR и reviews не копируются.
+Sync после lint/test/docker включается `COURSE_SYNC_ENABLED=true`, не зависит от deploy.
+Для повтора без deploy: Actions → Sync to course → main → `ci_run_id`
+успешного push/main CI. Deploy в caller и CD требует `PRODUCTION_ENABLED=true`.
+Отсутствующие flags выключают соответствующие операции. Production хранит
+`DEPLOY_SSH_KEY`, `SSH_KNOWN_HOSTS`, `ANSIBLE_VAULT_PASSWORD`; contract-drift
+использует repository secret `APIDOG_TOKEN`.
+Порядок включения и восстановления задач —
+[runbook организации](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
+Откат к старому registry требует полного
+`ghcr.io/go-park-mail-ru/2026_2_cringe_driven_development:sha-<old>`
+и credential с read-доступом к старому package; новый token может его не иметь.
 
 ## Авторизация
 
@@ -187,7 +204,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 - [Сервис cellestial.ru](https://cellestial.ru)
 - [Доска задач](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1)
-- [Репозиторий фронтенда](https://github.com/frontend-park-mail-ru/2026_2_Cringe_Driven_Development)
+- [Репозиторий фронтенда](https://github.com/Cringe-Driven-Development-Team/frontend)
 - [Организация команды](https://github.com/Cringe-Driven-Development-Team)
 
 ## Участники команды
@@ -205,7 +222,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 ## Как работать с задачами
 
-Код лежит здесь, а задачи — в
+Код, PR и задачи ведём в
 [Cringe-Driven-Development-Team/backend](https://github.com/Cringe-Driven-Development-Team/backend)
 и на общей [доске](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1) вместе с фронтовыми
 
@@ -217,7 +234,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 3. **Создать ветку.** Открыть задачу → в правой колонке `Development` →
    **`Create a branch`**. В `Repository destination` выбрать
-   `go-park-mail-ru/2026_2_Cringe_Driven_Development` (в поиске — `2026_2`),
+   `Cringe-Driven-Development-Team/backend`,
    имя ветки заменить на `api-<номер задачи>`, например `api-12`.
    Затем `Create branch` и локально:
 
@@ -240,10 +257,10 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
    `API-12: Эндпоинт регистрации`. В описании — **обязательно** строка
 
    ```
-   Closes Cringe-Driven-Development-Team/backend#12
+   Closes #12
    ```
 
-   Почему ссылка полная и что писать, если задача затрагивает ещё один репозиторий, —
+   Что писать, если задача затрагивает ещё один репозиторий, —
    в [гайдлайне](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md#как-закрыть).
    Убедиться, что в правой колонке PR в блоке `Development` указана задача
 
