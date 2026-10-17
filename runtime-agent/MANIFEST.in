@@ -1,0 +1,4 @@
+include requirements*.txt requirements*.in
+recursive-include deploy *
+recursive-include images *.py *.Dockerfile
+recursive-include tests *.py

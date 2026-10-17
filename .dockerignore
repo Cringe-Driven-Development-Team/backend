@@ -9,3 +9,4 @@ bin/
 docker-compose.yml
 coverage.out
 coverage-summary.txt
+runtime-agent/

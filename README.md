@@ -4,6 +4,19 @@
 
 Backend-репозиторий проекта «Colab» команды «Cringe Driven Development»
 
+## Агент исполнения Python/R
+
+[runtime-agent](runtime-agent/README.md) — отдельный Python 3.13 сервис под systemd
+на общей VPS. Создаёт изолированные Docker-сессии с Python или R, принимает команды
+через внутренний HTTP/WebSocket API и хранит журнал SQLite. Сессии работают без сети,
+с лимитами 1 CPU / 1 GiB RAM; простой 15 минут завершает сессию.
+
+Локальные проверки: `make agent-setup agent-lint agent-test agent-build`.
+Для проверки настоящих kernel нужны Docker и `make agent-images agent-integration`.
+Можно проверить транспорт с локальным Python kernel: `make agent-test-jupyter`.
+CI отдельно проверяет агент и оба образа. Установка systemd-сервиса относится к
+`infra`; создание VPS и интеграция с Go API, пользователями и ipynb сюда не входят.
+
 ## CI и Docker-образ
 
 На каждом PR запускаются `lint` (golangci-lint), `test` (проверка зависимостей

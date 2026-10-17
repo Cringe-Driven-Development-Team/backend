@@ -253,3 +253,12 @@ bin/*
 
 # Спецификация, скачанная make generate
 internal/api/openapi.yaml
+
+# Python runtime agent
+runtime-agent/.venv/
+runtime-agent/.pytest_cache/
+runtime-agent/.ruff_cache/
+runtime-agent/build/
+runtime-agent/dist/
+runtime-agent/**/__pycache__/
+runtime-agent/**/*.egg-info/
