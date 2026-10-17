@@ -3,7 +3,7 @@
 Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста.
 Правила работы с задачами, ветками и PR — в [README.md](README.md).
 Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
-в Claude Code для этого подключён скилл `cdd-tasks`.
+в Codex и Claude Code используй командный скилл `cdd-tasks`.
 
 ## Целевые продуктовые требования
 
@@ -20,7 +20,7 @@
 
 - Go: версия в [go.mod](go.mod), зависимости через Go Modules (`go.mod`, `go.sum`).
 - HTTP: `net/http`, Gorilla mux; PostgreSQL: `pgx/v5/pgxpool`.
-- Локально: Docker Compose с Go API и PostgreSQL 18.
+- Локально: Docker Compose с Go API, PostgreSQL 18 и SeaweedFS (S3).
 
 Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose.
 Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
@@ -32,7 +32,12 @@ make build            # собрать bin/server
 make test             # тесты с -race, coverage.out и итоговое покрытие
 make lint             # статический анализ
 make docker-build     # собрать colab-backend:local
-make run              # собрать и запустить API и PostgreSQL; занимает терминал
+make doctor           # инструменты, настройки и GitHub-доступы; ничего не меняет
+make check-fast       # gofmt и go vet; затем тесты изменённого пакета
+make check            # tidy, сборка всех пакетов, race-тесты, lint перед PR
+make up               # собрать и запустить API, PostgreSQL, SeaweedFS; ждать health
+make health           # GET /health; make logs — последние логи; make down — остановка
+make run              # то же окружение с логами в терминале
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
@@ -42,12 +47,13 @@ make run              # собрать и запустить API и PostgreSQL; 
 Последняя строка — итоговое покрытие; CI пишет ту же строку в summary.
 Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
 
-В другом терминале, при стандартном порте 8080:
-
-```bash
-curl --fail http://localhost:8080/health  # {"status": "alive"}
-docker compose down                    # остановить локальное окружение
-```
+Запускай клиент агента из корня backend с `go.mod`, включая отдельный worktree.
+Настройка Codex/Claude Code, gopls и сценарий новой сессии — в README, раздел
+«Harness AI-агента». Сначала вызови `go_workspace`, затем `go_search`;
+после чтения Go-файла — `go_file_context`, перед изменением символа —
+`go_symbol_references`, после изменений — `go_diagnostics` и тесты пакета.
+Если MCP недоступен, явно укажи это; `rg`, `go vet` и тесты дают запасной путь.
+Перед PR нужны `make check` и `make docker-build`; результаты и ограничения — в PR.
 
 ## Паттерны кода
 
@@ -55,21 +61,11 @@ docker compose down                    # остановить локальное
 микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай
 в `internal/` (сборка и запуск API — `internal/app`).
 
-Middleware из [internal/middleware/common.go](internal/middleware/common.go):
-
-```go
-func requestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqID := r.Header.Get("X-Request-ID")
-		if reqID == "" {
-			reqID = uuid.New().String()
-		}
-		w.Header().Set("X-Request-ID", reqID)
-		ctx := context.WithValue(r.Context(), requestIDKey, reqID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-```
+Карта кода: `cmd/main` → `internal/app` (сборка зависимостей, роутер, `/health`);
+`internal/{user,notebook}/delivery` → `usecase` → `repository/{postgres,s3}`.
+`internal/auth` — токены; `internal/middleware` — HTTP-политики;
+`migrations` — встроенные goose SQL; `internal/api/api.gen.go` — генерация из Apidog,
+не редактируй вручную. Контракт и `make generate` описаны в README.
 
 Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
 используй `r.Context()`. Порядок: request ID → logging → recover → CORS →
