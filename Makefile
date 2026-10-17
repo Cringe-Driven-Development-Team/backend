@@ -1,4 +1,4 @@
-.PHONY: lint lint-fix test build run docker-build generate migrate-new migrate-status migrate-down
+.PHONY: doctor check-fast check up health logs down lint lint-fix test build run docker-build generate migrate-new migrate-status migrate-down
 
 BIN_DIR := ./bin
 LINT_BIN := $(BIN_DIR)/golangci-lint
@@ -19,6 +19,34 @@ test:
 build:
 	go build -o bin/server ./cmd/main
 
+doctor:
+	@bash scripts/doctor.sh
+
+# Быстрый цикл; для изменённого пакета дополнительно go test ./internal/<package>.
+check-fast:
+	bash -n scripts/*.sh
+	@test -z "$$(gofmt -l $$(git ls-files --cached --others --exclude-standard '*.go'))" || (gofmt -l $$(git ls-files --cached --others --exclude-standard '*.go'); exit 1)
+	go vet ./...
+
+# Проверки job test/lint в CI; Docker проверяется отдельно make docker-build.
+check: check-fast
+	go mod tidy -diff
+	go build ./...
+	$(MAKE) test
+	$(MAKE) lint
+
+up:
+	docker compose up --build --wait --wait-timeout 120
+
+health:
+	curl --fail --silent --show-error --max-time 10 http://localhost:$(or $(PORT),8080)/health
+
+logs:
+	docker compose logs --tail=100 api db s3
+
+down:
+	docker compose down
+
 run:
 	docker compose up --build
 
@@ -35,7 +63,7 @@ generate:
 
 GOOSE := go run github.com/pressly/goose/v3/cmd/goose@v3.28.0
 
-DB_URL := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?sslmode=disable
+DB_URL := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(or $(POSTGRES_PORT),5432)/$(POSTGRES_DB)?sslmode=disable
 
 migrate-new:
 	@test -n "$(name)" || (echo 'usage: make migrate-new name=create_something' && exit 1)

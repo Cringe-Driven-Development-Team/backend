@@ -9,3 +9,7 @@ bin/
 docker-compose.yml
 coverage.out
 coverage-summary.txt
+
+.codex
+.claude
+.mcp.json

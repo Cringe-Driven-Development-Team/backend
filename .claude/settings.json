@@ -3,7 +3,7 @@
     "cdd": {
       "source": {
         "source": "github",
-        "repo": "Cringe-Driven-Development-Team/claude-plugins"
+        "repo": "Cringe-Driven-Development-Team/agent-plugins"
       }
     }
   },

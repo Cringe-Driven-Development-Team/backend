@@ -253,3 +253,6 @@ bin/*
 
 # Спецификация, скачанная make generate
 internal/api/openapi.yaml
+
+# Личные разрешения Claude Code
+.claude/settings.local.json
