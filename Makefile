@@ -73,3 +73,35 @@ migrate-status:
 
 migrate-down:
 	$(GOOSE) -dir migrations postgres "$(DB_URL)" down
+
+# Runtime agent is an independent Python project; Go commands stay unchanged.
+AGENT_PYTHON ?= python3.13
+AGENT_VENV ?= $(CURDIR)/runtime-agent/.venv
+AGENT_BIN := $(AGENT_VENV)/bin
+
+.PHONY: agent-setup agent-lint agent-test agent-test-jupyter agent-build agent-images agent-integration
+
+agent-setup:
+	$(AGENT_PYTHON) -m venv $(AGENT_VENV)
+	cd runtime-agent && $(AGENT_BIN)/python -m pip install -r requirements-dev.txt
+
+agent-lint:
+	cd runtime-agent && $(AGENT_BIN)/ruff check src tests images
+	cd runtime-agent && $(AGENT_BIN)/ruff format --check src tests images
+
+agent-test:
+	cd runtime-agent && $(AGENT_BIN)/python -m pytest -q -m 'not docker and not jupyter'
+
+agent-test-jupyter:
+	cd runtime-agent && $(AGENT_BIN)/python -m pip install -r requirements-kernel.txt
+	cd runtime-agent && RUN_JUPYTER_TESTS=1 $(AGENT_BIN)/python -m pytest -q -m jupyter
+
+agent-build:
+	cd runtime-agent && $(AGENT_BIN)/python -m build
+
+agent-images:
+	docker build -f runtime-agent/images/python.Dockerfile -t cellestial-kernel-python:local runtime-agent
+	docker build -f runtime-agent/images/r.Dockerfile -t cellestial-kernel-r:local runtime-agent
+
+agent-integration:
+	cd runtime-agent && RUN_DOCKER_TESTS=1 $(AGENT_BIN)/python -m pytest -q -m docker

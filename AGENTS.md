@@ -24,6 +24,8 @@ review ментора, кроме настроенного исключения 
 - Go: версия в [go.mod](go.mod), зависимости через Go Modules (`go.mod`, `go.sum`).
 - HTTP: `net/http`, Gorilla mux; PostgreSQL: `pgx/v5/pgxpool`.
 - Локально: Docker Compose с Go API, PostgreSQL 18 и SeaweedFS (S3).
+- `runtime-agent/`: отдельный Python 3.13 сервис systemd; Docker-контейнер на сессию
+  Python/R на общей VPS. Сеть kernel отключена; SQLite и токен хранятся на хосте.
 
 Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose.
 Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
@@ -41,6 +43,8 @@ make check            # tidy, сборка всех пакетов, race-тес�
 make up               # собрать и запустить API, PostgreSQL, SeaweedFS; ждать health
 make health           # GET /health; make logs — последние логи; make down — остановка
 make run              # то же окружение с логами в терминале
+make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
+make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
@@ -85,6 +89,8 @@ request ID был на всех ответах, включая CSRF-отказы
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
+- Агент не создаёт VPS; язык выбирается при создании контейнерной сессии.
+  Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие

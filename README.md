@@ -19,6 +19,19 @@ make down    # volumes сохраняются
 
 `make up` ждёт healthcheck до 120 секунд. При отказе используйте `make logs` и `docker compose ps -a`. `/health` проверяет ответ API, но не все операции с БД и S3. Полный список команд, настройки портов и окружения — в [локальной разработке](docs/local-development.md).
 
+## Агент исполнения Python/R
+
+[runtime-agent](runtime-agent/README.md) — отдельный Python 3.13 сервис под systemd
+на общей VPS. Создаёт изолированные Docker-сессии с Python или R, принимает команды
+через внутренний HTTP/WebSocket API и хранит журнал SQLite. Сессии работают без сети,
+с лимитами 1 CPU / 1 GiB RAM; простой 15 минут завершает сессию.
+
+Локальные проверки: `make agent-setup agent-lint agent-test agent-build`.
+Для проверки настоящих kernel нужны Docker и `make agent-images agent-integration`.
+Можно проверить транспорт с локальным Python kernel: `make agent-test-jupyter`.
+CI отдельно проверяет агент и оба образа. Установка systemd-сервиса относится к
+`infra`; создание VPS и интеграция с Go API, пользователями и ipynb сюда не входят.
+
 ## Код и документация
 
 - `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
