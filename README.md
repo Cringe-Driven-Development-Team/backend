@@ -19,10 +19,20 @@ git fetch origin
 git remote -v
 ```
 
-Включение синхронизации и production проходит последовательно по
-[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md):
-сверка задач после импорта, проверенный main CI с новым приватным package,
-проверка sync, затем reviewed infra и первая выкатка.
+Рабочие PR, ревью и задачи ведутся в этом репозитории. После успешных
+`lint`/`test`/`docker` main синхронизируется в
+[учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development):
+туда передаются те же коммиты и файлы; Actions там выключены.
+PR и ревью остаются здесь. Повторить только копирование можно через
+`Course sync`, указав ID успешного main CI, без повторной выкатки.
+
+Production использует отдельный SSH-ключ team/backend и приватный image из
+этого репозитория. Выкатка разрешена при `PRODUCTION_ENABLED=true`;
+синхронизация независимо управляется `COURSE_SYNC_ENABLED`.
+Обычный откат и восстановление из сохранённого образа без доступа к старому
+registry описаны в [инструкции infra](https://github.com/Cringe-Driven-Development-Team/infra/blob/main/ansible/README.md).
+Порядок переключения и проверки — в
+[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
 
 ## CI и Docker-образ
 

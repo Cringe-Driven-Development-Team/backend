@@ -116,7 +116,9 @@ request ID был на всех ответах, включая CSRF-отказы
 Выкатывается SHA-тег; строго неизменяемая ссылка — digest.
 Deploy требует PRODUCTION_ENABLED=true; sync — COURSE_SYNC_ENABLED=true,
 needs lint/test/docker, независимо от deploy. Повтор sync принимает только ci_run_id.
-Для старого GHCR path при откате нужны old sha-tag и прежний read credential.
+Pull старого GHCR path требует old sha-tag и прежний read credential.
+Без registry используй проверенный сохранённый образ и manual override из
+infra/ansible/README.md: pull_policy never, только API, без миграций Down.
 
 ## Коммиты
 
