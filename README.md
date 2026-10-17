@@ -4,13 +4,33 @@
 
 Backend-репозиторий проекта «Colab» команды «Cringe Driven Development»
 
+## Импорт 18 октября 2026
+
+История разработки и история репозитория задач объединены через
+[PR #24](https://github.com/Cringe-Driven-Development-Team/backend/pull/24)
+с ревью backend-ментора. Рабочая ветка `api-3` сохранена с исходным SHA;
+её изменения схемы не входят в импорт main.
+
+В существующем клоне переключить основной remote и проверить адрес перед push:
+
+```bash
+git remote set-url origin https://github.com/Cringe-Driven-Development-Team/backend.git
+git fetch origin
+git remote -v
+```
+
+Включение синхронизации и production проходит последовательно по
+[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md):
+сверка задач после импорта, проверенный main CI с новым приватным package,
+проверка sync, затем reviewed infra и первая выкатка.
+
 ## CI и Docker-образ
 
 На каждом PR запускаются `lint` (golangci-lint), `test` (проверка зависимостей
 через `go mod tidy -diff`, сборка и тесты с race detector) и `docker` (сборка образа
 без публикации). Покрытие выводится в summary запуска; минимального порога нет.
 Новый push в PR отменяет предыдущие проверки этого PR. Запуски `main` не отменяют
-друг друга; выкатки сериализуются отдельно и требуют ручного approval.
+друг друга; выкатки сериализуются отдельно. Merge в `main` требует ревью ментора.
 
 После push в `main`, если все проверки прошли, образ публикуется в
 `ghcr.io/cringe-driven-development-team/backend`:
@@ -150,12 +170,27 @@ Postgres. Caddy проксирует `/api/v1/*` в API с сохранение�
 вне `/api/v1/*` Caddy продолжает обслуживать из S3.
 
 После успешных `lint`, `test`, `docker` на push в `main` CI вызывает
-[CD](.github/workflows/cd.yml) через `workflow_call`. Его job `deploy` ждёт approval
-Environment `production`. В настройках GitHub нужно разрешить только ветку `main`
-и назначить required reviewers `blackHATred` и `YarikMix`: достаточно одного
-одобрения. Это внешняя настройка GitHub, workflow сам reviewers не создаёт.
+[CD](.github/workflows/cd.yml) через `workflow_call`, если `PRODUCTION_ENABLED=true`.
+Job `deploy` использует environment `production`, разрешённый только из `main`.
+Отдельного approval environment в действующей конфигурации нет: обязательное
+ревью ментора проходит перед merge в `main`.
 
-Первоначальная подготовка:
+Подготовка командного CI:
+
+- Приватный package `ghcr.io/cringe-driven-development-team/backend` связан с этим
+  репозиторием; после публикации CI проверяет приватность и привязку через API.
+- Отдельный public key командного CI хранится в
+  `infra/ansible/files/authorized_keys/ci-team-backend.pub`, private key — только
+  в environment secret `DEPLOY_SSH_KEY`. Public key принимается через infra PR
+  и устанавливается существующим операторским ключом перед первым deploy.
+- `SSH_KNOWN_HOSTS` содержит проверенный host key; `ANSIBLE_VAULT_PASSWORD` —
+  пароль существующего Vault. Личный SSH-ключ оператора в CI не передаётся.
+- Старый `ci.pub`, package и образ сохраняются для отката. Новый image default
+  в infra принимается после успешной публикации нового package и остановки
+  старых deploy jobs. Первое включение и откат описаны в
+  [runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
+
+Первоначальная подготовка учебного CI (история до переноса):
 
 - Пакет остаётся приватным и доступен `GITHUB_TOKEN` курсового репозитория.
   Ansible временно авторизует VPS для pull и делает logout даже при ошибке.
