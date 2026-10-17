@@ -11,7 +11,7 @@ on:
 jobs:
   deploy:
     name: deploy
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'true'
     permissions:
       contents: read
       packages: read

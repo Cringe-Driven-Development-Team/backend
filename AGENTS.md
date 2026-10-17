@@ -4,6 +4,8 @@
 Правила работы с задачами, ветками и PR — в [README.md](README.md).
 Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
 в Claude Code для этого подключён скилл `cdd-tasks`.
+Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
+review ментора. Учебный repo — копия main без Actions и новых PR.
 
 ## Целевые продуктовые требования
 
@@ -89,7 +91,7 @@ request ID был на всех ответах, включая CSRF-отказы
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
 - Агент не создаёт VPS; язык выбирается при создании контейнерной сессии.
   Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
-- [Frontend](https://github.com/frontend-park-mail-ru/2026_2_Cringe_Driven_Development):
+- [Frontend](https://github.com/Cringe-Driven-Development-Team/frontend):
   клиент React/Vite, обращается к Go API по контракту Apidog.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
@@ -98,10 +100,10 @@ request ID был на всех ответах, включая CSRF-отказы
 - Файлы блокнотов хранятся в S3: нужен `S3_NOTEBOOKS_BUCKET` и параметры `AWS_*`.
   Локально Compose использует SeaweedFS, production — Selectel.
 - `ci.yml` проверяет код и публикует образ, затем вызывает `cd.yml` через
-  `workflow_call` с SHA-тегом из job `docker`. CD после approval `production`
+  `workflow_call` с SHA-тегом из job `docker`. CD в environment `production`
   запускает `deploy-backend.yml` из `infra/main`. Inventory статический;
   Selectel credentials и Pulumi в CI не используются.
-- Reviewers production: `blackHATred`, `YarikMix`; достаточно одного одобрения.
+- Merge в `main` требует review ментора; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
 - API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
@@ -114,10 +116,13 @@ request ID был на всех ответах, включая CSRF-отказы
 [CD](https://cringe-driven-development-team.github.io/docs/cd.html).
 
 Фактический [CI backend](.github/workflows/ci.yml) публикует
-`ghcr.io/go-park-mail-ru/2026_2_cringe_driven_development`: теги `sha-<short>` и `main`,
+`ghcr.io/cringe-driven-development-team/backend`: теги `sha-<short>` и `main`,
 без `latest`. Пакет приватный; job выкатки передаёт временный `GITHUB_TOKEN`
 с `packages: read` через окружение Ansible. Постоянного GHCR-токена в Vault нет.
 Выкатывается SHA-тег; строго неизменяемая ссылка — digest.
+Deploy требует PRODUCTION_ENABLED=true; sync — COURSE_SYNC_ENABLED=true,
+needs lint/test/docker, независимо от deploy. Повтор sync принимает только ci_run_id.
+Для старого GHCR path при откате нужны old sha-tag и прежний read credential.
 
 ## Коммиты
 
