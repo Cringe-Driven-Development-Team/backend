@@ -5,7 +5,8 @@
 Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
 в Claude Code для этого подключён скилл `cdd-tasks`.
 Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
-review ментора. Учебный repo — копия main без Actions и новых PR.
+review ментора, кроме настроенного исключения YarikMix (см. README).
+Учебный repo — копия main без Actions и новых PR.
 
 ## Целевые продуктовые требования
 
@@ -97,7 +98,7 @@ request ID был на всех ответах, включая CSRF-отказы
   `workflow_call` с SHA-тегом из job `docker`. CD в environment `production`
   запускает `deploy-backend.yml` из `infra/main`. Inventory статический;
   Selectel credentials и Pulumi в CI не используются.
-- Merge в `main` требует review ментора; отдельного approval environment нет.
+- Merge в `main` требует review ментора, кроме YarikMix; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
 - API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
