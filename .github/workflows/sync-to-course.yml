@@ -1,0 +1,47 @@
+name: Sync to course
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful push/main CI run ID to synchronize (no deploy)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resolve:
+    if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.ref == 'refs/heads/main' && vars.COURSE_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.run.outputs.sha }}
+    steps:
+      - name: Resolve CI run SHA
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO: ${{ github.repository }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CI_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Invalid CI run ID"; exit 1; }
+          SHA=$(gh api "repos/$SOURCE_REPO/actions/runs/$CI_RUN_ID" --jq .head_sha)
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid run SHA"; exit 1; }
+          printf 'sha=%s\n' "$SHA" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: [resolve]
+    permissions:
+      contents: read
+      actions: read
+    uses: Cringe-Driven-Development-Team/.github/.github/workflows/sync-to-course.yml@b532b271f3e816fc329d46fec954ab61467e6b6e
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      ci_run_id: ${{ inputs.ci_run_id }}
+      automation_ref: b532b271f3e816fc329d46fec954ab61467e6b6e
+    secrets:
+      COURSE_SYNC_SSH_KEY: ${{ secrets.COURSE_SYNC_SSH_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

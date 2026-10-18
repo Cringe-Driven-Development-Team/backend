@@ -61,7 +61,7 @@ fi
 if command -v gh >/dev/null 2>&1; then
     if gh auth status >/dev/null 2>&1; then
         ok 'gh authentication'
-        for repo in Cringe-Driven-Development-Team/backend go-park-mail-ru/2026_2_Cringe_Driven_Development; do
+        for repo in Cringe-Driven-Development-Team/backend; do
             if gh api "repos/$repo" --jq .permissions.push 2>/dev/null | awk '$0 == "true" {ok=1} END {exit !ok}'; then
                 ok "GitHub write access: $repo"
             else fail "нет доступа к $repo — проверьте gh auth status, членство, сеть и разрешения песочницы"; fi

@@ -1,8 +1,38 @@
 # 2026_2_Cringe_Driven_Development
 
-[![CI](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/actions/workflows/ci.yml)
+[![CI](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml)
 
 Backend-репозиторий проекта «Colab» команды «Cringe Driven Development»
+
+## Импорт 18 октября 2026
+
+История разработки и история репозитория задач объединены через
+[PR #24](https://github.com/Cringe-Driven-Development-Team/backend/pull/24)
+с ревью backend-ментора. Рабочая ветка `api-3` сохранена с исходным SHA;
+её изменения схемы не входят в импорт main.
+
+В существующем клоне переключить основной remote и проверить адрес перед push:
+
+```bash
+git remote set-url origin https://github.com/Cringe-Driven-Development-Team/backend.git
+git fetch origin
+git remote -v
+```
+
+Рабочие PR, ревью и задачи ведутся в этом репозитории. После успешных
+`lint`/`test`/`docker` main синхронизируется в
+[учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development):
+туда передаются те же коммиты и файлы; Actions там выключены.
+PR и ревью остаются здесь. Повторить только копирование можно через
+`Course sync`, указав ID успешного main CI, без повторной выкатки.
+
+Production использует отдельный SSH-ключ team/backend и приватный image из
+этого репозитория. Выкатка разрешена при `PRODUCTION_ENABLED=true`;
+синхронизация независимо управляется `COURSE_SYNC_ENABLED`.
+Обычный откат и восстановление из сохранённого образа без доступа к старому
+registry описаны в [инструкции infra](https://github.com/Cringe-Driven-Development-Team/infra/blob/main/ansible/README.md).
+Порядок переключения и проверки — в
+[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
 
 ## CI и Docker-образ
 
@@ -10,10 +40,11 @@ Backend-репозиторий проекта «Colab» команды «Cringe 
 через `go mod tidy -diff`, сборка и тесты с race detector) и `docker` (сборка образа
 без публикации). Покрытие выводится в summary запуска; минимального порога нет.
 Новый push в PR отменяет предыдущие проверки этого PR. Запуски `main` не отменяют
-друг друга; выкатки сериализуются отдельно и требуют ручного approval.
+друг друга; выкатки сериализуются отдельно. Правила ревью и исключение для
+`YarikMix` описаны ниже.
 
 После push в `main`, если все проверки прошли, образ публикуется в
-`ghcr.io/go-park-mail-ru/2026_2_cringe_driven_development`:
+`ghcr.io/cringe-driven-development-team/backend`:
 
 - `sha-<short>` — тег конкретного коммита для выбора версии при деплое;
 - `main` — последняя успешно опубликованная сборка основной ветки.
@@ -100,7 +131,8 @@ Codex загружает проектный config только в trusted-пр�
 проверяет Go в PATH относительно `go.mod` (с `GOTOOLCHAIN=local`, без
 автоматического скачивания toolchain), CGO/C-компилятор для race, Make/curl/Git, gopls MCP,
 Docker daemon/Compose, конфигурацию и секреты, авторизацию gh и права записи
-в репозитории кода и задач. Ошибки собираются вместе, код возврата ненулевой.
+в командном `Cringe-Driven-Development-Team/backend`, где теперь находятся и код, и задачи.
+Права записи в учебную копию для разработки не нужны. Ошибки собираются вместе, код возврата ненулевой.
 Установку клиента, trust, подключение MCP и наличие скилла проверяйте отдельно.
 Apidog-токен нужен только для изменения контракта (`make generate`); Projects
 нужен для работы с доской (`gh auth refresh -s project`). Сетевой отказ в
@@ -122,7 +154,7 @@ Apidog-токен нужен только для изменения контра
    Docker-проверка не публикует образ. Контракт меняйте по процессу Apidog ниже.
 6. В PR запишите версии клиентов/gopls, результаты MCP, doctor, health и проверок.
    Недоступный клиент отмечайте как непроверенный; запуск MCP сам по себе
-   не подтверждает интеграцию с обоими клиентами. Не вливайте PR без ревью ментора.
+   не подтверждает интеграцию с обоими клиентами. Правила ревью и исключение YarikMix — в разделе работы с задачами ниже.
 
 CORS для запросов с `credentials: "include"` настраивает Go API через
 `CORS_ALLOWED_ORIGINS`. Если переменная отсутствует, разрешены
@@ -148,8 +180,8 @@ curl -i -X OPTIONS http://localhost:8080/api/v1/users/me \
 CORS-заголовки приходят и на ошибках API. Политика cookie (`SameSite`/`Secure`)
 настраивается отдельно и этим изменением не расширяется.
 
-Пакет GHCR остаётся приватным: организация `go-park-mail-ru` запрещает публичные
-пакеты. CI публикует его с `GITHUB_TOKEN`; job выкатки получает `packages: read`
+Пакет GHCR остаётся приватным. При первом publishing проверить связь package с
+командным репозиторием и права Actions. CI публикует его с `GITHUB_TOKEN`; job выкатки получает `packages: read`
 и передаёт собственный временный `GITHUB_TOKEN` в Ansible через окружение.
 Постоянный PAT для production и отдельный GHCR secret не нужны. Для `main`
 администратор включает обязательные проверки `lint`, `test`, `docker`.
@@ -157,6 +189,23 @@ CORS-заголовки приходят и на ошибках API. Полит�
 Если публикация завершается с 403, передайте ментору ссылку на запуск для
 проверки прав организации и пакета. Личные токены для обхода ограничений
 не используются; CI работает с `GITHUB_TOKEN`.
+
+## Рабочий репозиторий и синхронизация
+
+Разработка и review ментора — в командном репозитории.
+[Учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development)
+получает те же коммиты main; Actions там выключены, новые PR и reviews не копируются.
+Sync после lint/test/docker включается `COURSE_SYNC_ENABLED=true`, не зависит от deploy.
+Для повтора без deploy: Actions → Sync to course → main → `ci_run_id`
+успешного push/main CI. Deploy в caller и CD требует `PRODUCTION_ENABLED=true`.
+Отсутствующие flags выключают соответствующие операции. Production хранит
+`DEPLOY_SSH_KEY`, `SSH_KNOWN_HOSTS`, `ANSIBLE_VAULT_PASSWORD`; contract-drift
+использует repository secret `APIDOG_TOKEN`.
+Порядок включения и восстановления задач —
+[runbook организации](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
+Откат к старому registry требует полного
+`ghcr.io/go-park-mail-ru/2026_2_cringe_driven_development:sha-<old>`
+и credential с read-доступом к старому package; новый token может его не иметь.
 
 ## Авторизация
 
@@ -218,12 +267,27 @@ Postgres. Caddy проксирует `/api/v1/*` в API с сохранение�
 вне `/api/v1/*` Caddy продолжает обслуживать из S3.
 
 После успешных `lint`, `test`, `docker` на push в `main` CI вызывает
-[CD](.github/workflows/cd.yml) через `workflow_call`. Его job `deploy` ждёт approval
-Environment `production`. В настройках GitHub нужно разрешить только ветку `main`
-и назначить required reviewers `blackHATred` и `YarikMix`: достаточно одного
-одобрения. Это внешняя настройка GitHub, workflow сам reviewers не создаёт.
+[CD](.github/workflows/cd.yml) через `workflow_call`, если `PRODUCTION_ENABLED=true`.
+Job `deploy` использует environment `production`, разрешённый только из `main`.
+Отдельного approval environment в действующей конфигурации нет: обязательное
+ревью ментора проходит перед merge в `main`, кроме разрешённого исключения для `YarikMix`.
 
-Первоначальная подготовка:
+Подготовка командного CI:
+
+- Приватный package `ghcr.io/cringe-driven-development-team/backend` связан с этим
+  репозиторием; после публикации CI проверяет приватность и привязку через API.
+- Отдельный public key командного CI хранится в
+  `infra/ansible/files/authorized_keys/ci-team-backend.pub`, private key — только
+  в environment secret `DEPLOY_SSH_KEY`. Public key принимается через infra PR
+  и устанавливается существующим операторским ключом перед первым deploy.
+- `SSH_KNOWN_HOSTS` содержит проверенный host key; `ANSIBLE_VAULT_PASSWORD` —
+  пароль существующего Vault. Личный SSH-ключ оператора в CI не передаётся.
+- Старый `ci.pub`, package и образ сохраняются для отката. Новый image default
+  в infra принимается после успешной публикации нового package и остановки
+  старых deploy jobs. Первое включение и откат описаны в
+  [runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
+
+Первоначальная подготовка учебного CI (история до переноса):
 
 - Пакет остаётся приватным и доступен `GITHUB_TOKEN` курсового репозитория.
   Ansible временно авторизует VPS для pull и делает logout даже при ошибке.
@@ -272,7 +336,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 - [Сервис cellestial.ru](https://cellestial.ru)
 - [Доска задач](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1)
-- [Репозиторий фронтенда](https://github.com/frontend-park-mail-ru/2026_2_Cringe_Driven_Development)
+- [Репозиторий фронтенда](https://github.com/Cringe-Driven-Development-Team/frontend)
 - [Организация команды](https://github.com/Cringe-Driven-Development-Team)
 
 ## Участники команды
@@ -290,7 +354,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 ## Как работать с задачами
 
-Код лежит здесь, а задачи — в
+Код, PR и задачи ведём в
 [Cringe-Driven-Development-Team/backend](https://github.com/Cringe-Driven-Development-Team/backend)
 и на общей [доске](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1) вместе с фронтовыми
 
@@ -302,7 +366,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 3. **Создать ветку.** Открыть задачу → в правой колонке `Development` →
    **`Create a branch`**. В `Repository destination` выбрать
-   `go-park-mail-ru/2026_2_Cringe_Driven_Development` (в поиске — `2026_2`),
+   `Cringe-Driven-Development-Team/backend`,
    имя ветки заменить на `api-<номер задачи>`, например `api-12`.
    Затем `Create branch` и локально:
 
@@ -325,14 +389,14 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
    `API-12: Эндпоинт регистрации`. В описании — **обязательно** строка
 
    ```
-   Closes Cringe-Driven-Development-Team/backend#12
+   Closes #12
    ```
 
-   Почему ссылка полная и что писать, если задача затрагивает ещё один репозиторий, —
+   Что писать, если задача затрагивает ещё один репозиторий, —
    в [гайдлайне](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md#как-закрыть).
    Убедиться, что в правой колонке PR в блоке `Development` указана задача
 
-6. **Получить апрув** от [Александра](https://github.com/blackHATred)
+6. **Получить апрув** от [Александра](https://github.com/blackHATred), кроме исключения для `YarikMix` ниже.
 
 7. **Влить в `main`** через `Merge pull request`.
    Задача закроется сама, карточка уедет в `Done`
@@ -340,6 +404,15 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 > [!TIP]
 > Ветку, созданную руками (`git switch -c api-12 origin/main`), с задачей свяжет
 > та же строка `Closes …` — поэтому она обязательна всегда
+
+## Ревью и исключение для YarikMix
+
+По согласованию владельца `YarikMix` может мержить backend PR без Approve,
+включая свои PR. Для остальных участников ревью Александра обязательно.
+Исключение задано только для этого аккаунта в approval ruleset и действует
+только через PR. Отдельный ruleset без bypass требует зелёные `lint`, `test`,
+`docker`, актуальность ветки и разрешение обсуждений; force-push и удаление main
+запрещены. Используется обычный merge commit без `--admin`.
 
 ## Типы коммитов
 
