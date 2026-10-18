@@ -28,7 +28,8 @@ type SessionStore interface {
 // PasswordHasher отделяет сценарии от алгоритма хранения паролей.
 type PasswordHasher interface {
 	Hash(password string) (string, error)
-	Compare(hash, password string) error
+	// Compare отличает несовпадение (false, nil) от сбоя проверки.
+	Compare(hash, password string) (matched bool, err error)
 }
 
 // RefreshTokens выпускает случайный refresh-токен и его хеш для хранилища.

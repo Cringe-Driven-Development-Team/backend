@@ -1,9 +1,12 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -186,6 +189,43 @@ func TestHandlerErrors(t *testing.T) {
 				t.Errorf("тело ответа (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestHandlerLoginVerificationFailure(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	failure := errors.New("unsupported password hash version")
+	uc := &fakeUsecase{err: fmt.Errorf("compare password: %w", failure)}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"login":"alice","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	newRouter(uc).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body %s", rec.Code, rec.Body)
+	}
+	var got api.Error
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := api.Error{Code: api.Internal, Message: "internal server error"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("error response (-want +got):\n%s", diff)
+	}
+	if strings.Contains(rec.Body.String(), failure.Error()) {
+		t.Error("response exposed verification failure")
+	}
+	if !strings.Contains(logs.String(), failure.Error()) {
+		t.Error("log lost original verification failure")
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == cookies.AccessName || cookie.Name == cookies.RefreshName {
+			t.Errorf("verification failure issued %s", cookie.Name)
+		}
 	}
 }
 

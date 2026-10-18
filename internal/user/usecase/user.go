@@ -51,7 +51,11 @@ func (uc *UserUsecase) Login(ctx context.Context, login, password string) (domai
 	if err != nil {
 		return domain.User{}, Session{}, err
 	}
-	if uc.passwords.Compare(hash, password) != nil {
+	matched, err := uc.passwords.Compare(hash, password)
+	if err != nil {
+		return domain.User{}, Session{}, fmt.Errorf("compare password: %w", err)
+	}
+	if !matched {
 		return domain.User{}, Session{}, ErrInvalidCredentials
 	}
 	sess, err := uc.startSession(ctx, u.ID)
