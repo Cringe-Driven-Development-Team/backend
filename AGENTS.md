@@ -78,7 +78,7 @@ request ID был на всех ответах, включая CSRF-отказы
 ## Границы backend и эксплуатация
 
 Общепроектный контекст, текущая архитектура и планы — в
-[docs/site/project-context.md](https://github.com/Cringe-Driven-Development-Team/docs/blob/main/site/project-context.md).
+[Контекст проекта](https://docs.cellestial.ru/project-context).
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
