@@ -72,7 +72,7 @@ func run(out, envFile string) error {
 	if token == "" {
 		return errors.New("APIDOG_TOKEN is not set: create a personal token in Apidog " +
 			"(Account Settings → API Access Token) and put it into .env, " +
-			"see «Как менять контракт» in README.md")
+			"see docs/apidog.md")
 	}
 
 	req := exportRequest{
