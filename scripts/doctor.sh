@@ -51,7 +51,7 @@ if command -v docker >/dev/null 2>&1; then
             csrf=$(printf '%s\n' "$config_env" | awk '/^CSRF_SECRET=/{sub(/^[^=]*=/,""); print}')
             for secret in JWT_SECRET CSRF_SECRET; do
                 if [ "$secret" = JWT_SECRET ]; then value=$jwt; else value=$csrf; fi
-                if [ -n "$value" ]; then ok "$secret задан"; else fail "$secret пуст — скопируйте .env.example в .env и задайте отдельный случайный секрет (README)"; fi
+                if [ -n "$value" ]; then ok "$secret задан"; else fail "$secret пуст — скопируйте .env.example в .env и задайте отдельный случайный секрет (docs/local-development.md)"; fi
             done
             if [ -n "$jwt" ] && [ "$jwt" = "$csrf" ]; then fail 'JWT_SECRET и CSRF_SECRET должны отличаться'; fi
             unset config_env jwt csrf value
@@ -70,10 +70,10 @@ if command -v gh >/dev/null 2>&1; then
 fi
 client=0
 for cli in codex claude; do
-    if command -v "$cli" >/dev/null 2>&1; then ok "$cli найден; MCP trust и подключение проверьте в новой сессии по README"; client=1; fi
+    if command -v "$cli" >/dev/null 2>&1; then ok "$cli найден; MCP trust и подключение проверьте в новой сессии по docs/local-development.md"; client=1; fi
 done
 if [ "$client" = 0 ]; then fail 'установите Codex или Claude Code для работы агента'; fi
-warn 'cdd-tasks, MCP trust, доступ Apidog и Projects проверяются отдельно по README; doctor не подтверждает их'
+warn 'cdd-tasks, MCP trust и Projects проверяются по docs/local-development.md; доступ Apidog — по docs/apidog.md; doctor не подтверждает их'
 if [ ! -x bin/golangci-lint ]; then warn 'golangci-lint ещё не установлен; make lint скачает версию из Makefile'; fi
 printf '\nОшибок: %s\n' "$failures"
 [ "$failures" -eq 0 ]

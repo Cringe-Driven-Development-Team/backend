@@ -51,8 +51,9 @@ make run              # то же окружение с логами в терм
 Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
 
 Запускай клиент агента из корня backend с `go.mod`, включая отдельный worktree.
-Настройка Codex/Claude Code, gopls и сценарий новой сессии — в README, раздел
-«Harness AI-агента». Сначала вызови `go_workspace`, затем `go_search`;
+Настройка Codex/Claude Code, gopls и сценарий новой сессии — в
+[docs/local-development.md](docs/local-development.md), раздел «Harness AI-агента».
+Сначала вызови `go_workspace`, затем `go_search`;
 после чтения Go-файла — `go_file_context`, перед изменением символа —
 `go_symbol_references`, после изменений — `go_diagnostics` и тесты пакета.
 Если MCP недоступен, явно укажи это; `rg`, `go vet` и тесты дают запасной путь.
@@ -68,7 +69,7 @@ make run              # то же окружение с логами в терм
 `internal/{user,notebook}/delivery` → `usecase` → `repository/{postgres,s3}`.
 `internal/auth` — токены; `internal/middleware` — HTTP-политики;
 `migrations` — встроенные goose SQL; `internal/api/api.gen.go` — генерация из Apidog,
-не редактируй вручную. Контракт и `make generate` описаны в README.
+не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
 Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
 используй `r.Context()`. Порядок: request ID → logging → recover → CORS →
@@ -126,9 +127,9 @@ refactor(auth): вынести проверку токена в middleware
 README содержит краткую, актуальную информацию о проекте и его использовании.
 Порядок выкатки конкретной задачи, временные зависимости и условия слияния
 описывай в задаче при необходимости, а не в README.
-Подробную проектную документацию размещай в репозитории организации
-[docs](https://github.com/Cringe-Driven-Development-Team/docs);
-локальную папку `docs/` используй по явному запросу.
+Подробную общепроектную документацию размещай в репозитории организации
+[docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции
+backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
 
 ## Актуальность документа
 
