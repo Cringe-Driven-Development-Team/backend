@@ -19,10 +19,20 @@ git fetch origin
 git remote -v
 ```
 
-Включение синхронизации и production проходит последовательно по
-[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md):
-сверка задач после импорта, проверенный main CI с новым приватным package,
-проверка sync, затем reviewed infra и первая выкатка.
+Рабочие PR, ревью и задачи ведутся в этом репозитории. После успешных
+`lint`/`test`/`docker` main синхронизируется в
+[учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development):
+туда передаются те же коммиты и файлы; Actions там выключены.
+PR и ревью остаются здесь. Повторить только копирование можно через
+`Course sync`, указав ID успешного main CI, без повторной выкатки.
+
+Production использует отдельный SSH-ключ team/backend и приватный image из
+этого репозитория. Выкатка разрешена при `PRODUCTION_ENABLED=true`;
+синхронизация независимо управляется `COURSE_SYNC_ENABLED`.
+Обычный откат и восстановление из сохранённого образа без доступа к старому
+registry описаны в [инструкции infra](https://github.com/Cringe-Driven-Development-Team/infra/blob/main/ansible/README.md).
+Порядок переключения и проверки — в
+[runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md).
 
 ## Агент исполнения Python/R
 
@@ -44,7 +54,8 @@ CI отдельно проверяет агент и оба образа. Уст
 через `go mod tidy -diff`, сборка и тесты с race detector) и `docker` (сборка образа
 без публикации). Покрытие выводится в summary запуска; минимального порога нет.
 Новый push в PR отменяет предыдущие проверки этого PR. Запуски `main` не отменяют
-друг друга; выкатки сериализуются отдельно. Merge в `main` требует ревью ментора.
+друг друга; выкатки сериализуются отдельно. Правила ревью и исключение для
+`YarikMix` описаны ниже.
 
 После push в `main`, если все проверки прошли, образ публикуется в
 `ghcr.io/cringe-driven-development-team/backend`:
@@ -187,7 +198,7 @@ Postgres. Caddy проксирует `/api/v1/*` в API с сохранение�
 [CD](.github/workflows/cd.yml) через `workflow_call`, если `PRODUCTION_ENABLED=true`.
 Job `deploy` использует environment `production`, разрешённый только из `main`.
 Отдельного approval environment в действующей конфигурации нет: обязательное
-ревью ментора проходит перед merge в `main`.
+ревью ментора проходит перед merge в `main`, кроме разрешённого исключения для `YarikMix`.
 
 Подготовка командного CI:
 
@@ -313,7 +324,7 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
    в [гайдлайне](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md#как-закрыть).
    Убедиться, что в правой колонке PR в блоке `Development` указана задача
 
-6. **Получить апрув** от [Александра](https://github.com/blackHATred)
+6. **Получить апрув** от [Александра](https://github.com/blackHATred), кроме исключения для `YarikMix` ниже.
 
 7. **Влить в `main`** через `Merge pull request`.
    Задача закроется сама, карточка уедет в `Done`
@@ -321,6 +332,15 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 > [!TIP]
 > Ветку, созданную руками (`git switch -c api-12 origin/main`), с задачей свяжет
 > та же строка `Closes …` — поэтому она обязательна всегда
+
+## Ревью и исключение для YarikMix
+
+По согласованию владельца `YarikMix` может мержить backend PR без Approve,
+включая свои PR. Для остальных участников ревью Александра обязательно.
+Исключение задано только для этого аккаунта в approval ruleset и действует
+только через PR. Отдельный ruleset без bypass требует зелёные `lint`, `test`,
+`docker`, актуальность ветки и разрешение обсуждений; force-push и удаление main
+запрещены. Используется обычный merge commit без `--admin`.
 
 ## Типы коммитов
 

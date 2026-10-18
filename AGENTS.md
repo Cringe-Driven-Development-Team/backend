@@ -5,7 +5,8 @@
 Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
 в Claude Code для этого подключён скилл `cdd-tasks`.
 Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
-review ментора. Учебный repo — копия main без Actions и новых PR.
+review ментора, кроме настроенного исключения YarikMix (см. README).
+Учебный repo — копия main без Actions и новых PR.
 
 ## Целевые продуктовые требования
 
@@ -103,7 +104,7 @@ request ID был на всех ответах, включая CSRF-отказы
   `workflow_call` с SHA-тегом из job `docker`. CD в environment `production`
   запускает `deploy-backend.yml` из `infra/main`. Inventory статический;
   Selectel credentials и Pulumi в CI не используются.
-- Merge в `main` требует review ментора; отдельного approval environment нет.
+- Merge в `main` требует review ментора, кроме YarikMix; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
 - API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
@@ -122,7 +123,9 @@ request ID был на всех ответах, включая CSRF-отказы
 Выкатывается SHA-тег; строго неизменяемая ссылка — digest.
 Deploy требует PRODUCTION_ENABLED=true; sync — COURSE_SYNC_ENABLED=true,
 needs lint/test/docker, независимо от deploy. Повтор sync принимает только ci_run_id.
-Для старого GHCR path при откате нужны old sha-tag и прежний read credential.
+Pull старого GHCR path требует old sha-tag и прежний read credential.
+Без registry используй проверенный сохранённый образ и manual override из
+infra/ansible/README.md: pull_policy never, только API, без миграций Down.
 
 ## Коммиты
 
