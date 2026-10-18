@@ -20,7 +20,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-devkey}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-devsecret}
     ports:
-      - "8333:8333"
+      - "${S3_PORT:-8333}:8333"
     volumes:
       - s3_data:/data
     healthcheck:
