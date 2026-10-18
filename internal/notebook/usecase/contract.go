@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/models"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 )
 
 // MaxCells ограничивает число блоков в блокноте.
@@ -21,11 +21,11 @@ var (
 
 // Usecase работает только с блокнотами владельца.
 type Usecase interface {
-	List(ctx context.Context, ownerID int64) ([]models.NotebookSummary, error)
+	List(ctx context.Context, ownerID int64) ([]domain.NotebookSummary, error)
 	// Create кладёт в новый блокнот один пустой блок кода.
-	Create(ctx context.Context, ownerID int64, name string) (models.Notebook, error)
-	Get(ctx context.Context, id, ownerID int64) (models.Notebook, error)
+	Create(ctx context.Context, ownerID int64, name string) (domain.Notebook, error)
+	Get(ctx context.Context, id, ownerID int64) (domain.Notebook, error)
 	// CreateCell вставляет пустой блок на место index, а без index — в конец.
-	CreateCell(ctx context.Context, id, ownerID int64, kind models.CellKind, index *int) (models.Cell, error)
+	CreateCell(ctx context.Context, id, ownerID int64, kind domain.CellKind, index *int) (domain.Cell, error)
 	DeleteCell(ctx context.Context, id, ownerID int64, index int) error
 }

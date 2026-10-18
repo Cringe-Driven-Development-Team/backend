@@ -443,12 +443,24 @@ Go API хранит файлы блокнотов в бакете `S3_NOTEBOOKS_
 
 Статусы доска двигает сама по событиям в pull request. Руками нужно только взять задачу в работу — остальное происходит автоматически
 
+## Структура кода
+
+- `cmd/main` и `cmd/apidog` — точки входа; логика экспорта контракта — `internal/tooling/apidog`.
+- `internal/app` собирает зависимости и запускает API; `internal/config` читает окружение.
+- `internal/transport/http` содержит роутер, `/health`, сгенерированный API,
+  middleware, security, cookies, principal и преобразование ошибок.
+- `internal/user` и `internal/notebook`: `domain` — типы предметной области,
+  `usecase` — сценарии и необходимые им интерфейсы, `delivery/http` — обработчики,
+  `adapters` — реализации для PostgreSQL, S3, криптографии и ipynb.
+- Зависимости направлены внутрь: адаптеры реализуют интерфейсы usecase;
+  domain не знает об HTTP и хранилищах. Сборка реализаций выполняется в app.
+
 ## Как менять контракт
 
 Контракт API живёт в [Apidog](https://app.apidog.com/project/1382426) (проект `1382426`).
 Источник истины — ветка `main` Apidog, опубликованная документация —
 [vb78fyael1.apidog.io](https://vb78fyael1.apidog.io/). Файла `openapi.yaml` в репозитории нет:
-`make generate` скачивает спецификацию по API и генерирует `internal/api/api.gen.go`.
+`make generate` скачивает спецификацию по API и генерирует `internal/transport/http/api/api.gen.go`.
 Сгенерированный код коммитится и руками не правится
 
 ### Личный токен

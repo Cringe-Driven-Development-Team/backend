@@ -45,7 +45,7 @@ make run              # то же окружение с логами в терм
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
 `-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов).
-Из `coverage.out` исключаются `internal/api`, `cmd/apidog`,
+Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`,
 `migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается.
 Последняя строка — итоговое покрытие; CI пишет ту же строку в summary.
 Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
@@ -64,11 +64,13 @@ make run              # то же окружение с логами в терм
 микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай
 в `internal/` (сборка и запуск API — `internal/app`).
 
-Карта кода: `cmd/main` → `internal/app` (сборка зависимостей, роутер, `/health`);
-`internal/{user,notebook}/delivery` → `usecase` → `repository/{postgres,s3}`.
-`internal/auth` — токены; `internal/middleware` — HTTP-политики;
-`migrations` — встроенные goose SQL; `internal/api/api.gen.go` — генерация из Apidog,
-не редактируй вручную. Контракт и `make generate` описаны в README.
+Карта кода: `cmd/main` → `internal/app` (сборка и запуск), `internal/config` — окружение.
+`internal/transport/http` — роутер, `/health`, API-генерация, middleware,
+security, cookies, principal и httperr; `internal/{user,notebook}/delivery/http`
+→ `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
+реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
+`internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
+`internal/transport/http/api/api.gen.go` не редактируй вручную; см. README.
 
 Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
 используй `r.Context()`. Порядок: request ID → logging → recover → CORS →

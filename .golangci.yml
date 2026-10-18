@@ -28,6 +28,32 @@ linters:
               desc: 'Google Go Style: Do not use assertion libraries.'
             - pkg: github.com/google/go-cmp/cmp
               desc: Библиотека go-cmp разрешена только в файлах тестов (*_test.go)
+        domain:
+          list-mode: lax
+          files:
+            - '**/internal/*/domain/*.go'
+            - '!$test'
+          deny:
+            - pkg: github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal
+              desc: Domain не зависит от прикладных и инфраструктурных пакетов.
+            - pkg: net/http
+              desc: Domain не знает о HTTP.
+        usecase:
+          list-mode: lax
+          files:
+            - '**/internal/*/usecase/*.go'
+            - '!$test'
+          deny:
+            - pkg: github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport
+              desc: Usecase не зависит от HTTP.
+            - pkg: github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters
+              desc: Адаптеры реализуют порты usecase.
+            - pkg: github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters
+              desc: Адаптеры реализуют порты usecase.
+            - pkg: golang.org/x/crypto
+              desc: Криптография подключается через порты.
+            - pkg: net/http
+              desc: Usecase не знает о HTTP.
         tests:
           list-mode: lax
           files:
@@ -51,7 +77,7 @@ linters:
         - empty
         - stdlib
         - context.Context
-        - github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/api\..*ResponseObject$
+        - github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api\..*ResponseObject$
     nakedret:
       max-func-lines: 5
     prealloc:

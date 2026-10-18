@@ -1,0 +1,57 @@
+package config
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func settings(values map[string]string) func(string) (string, bool) {
+	return func(key string) (string, bool) { v, ok := values[key]; return v, ok }
+}
+func TestLoadDefaultsAndOverrides(t *testing.T) {
+	values := map[string]string{"JWT_SECRET": "jwt", "CSRF_SECRET": "csrf", "S3_NOTEBOOKS_BUCKET": "notebooks"}
+	c, err := LoadFrom(settings(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Host != "0.0.0.0" || c.Port != "8080" || c.AccessTTL != 15*time.Minute || c.RefreshTTL != 720*time.Hour || c.WriteTimeout != 15*time.Second || c.CookieSecure {
+		t.Fatalf("unexpected defaults: host=%s port=%s ttl=%s", c.Host, c.Port, c.AccessTTL)
+	}
+	values["PORT"] = "9000"
+	values["ACCESS_TOKEN_TTL"] = "5m"
+	values["WRITE_TIMEOUT"] = "invalid"
+	values["COOKIE_SECURE"] = "true"
+	values["CORS_ALLOWED_ORIGINS"] = ""
+	c, err = LoadFrom(settings(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Port != "9000" || c.AccessTTL != 5*time.Minute || c.WriteTimeout != 15*time.Second || !c.CookieSecure || c.CORSOrigins != "" {
+		t.Fatal("overrides or duration fallback changed")
+	}
+}
+func TestMissingRequiredSettings(t *testing.T) {
+	for _, key := range []string{"JWT_SECRET", "CSRF_SECRET", "S3_NOTEBOOKS_BUCKET"} {
+		t.Run(key, func(t *testing.T) {
+			v := map[string]string{"JWT_SECRET": "jwt", "CSRF_SECRET": "csrf", "S3_NOTEBOOKS_BUCKET": "bucket"}
+			delete(v, key)
+			_, err := LoadFrom(settings(v))
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("missing %s: %v", key, err)
+			}
+		})
+	}
+}
+func TestPostgresURLCredentials(t *testing.T) {
+	c := Config{DBUser: "app@user", DBPassword: "p@ss:word?#%$&", DBHost: "postgres", DBName: "app_db"}
+	p, err := pgxpool.ParseConfig(c.PostgresURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ConnConfig.User != c.DBUser || p.ConnConfig.Password != c.DBPassword || p.ConnConfig.Host != c.DBHost || p.ConnConfig.Database != c.DBName || p.ConnConfig.Port != 5432 {
+		t.Fatal("connection parameters changed")
+	}
+}

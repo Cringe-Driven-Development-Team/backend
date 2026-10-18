@@ -6,23 +6,23 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/ipynb"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/models"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/ipynb"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/google/go-cmp/cmp"
 )
 
 const owner = int64(1)
 
 // kinds сокращает блоки до их видов.
-func kinds(cells []models.Cell) []models.CellKind {
-	out := make([]models.CellKind, 0, len(cells))
+func kinds(cells []domain.Cell) []domain.CellKind {
+	out := make([]domain.CellKind, 0, len(cells))
 	for _, c := range cells {
 		out = append(out, c.Kind)
 	}
 	return out
 }
 
-func ids(cells []models.Cell) []string {
+func ids(cells []domain.Cell) []string {
 	out := make([]string, 0, len(cells))
 	for _, c := range cells {
 		out = append(out, c.ID)
@@ -41,7 +41,7 @@ func TestCreate(t *testing.T) {
 	if n.Name != "Анализ данных" {
 		t.Errorf("name = %q, пробелы по краям не обрезаны", n.Name)
 	}
-	if diff := cmp.Diff([]models.CellKind{models.CellKindCode}, kinds(n.Cells)); diff != "" {
+	if diff := cmp.Diff([]domain.CellKind{domain.CellKindCode}, kinds(n.Cells)); diff != "" {
 		t.Errorf("новый блокнот (-want +got):\n%s", diff)
 	}
 	if n.CellsCount != 1 {
@@ -101,11 +101,11 @@ func TestCreateCell(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			cell, err := uc.CreateCell(ctx, n.ID, owner, models.CellKindMarkdown, tt.index)
+			cell, err := uc.CreateCell(ctx, n.ID, owner, domain.CellKindMarkdown, tt.index)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("CreateCell() error = %v, want %v", err, tt.wantErr)
 			}
-			if tt.wantErr == nil && (cell.Kind != models.CellKindMarkdown || cell.Source != "") {
+			if tt.wantErr == nil && (cell.Kind != domain.CellKindMarkdown || cell.Source != "") {
 				t.Errorf("CreateCell() = %+v, want пустой markdown", cell)
 			}
 			got, err := uc.Get(ctx, n.ID, owner)
@@ -129,7 +129,7 @@ func TestDeleteCell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []models.CellKind{models.CellKindMarkdown, models.CellKindCode} {
+	for _, kind := range []domain.CellKind{domain.CellKindMarkdown, domain.CellKindCode} {
 		if _, err = uc.CreateCell(ctx, n.ID, owner, kind, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +183,7 @@ func TestNotFound(t *testing.T) {
 		{name: "Get чужого", call: func() error { _, err := uc.Get(ctx, n.ID, stranger); return err }},
 		{name: "Get несуществующего", call: func() error { _, err := uc.Get(ctx, 999, owner); return err }},
 		{name: "CreateCell чужого", call: func() error {
-			_, err := uc.CreateCell(ctx, n.ID, stranger, models.CellKindCode, nil)
+			_, err := uc.CreateCell(ctx, n.ID, stranger, domain.CellKindCode, nil)
 			return err
 		}},
 		{name: "DeleteCell чужого", call: func() error { return uc.DeleteCell(ctx, n.ID, stranger, 0) }},
@@ -209,14 +209,14 @@ func TestTooManyCells(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full := make([]models.Cell, MaxCells)
+	full := make([]domain.Cell, MaxCells)
 	for i := range full {
-		full[i] = models.Cell{ID: "x" + strconv.Itoa(i), Kind: models.CellKindCode}
+		full[i] = domain.Cell{ID: "x" + strconv.Itoa(i), Kind: domain.CellKindCode}
 	}
 	if files.data[n.FileKey], err = ipynb.Build(full); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = uc.CreateCell(ctx, n.ID, owner, models.CellKindCode, nil); !errors.Is(err, ErrTooManyCells) {
+	if _, err = uc.CreateCell(ctx, n.ID, owner, domain.CellKindCode, nil); !errors.Is(err, ErrTooManyCells) {
 		t.Errorf("CreateCell() сверх предела: error = %v, want ErrTooManyCells", err)
 	}
 }
@@ -230,7 +230,7 @@ func TestS3ErrorKeepsCellsCount(t *testing.T) {
 	}
 	files.down = true
 
-	if _, err = uc.CreateCell(ctx, n.ID, owner, models.CellKindCode, nil); !errors.Is(err, errS3Down) {
+	if _, err = uc.CreateCell(ctx, n.ID, owner, domain.CellKindCode, nil); !errors.Is(err, errS3Down) {
 		t.Fatalf("CreateCell() error = %v, want errS3Down", err)
 	}
 	if meta.notebooks[n.ID].CellsCount != 1 {

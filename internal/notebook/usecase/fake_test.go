@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/models"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/repository"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/ipynb"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 )
 
 var errS3Down = errors.New("s3 is down")
@@ -16,13 +16,11 @@ var errS3Down = errors.New("s3 is down")
 // fakeMeta хранит строки блокнотов в памяти; мьютекс заменяет блокировку строки.
 type fakeMeta struct {
 	mu        sync.Mutex
-	notebooks map[int64]models.Notebook
+	notebooks map[int64]domain.Notebook
 	lastID    int64
 }
 
-var _ repository.Metadata = (*fakeMeta)(nil)
-
-func (m *fakeMeta) Create(_ context.Context, n models.Notebook) (models.Notebook, error) {
+func (m *fakeMeta) Create(_ context.Context, n domain.Notebook) (domain.Notebook, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastID++
@@ -33,25 +31,25 @@ func (m *fakeMeta) Create(_ context.Context, n models.Notebook) (models.Notebook
 	return n, nil
 }
 
-func (m *fakeMeta) List(_ context.Context, ownerID int64) ([]models.NotebookSummary, error) {
+func (m *fakeMeta) List(_ context.Context, ownerID int64) ([]domain.NotebookSummary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	list := []models.NotebookSummary{}
+	list := []domain.NotebookSummary{}
 	for _, n := range m.notebooks {
 		if n.OwnerID == ownerID {
-			list = append(list, models.NotebookSummary{ID: n.ID, Name: n.Name, CellsCount: n.CellsCount, UpdatedAt: n.UpdatedAt})
+			list = append(list, domain.NotebookSummary{ID: n.ID, Name: n.Name, CellsCount: n.CellsCount, UpdatedAt: n.UpdatedAt})
 		}
 	}
 	return list, nil
 }
 
-func (m *fakeMeta) Get(_ context.Context, id, ownerID int64) (models.Notebook, error) {
+func (m *fakeMeta) Get(_ context.Context, id, ownerID int64) (domain.Notebook, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.find(id, ownerID)
 }
 
-func (m *fakeMeta) Modify(_ context.Context, id, ownerID int64, fn func(models.Notebook) (int, error)) error {
+func (m *fakeMeta) Modify(_ context.Context, id, ownerID int64, fn func(domain.Notebook) (int, error)) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n, err := m.find(id, ownerID)
@@ -68,10 +66,10 @@ func (m *fakeMeta) Modify(_ context.Context, id, ownerID int64, fn func(models.N
 	return nil
 }
 
-func (m *fakeMeta) find(id, ownerID int64) (models.Notebook, error) {
+func (m *fakeMeta) find(id, ownerID int64) (domain.Notebook, error) {
 	n, ok := m.notebooks[id]
 	if !ok || n.OwnerID != ownerID {
-		return models.Notebook{}, repository.ErrNotebookNotFound
+		return domain.Notebook{}, ErrNotebookNotFound
 	}
 	return n, nil
 }
@@ -84,14 +82,12 @@ type fakeFiles struct {
 	down bool
 }
 
-var _ repository.Files = (*fakeFiles)(nil)
-
 func (f *fakeFiles) Get(_ context.Context, key string) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	data, ok := f.data[key]
 	if !ok {
-		return nil, repository.ErrFileNotFound
+		return nil, ErrFileNotFound
 	}
 	return data, nil
 }
@@ -108,9 +104,9 @@ func (f *fakeFiles) Put(_ context.Context, key string, data []byte) error {
 
 // newTestUsecase выдаёт id по порядку: c1, c2, c3...
 func newTestUsecase() (*NotebookUsecase, *fakeMeta, *fakeFiles) {
-	meta := &fakeMeta{notebooks: map[int64]models.Notebook{}}
+	meta := &fakeMeta{notebooks: map[int64]domain.Notebook{}}
 	files := &fakeFiles{data: map[string][]byte{}}
-	uc := NewNotebookUsecase(meta, files)
+	uc := NewNotebookUsecase(meta, files, ipynb.Codec{})
 	var mu sync.Mutex
 	next := 0
 	uc.newID = func() string {
