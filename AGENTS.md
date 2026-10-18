@@ -1,7 +1,6 @@
 # Backend: инструкции для агента
 
-Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста.
-Правила работы с задачами, ветками и PR — в [README.md](README.md).
+Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md).
 Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
 в Claude Code для этого подключён скилл `cdd-tasks`.
 Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
@@ -27,8 +26,7 @@ review ментора, кроме настроенного исключения 
 - `runtime-agent/`: отдельный Python 3.13 сервис systemd; Docker-контейнер на сессию
   Python/R на общей VPS. Сеть kernel отключена; SQLite и токен хранятся на хосте.
 
-Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose.
-Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
@@ -141,9 +139,7 @@ refactor(auth): вынести проверку токена в middleware
 
 ## Документация
 
-README содержит краткую, актуальную информацию о проекте и его использовании.
-Порядок выкатки конкретной задачи, временные зависимости и условия слияния
-описывай в задаче при необходимости, а не в README.
+README содержит краткую, актуальную информацию о проекте и его использовании. Порядок выкатки конкретной задачи, временные зависимости и условия слияния описывай в задаче при необходимости, а не в README.
 Подробную проектную документацию размещай в репозитории организации
 [docs](https://github.com/Cringe-Driven-Development-Team/docs);
 локальную папку `docs/` используй по явному запросу.
