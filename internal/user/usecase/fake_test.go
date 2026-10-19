@@ -7,12 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/models"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/repository"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// fakeRepo реализует repository.Repository в памяти вместо базы.
+// fakeRepo реализует Repository в памяти вместо базы.
 type fakeRepo struct {
 	mu       sync.Mutex
 	users    map[int64]fakeUser
@@ -21,10 +20,8 @@ type fakeRepo struct {
 	lastID int64
 }
 
-var _ repository.Repository = (*fakeRepo)(nil)
-
 type fakeUser struct {
-	models.User
+	domain.User
 	hash string
 }
 
@@ -38,32 +35,32 @@ func newFakeRepo() *fakeRepo {
 }
 
 // addUser кладёт пользователя с паролем. MinCost, чтобы тесты не ждали bcrypt.
-func (r *fakeRepo) addUser(login, password string) models.User {
+func (r *fakeRepo) addUser(login, password string) domain.User {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
 		panic(err)
 	}
 	r.lastID++
-	u := models.User{ID: r.lastID, Login: login}
+	u := domain.User{ID: r.lastID, Login: login}
 	r.users[u.ID] = fakeUser{User: u, hash: string(hash)}
 	return u
 }
 
-func (r *fakeRepo) CreateUser(_ context.Context, login, passwordHash string) (models.User, error) {
+func (r *fakeRepo) CreateUser(_ context.Context, login, passwordHash string) (domain.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.users {
 		if strings.EqualFold(u.Login, login) {
-			return models.User{}, repository.ErrLoginTaken
+			return domain.User{}, ErrLoginTaken
 		}
 	}
 	r.lastID++
-	u := models.User{ID: r.lastID, Login: login}
+	u := domain.User{ID: r.lastID, Login: login}
 	r.users[u.ID] = fakeUser{User: u, hash: passwordHash}
 	return u, nil
 }
 
-func (r *fakeRepo) UserByLogin(_ context.Context, login string) (models.User, string, error) {
+func (r *fakeRepo) UserByLogin(_ context.Context, login string) (domain.User, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.users {
@@ -71,15 +68,15 @@ func (r *fakeRepo) UserByLogin(_ context.Context, login string) (models.User, st
 			return u.User, u.hash, nil
 		}
 	}
-	return models.User{}, "", repository.ErrUserNotFound
+	return domain.User{}, "", ErrUserNotFound
 }
 
-func (r *fakeRepo) UserByID(_ context.Context, id int64) (models.User, error) {
+func (r *fakeRepo) UserByID(_ context.Context, id int64) (domain.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	u, ok := r.users[id]
 	if !ok {
-		return models.User{}, repository.ErrUserNotFound
+		return domain.User{}, ErrUserNotFound
 	}
 	return u.User, nil
 }
@@ -96,7 +93,7 @@ func (r *fakeRepo) DeleteSession(_ context.Context, tokenHash string) (int64, ti
 	defer r.mu.Unlock()
 	s, ok := r.sessions[tokenHash]
 	if !ok {
-		return 0, time.Time{}, repository.ErrSessionNotFound
+		return 0, time.Time{}, ErrSessionNotFound
 	}
 	delete(r.sessions, tokenHash)
 	return s.userID, s.expiresAt, nil
@@ -114,7 +111,7 @@ func (r *fakeRepo) SessionByTokenHash(_ context.Context, tokenHash string) (int6
 	defer r.mu.Unlock()
 	s, ok := r.sessions[tokenHash]
 	if !ok {
-		return 0, time.Time{}, repository.ErrSessionNotFound
+		return 0, time.Time{}, ErrSessionNotFound
 	}
 	return s.userID, s.expiresAt, nil
 }

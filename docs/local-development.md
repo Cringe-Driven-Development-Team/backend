@@ -93,7 +93,7 @@ Apidog-токен нужен только для изменения контра
 2. Через MCP вызовите `go_workspace`: ожидается модуль из текущего `go.mod`.
    Если модуль не найден, перезапустите клиент из корня backend.
 3. `go_search` с `Handler.GetCurrentUser` должен найти
-   `internal/user/delivery/user.go`; `go_file_context` — показать зависимости.
+   `internal/user/delivery/http/user.go`; `go_file_context` — показать зависимости.
    `go_symbol_references` для `NewHandler` в этом файле должен найти сборку в
    `internal/app/app.go` и тесты; `go_diagnostics` для файла — вернуть диагностику.
    В аргументах путей используйте абсолютный путь **своего** checkout.

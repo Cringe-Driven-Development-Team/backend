@@ -21,9 +21,9 @@ make down    # volumes сохраняются
 
 ## Код и документация
 
-- `cmd/main` — точка входа; `internal/app` собирает зависимости и маршруты.
-- `internal/{user,notebook}` — доставка, use case и хранилища; `internal/auth` и `internal/middleware` — авторизация и HTTP-политики.
-- `migrations/` — SQL-миграции goose; `internal/api/api.gen.go` — код, сгенерированный из Apidog, вручную не редактируйте.
+- `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
+- `internal/transport/http` — маршруты, авторизация и HTTP-политики; `internal/{user,notebook}` — domain, usecase, HTTP-обработчики и адаптеры хранения.
+- `migrations/` — SQL-миграции goose; `internal/transport/http/api/api.gen.go` — код, сгенерированный из Apidog, вручную не редактируйте.
 - [Авторизация, CSRF и CORS](docs/authentication.md) — cookie, заголовки и примеры запросов.
 - [Контракт API в Apidog](docs/apidog.md) — ветки, Merge Request и `make generate`.
 - [CI, образ и деплой](docs/release.md) — проверки, синхронизация учебной копии и выпуск. Production-конфигурация принадлежит [infra](https://github.com/Cringe-Driven-Development-Team/infra).

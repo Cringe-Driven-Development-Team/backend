@@ -3,8 +3,9 @@
 Контракт API живёт в [Apidog](https://app.apidog.com/project/1382426) (проект `1382426`).
 Источник истины — ветка `main` Apidog, опубликованная документация —
 [vb78fyael1.apidog.io](https://vb78fyael1.apidog.io/). Файла `openapi.yaml` в репозитории нет:
-`make generate` скачивает спецификацию по API и генерирует `internal/api/api.gen.go`.
-Сгенерированный код коммитится и руками не правится
+`make generate` скачивает спецификацию по API и генерирует
+`internal/transport/http/api/api.gen.go`.
+Сгенерированный код коммитится и руками не правится.
 
 ## Личный токен
 

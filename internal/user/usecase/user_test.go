@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/auth"
+	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 )
 
 const refreshTTL = time.Hour
@@ -27,7 +27,7 @@ func TestUserUsecaseRegister(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newFakeRepo()
 			repo.addUser("bob", "password123")
-			uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+			uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 
 			u, sess, err := uc.Register(context.Background(), tt.login, tt.password)
 			if !errors.Is(err, tt.wantErr) {
@@ -42,7 +42,7 @@ func TestUserUsecaseRegister(t *testing.T) {
 			if sess.AccessToken == "" || sess.RefreshToken == "" {
 				t.Error("после регистрации нет токенов")
 			}
-			if _, ok := repo.sessions[auth.HashRefreshToken(sess.RefreshToken)]; !ok {
+			if _, ok := repo.sessions[usersecurity.HashRefreshToken(sess.RefreshToken)]; !ok {
 				t.Error("сессия не сохранена по хешу токена")
 			}
 		})
@@ -65,7 +65,7 @@ func TestUserUsecaseLogin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newFakeRepo()
 			want := repo.addUser("alice", "password123")
-			uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+			uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 
 			u, _, err := uc.Login(context.Background(), tt.login, tt.password)
 			if !errors.Is(err, tt.wantErr) {
@@ -93,7 +93,7 @@ func TestUserUsecaseRefresh(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newFakeRepo()
 			repo.addUser("alice", "password123")
-			uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+			uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 			_, first, err := uc.Login(context.Background(), "alice", "password123")
 			if err != nil {
 				t.Fatal(err)
@@ -122,7 +122,7 @@ func TestUserUsecaseRefresh(t *testing.T) {
 func TestUserUsecaseLogout(t *testing.T) {
 	repo := newFakeRepo()
 	repo.addUser("alice", "password123")
-	uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 	_, sess, err := uc.Login(context.Background(), "alice", "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestUserUsecaseLogout(t *testing.T) {
 func TestUserUsecaseCurrentUser(t *testing.T) {
 	repo := newFakeRepo()
 	want := repo.addUser("alice", "password123")
-	uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 
 	got, err := uc.CurrentUser(context.Background(), want.ID)
 	if err != nil || got != want {
@@ -156,7 +156,7 @@ func TestUserUsecaseCurrentUser(t *testing.T) {
 func TestRefreshUserIDDoesNotConsumeSession(t *testing.T) {
 	repo := newFakeRepo()
 	user := repo.addUser("alice", "password123")
-	uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 	_, session, err := uc.Login(context.Background(), "alice", "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestRefreshUserIDDoesNotConsumeSession(t *testing.T) {
 func TestRefreshUserIDInvalidSessions(t *testing.T) {
 	repo := newFakeRepo()
 	repo.addUser("alice", "password123")
-	uc := NewUserUsecase(repo, fakeTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 	_, session, err := uc.Login(context.Background(), "alice", "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +192,7 @@ func TestRefreshUserIDInvalidSessions(t *testing.T) {
 	if _, err = uc.RefreshUserID(context.Background(), session.RefreshToken); !errors.Is(err, ErrInvalidRefresh) {
 		t.Fatalf("expired session: %v", err)
 	}
-	if _, ok := repo.sessions[auth.HashRefreshToken(session.RefreshToken)]; !ok {
+	if _, ok := repo.sessions[usersecurity.HashRefreshToken(session.RefreshToken)]; !ok {
 		t.Fatal("lookup deleted expired session")
 	}
 }

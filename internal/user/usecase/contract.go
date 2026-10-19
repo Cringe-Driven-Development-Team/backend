@@ -1,12 +1,12 @@
 // Package usecase содержит бизнес-логику пользователя: регистрацию, вход, сессии.
-// Не знает ни про HTTP, ни про то, какая база под repository.Repository.
+// Не знает ни про HTTP, ни про то, какие хранилища реализуют прикладные порты.
 package usecase
 
 import (
 	"context"
 	"errors"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/models"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
 
 var (
@@ -20,14 +20,14 @@ var (
 )
 
 type Usecase interface {
-	Register(ctx context.Context, login, password string) (models.User, models.Session, error)
-	Login(ctx context.Context, login, password string) (models.User, models.Session, error)
+	Register(ctx context.Context, login, password string) (domain.User, Session, error)
+	Login(ctx context.Context, login, password string) (domain.User, Session, error)
 	// Refresh делает ротацию: старая сессия удаляется, вместо неё создаётся новая.
-	Refresh(ctx context.Context, refreshToken string) (models.Session, error)
+	Refresh(ctx context.Context, refreshToken string) (Session, error)
 	// RefreshUserID читает владельца действующей refresh-сессии без её ротации.
 	RefreshUserID(ctx context.Context, refreshToken string) (int64, error)
 	Logout(ctx context.Context, refreshToken string) error
-	CurrentUser(ctx context.Context, id int64) (models.User, error)
+	CurrentUser(ctx context.Context, id int64) (domain.User, error)
 }
 
 type TokenIssuer interface {

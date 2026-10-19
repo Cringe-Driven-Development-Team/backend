@@ -22,13 +22,12 @@ build:
 doctor:
 	@bash scripts/doctor.sh
 
-# Быстрый цикл; для изменённого пакета дополнительно go test ./internal/<package>.
 check-fast:
 	bash -n scripts/*.sh
-	@test -z "$$(gofmt -l $$(git ls-files --cached --others --exclude-standard '*.go'))" || (gofmt -l $$(git ls-files --cached --others --exclude-standard '*.go'); exit 1)
+	@files="$$(git ls-files --cached --others --exclude-standard --deduplicate '*.go' | while IFS= read -r file; do if [ -f "$$file" ]; then gofmt -l "$$file"; fi; done)"; \
+	test -z "$$files" || { printf '%s\n' "$$files"; exit 1; }
 	go vet ./...
 
-# Проверки job test/lint в CI; Docker проверяется отдельно make docker-build.
 check: check-fast
 	go mod tidy -diff
 	go build ./...
@@ -53,11 +52,11 @@ run:
 docker-build:
 	docker build -f build/main.Dockerfile -t colab-backend:local .
 
-SPEC_FILE := internal/api/openapi.yaml
+SPEC_FILE := internal/transport/http/api/openapi.yaml
 
 generate:
 	go run ./cmd/apidog -o $(SPEC_FILE)
-	cd internal/api && go tool oapi-codegen -config cfg.yaml openapi.yaml
+	cd internal/transport/http/api && go tool oapi-codegen -config cfg.yaml openapi.yaml
 
 -include .env
 
