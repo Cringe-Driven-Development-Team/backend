@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	LogLevel                           slog.Level
 	Host, Port                         string
 	WriteTimeout, ReadTimeout          time.Duration
 	JWTSecret, CSRFSecret              string
@@ -41,7 +42,8 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		Host: get("HOST", "0.0.0.0"), Port: get("PORT", "8080"),
+		LogLevel: slog.LevelInfo,
+		Host:     get("HOST", "0.0.0.0"), Port: get("PORT", "8080"),
 		WriteTimeout: duration("WRITE_TIMEOUT", 15*time.Second), ReadTimeout: duration("READ_TIMEOUT", 15*time.Second),
 		JWTSecret: get("JWT_SECRET", ""), CSRFSecret: get("CSRF_SECRET", ""),
 		AccessTTL: duration("ACCESS_TOKEN_TTL", 15*time.Minute), RefreshTTL: duration("REFRESH_TOKEN_TTL", 720*time.Hour),
@@ -49,6 +51,20 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 		CORSOrigins:  get("CORS_ALLOWED_ORIGINS", "https://cellestial.ru,http://localhost:5173"), AppOrigin: get("APP_ORIGIN", "https://cellestial.ru"),
 		NotebooksBucket: get("S3_NOTEBOOKS_BUCKET", ""),
 		DBUser:          get("POSTGRES_USER", "postgres"), DBPassword: get("POSTGRES_PASSWORD", "postgres"), DBHost: get("POSTGRES_HOST", "db"), DBName: get("POSTGRES_DB", "app_db"),
+	}
+	if raw, ok := lookup("LOG_LEVEL"); ok {
+		switch raw {
+		case "debug":
+			c.LogLevel = slog.LevelDebug
+		case "info":
+			c.LogLevel = slog.LevelInfo
+		case "warn":
+			c.LogLevel = slog.LevelWarn
+		case "error":
+			c.LogLevel = slog.LevelError
+		default:
+			return Config{}, errors.New("invalid LOG_LEVEL: expected debug, info, warn or error")
+		}
 	}
 	if c.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is not set")

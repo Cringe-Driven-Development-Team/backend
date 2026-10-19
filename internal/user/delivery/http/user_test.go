@@ -16,6 +16,7 @@ import (
 	"time"
 
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/cookies"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
@@ -199,7 +200,7 @@ func TestHandlerLoginVerificationFailure(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
 	failure := errors.New("unsupported password hash version")
-	uc := &fakeUsecase{err: fmt.Errorf("compare password: %w", failure)}
+	uc := &fakeUsecase{err: observability.WithCode(fmt.Errorf("compare password: %w", failure), "password_compare_failed")}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"login":"alice","password":"password123"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -219,8 +220,8 @@ func TestHandlerLoginVerificationFailure(t *testing.T) {
 	if strings.Contains(rec.Body.String(), failure.Error()) {
 		t.Error("response exposed verification failure")
 	}
-	if !strings.Contains(logs.String(), failure.Error()) {
-		t.Error("log lost original verification failure")
+	if !strings.Contains(logs.String(), "password_compare_failed") || strings.Contains(logs.String(), failure.Error()) {
+		t.Error("log must contain only a safe verification failure code")
 	}
 	for _, cookie := range rec.Result().Cookies() {
 		if cookie.Name == cookies.AccessName || cookie.Name == cookies.RefreshName {

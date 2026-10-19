@@ -1,9 +1,14 @@
 package httptransport
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/google/uuid"
 )
 
@@ -55,5 +60,55 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
+	handler, _, _, access, _ := csrfRouter(t)
+	var out bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(observability.NewHandler(slog.NewJSONHandler(&out, nil))))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	for _, tc := range []struct {
+		name, method, path, access, origin, route string
+		status                                    int
+	}{
+		{"success", http.MethodGet, BaseURL + "/users/me", access, "", BaseURL + "/users/me", 200},
+		{"unauthorized", http.MethodGet, BaseURL + "/users/me", "", "", BaseURL + "/users/me", 401},
+		{"csrf", http.MethodPost, BaseURL + "/auth/login", "", "", "unmatched", 403},
+		{"preflight", http.MethodOptions, BaseURL + "/users/me", "", "https://cellestial.ru", "unmatched", 204},
+		{"not_found", http.MethodGet, "/missing/SECRET?token=SECRET", "", "", "unmatched", 404},
+		{"method_not_allowed", http.MethodPost, "/health", "", "", "unmatched", 405},
+		{"parameterized", http.MethodGet, BaseURL + "/notebooks/invalid", access, "", BaseURL + "/notebooks/{id}", 400},
+		{"panic", http.MethodGet, BaseURL + "/notebooks", access, "", BaseURL + "/notebooks", 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out.Reset()
+			req := csrfRequest(tc.method, tc.path, "", tc.access, "")
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+				req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+			}
+			rec := serveCSRF(handler, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d, want %d", rec.Code, tc.status)
+			}
+			var summary map[string]any
+			for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+				var entry map[string]any
+				if err := json.Unmarshal([]byte(line), &entry); err != nil {
+					t.Fatalf("bad JSON log: %v", err)
+				}
+				if entry["msg"] == "http.request" {
+					if summary != nil {
+						t.Fatalf("multiple HTTP summaries: %s", out.String())
+					}
+					summary = entry
+				}
+			}
+			if summary == nil || summary["status"] != float64(tc.status) || summary["route"] != tc.route || summary["method"] != tc.method || summary["request_id"] != rec.Header().Get("X-Request-ID") || strings.Contains(out.String(), "SECRET") {
+				t.Fatalf("wrong HTTP summary: %s", out.String())
+			}
+		})
 	}
 }
