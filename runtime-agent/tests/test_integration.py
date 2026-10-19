@@ -169,7 +169,13 @@ async def test_real_execution_inspection_interrupt_restart(real_agent, language)
     assert generation != session.generation
     agent.accept(sid, command("cleared", "x"))
     assert (await completed(agent, sid, "cleared"))["state"] == "FAILED"
-    crash = "import os; os._exit(1)" if language == "python" else "quit(save='no', status=1)"
+    # IRkernel replaces quit()/q() with an ask_exit payload for the frontend;
+    # kill the process directly to exercise kernel death before an execute_reply.
+    crash = (
+        "import os; os._exit(1)"
+        if language == "python"
+        else "tools::pskill(Sys.getpid(), signal = 9L)"
+    )
     agent.accept(sid, command("crash", crash))
     assert (await completed(agent, sid, "crash"))["state"] == "UNKNOWN"
     async with asyncio.timeout(10):
