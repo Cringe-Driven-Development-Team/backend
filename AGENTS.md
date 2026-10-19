@@ -51,8 +51,9 @@ make run              # то же окружение с логами в терм
 Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
 
 Запускай клиент агента из корня backend с `go.mod`, включая отдельный worktree.
-Настройка Codex/Claude Code, gopls и сценарий новой сессии — в README, раздел
-«Harness AI-агента». Сначала вызови `go_workspace`, затем `go_search`;
+Настройка Codex/Claude Code, gopls и сценарий новой сессии — в
+[docs/local-development.md](docs/local-development.md), раздел «Harness AI-агента».
+Сначала вызови `go_workspace`, затем `go_search`;
 после чтения Go-файла — `go_file_context`, перед изменением символа —
 `go_symbol_references`, после изменений — `go_diagnostics` и тесты пакета.
 Если MCP недоступен, явно укажи это; `rg`, `go vet` и тесты дают запасной путь.
@@ -70,22 +71,20 @@ security, cookies, principal и httperr; `internal/{user,notebook}/delivery/http
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
-`internal/transport/http/api/api.gen.go` не редактируй вручную; см. README.
+`internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
 Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
 используй `r.Context()`. Порядок: request ID → logging → recover → CORS →
 CSRF/Authenticate → Validator. Общие middleware оборачивают весь роутер, чтобы
 request ID был на всех ответах, включая CSRF-отказы, preflight, 404 и 405.
 
-## Целевая архитектура MVP и границы
+## Границы backend и эксплуатация
 
-Одна VPS Selectel с Docker Compose: браузер → Caddy → Go API → PostgreSQL.
-Клиент обращается к `/api/v1` на том же домене, BFF нет. Только Caddy публикует
-80/443; API и Postgres доступны во внутренней сети Compose. Статика клиента — S3/CDN.
+Общепроектный контекст, текущая архитектура и планы — в
+[Контекст проекта](https://docs.cellestial.ru/project-context).
+Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
-- [Frontend](https://github.com/Cringe-Driven-Development-Team/frontend):
-  клиент React/Vite, обращается к Go API по контракту Apidog.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие
@@ -101,12 +100,6 @@ request ID был на всех ответах, включая CSRF-отказы
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
 - API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
   где клиент перестал ими пользоваться; проверять на ревью Apidog.
-- `diagrams/bff/` и `diagrams/frozen-k3s/` в docs заморожены; схемы не изменять.
-
-Источники: [docs](https://github.com/Cringe-Driven-Development-Team/docs),
-[MVP-спецификация](https://github.com/Cringe-Driven-Development-Team/docs/blob/main/docs/superpowers/specs/2026-09-29-mvp-single-vps-design.md),
-[Deployment](https://cringe-driven-development-team.github.io/docs/deployment.html),
-[CD](https://cringe-driven-development-team.github.io/docs/cd.html).
 
 Фактический [CI backend](.github/workflows/ci.yml) публикует
 `ghcr.io/cringe-driven-development-team/backend`: теги `sha-<short>` и `main`,
@@ -136,9 +129,9 @@ refactor(auth): вынести проверку токена в middleware
 README содержит краткую, актуальную информацию о проекте и его использовании.
 Порядок выкатки конкретной задачи, временные зависимости и условия слияния
 описывай в задаче при необходимости, а не в README.
-Подробную проектную документацию размещай в репозитории организации
-[docs](https://github.com/Cringe-Driven-Development-Team/docs);
-локальную папку `docs/` используй по явному запросу.
+Подробную общепроектную документацию размещай в репозитории организации
+[docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции
+backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
 
 ## Актуальность документа
 
