@@ -5,6 +5,7 @@ import hmac
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+import anyio
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
@@ -392,6 +393,9 @@ def create_app(settings=None, containers_factory=Containers):
             agent.subscribers.discard(wakeup)
             for task in tasks:
                 task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            # ASGI servers may cancel the handler while it is closing. Shield
+            # cleanup from repeated cancellation until both child tasks exit.
+            with anyio.CancelScope(shield=True):
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     return app
