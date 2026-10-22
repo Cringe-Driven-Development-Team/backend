@@ -1,7 +1,5 @@
 # Backend Colab
 
-[![CI](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Cringe-Driven-Development-Team/backend/actions/workflows/ci.yml)
-
 Go API учебного проекта «Colab». Общепроектный контекст, текущую архитектуру и планы ищите на [сайте документации](https://docs.cellestial.ru/project-context). Этот README — точка входа в backend: запуск, код и рабочие правила.
 
 ## Быстрый старт
@@ -26,18 +24,16 @@ make down    # volumes сохраняются
 - `migrations/` — SQL-миграции goose; `internal/transport/http/api/api.gen.go` — код, сгенерированный из Apidog, вручную не редактируйте.
 - [Авторизация, CSRF и CORS](docs/authentication.md) — cookie, заголовки и примеры запросов.
 - [Контракт API в Apidog](docs/apidog.md) — ветки, Merge Request и `make generate`.
-- [CI, образ и деплой](docs/release.md) — проверки, синхронизация учебной копии и выпуск. Production-конфигурация принадлежит [infra](https://github.com/Cringe-Driven-Development-Team/infra).
+- [CI, образ и деплой](docs/release.md) — проверки и выпуск. Production-конфигурация принадлежит [infra](https://github.com/Cringe-Driven-Development-Team/infra).
 - [AGENTS.md](AGENTS.md) — локальные правила для агента; Claude Code подключает их через [CLAUDE.md](CLAUDE.md).
 
-История переноса в командную организацию и порядок восстановления находятся в [runbook миграции](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/docs/migrations/team-repositories-runbook.md). Состав команды — в [профиле организации](https://github.com/Cringe-Driven-Development-Team/.github/tree/main/profile).
+Состав команды — в [профиле организации](https://github.com/Cringe-Driven-Development-Team/.github/tree/main/profile).
 
 ## Как работать с задачами
 
-Код, задачи, PR и ревью ведутся в [командном backend](https://github.com/Cringe-Driven-Development-Team/backend); [учебный репозиторий](https://github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development) автоматически получает те же коммиты `main`. Как создать, назначить и закрыть задачу, описано в [CONTRIBUTING организации](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md). Доска — [Scrumban](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1).
-
-Для задачи `#N` создайте ветку `api-N`, затем PR в `main` с заголовком `API-N: <название>` и строкой `Closes #N` в описании. Перед PR выполните `make check` и `make docker-build`; обязательные проверки GitHub — `lint`, `test`, `docker`. Merge — отдельным merge-коммитом.
-
-Backend PR требует review [Александра](https://github.com/blackHATred). По согласованному исключению аккаунт `YarikMix` может влить backend PR без Approve, включая свой; PR, зелёные проверки, актуальная ветка и разрешённые обсуждения остаются обязательными. Исключение относится только к approval ruleset, не к CI/integrity. Подробности реализации правила смотрите в GitHub rulesets.
+Задачи команды собраны на [доске Scrumban](https://github.com/orgs/Cringe-Driven-Development-Team/projects/1).
+Правила оформления задач и ревью — в [CONTRIBUTING команды](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md).
+Перед передачей изменений выполните `make check` и `make docker-build`.
 
 ## Типы коммитов
 
