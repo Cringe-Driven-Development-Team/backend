@@ -61,6 +61,10 @@ make agent-network-check # отдельная VPS с firewall infra; не обы
 после чтения Go-файла — `go_file_context`, перед изменением символа —
 `go_symbol_references`, после изменений — `go_diagnostics` и тесты пакета.
 Если MCP недоступен, явно укажи это; `rg`, `go vet` и тесты дают запасной путь.
+Для Python: Serena `initial_instructions` → `activate_project` для `runtime-agent/`;
+через `serena_repl` изучи `s.info("lsp")`, затем `s.lsp.get_symbols_overview` / `find_symbol`.
+Перед изменением символа — `s.lsp.find_referencing_symbols`; после — диагностика файла,
+Pyright с Python из `runtime-agent/.venv` и тесты агента. Без MCP — явно укажи это и используй `rg`, Pyright и тесты.
 Перед PR нужны `make check` и `make docker-build`; результаты и ограничения — в PR.
 
 ## Паттерны кода
