@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
 
@@ -30,7 +32,7 @@ func (uc *UserUsecase) Register(ctx context.Context, login, password string) (do
 	}
 	hash, err := uc.passwords.Hash(password)
 	if err != nil {
-		return domain.User{}, Session{}, fmt.Errorf("hash password: %w", err)
+		return domain.User{}, Session{}, observability.WithCode(fmt.Errorf("hash password: %w", err), "password_hash_failed")
 	}
 	u, err := uc.users.CreateUser(ctx, login, string(hash))
 	if errors.Is(err, ErrLoginTaken) {
@@ -40,6 +42,9 @@ func (uc *UserUsecase) Register(ctx context.Context, login, password string) (do
 		return domain.User{}, Session{}, err
 	}
 	sess, err := uc.startSession(ctx, u.ID)
+	if err == nil {
+		slog.InfoContext(ctx, "user.register", slog.String("outcome", "success"), slog.Int64("user_id", u.ID))
+	}
 	return u, sess, err
 }
 
@@ -53,12 +58,15 @@ func (uc *UserUsecase) Login(ctx context.Context, login, password string) (domai
 	}
 	matched, err := uc.passwords.Compare(hash, password)
 	if err != nil {
-		return domain.User{}, Session{}, fmt.Errorf("compare password: %w", err)
+		return domain.User{}, Session{}, observability.WithCode(fmt.Errorf("compare password: %w", err), "password_compare_failed")
 	}
 	if !matched {
 		return domain.User{}, Session{}, ErrInvalidCredentials
 	}
 	sess, err := uc.startSession(ctx, u.ID)
+	if err == nil {
+		slog.InfoContext(ctx, "user.login", slog.String("outcome", "success"), slog.Int64("user_id", u.ID))
+	}
 	return u, sess, err
 }
 
@@ -73,13 +81,20 @@ func (uc *UserUsecase) Refresh(ctx context.Context, refreshToken string) (Sessio
 	if !uc.now().Before(expiresAt) {
 		return Session{}, ErrInvalidRefresh
 	}
-	return uc.startSession(ctx, userID)
+	sess, err := uc.startSession(ctx, userID)
+	if err == nil {
+		slog.InfoContext(ctx, "session.refresh", slog.String("outcome", "success"), slog.Int64("user_id", userID))
+	}
+	return sess, err
 }
 
 func (uc *UserUsecase) Logout(ctx context.Context, refreshToken string) error {
 	_, _, err := uc.sessions.DeleteSession(ctx, uc.refresh.Hash(refreshToken))
 	if errors.Is(err, ErrSessionNotFound) {
 		return ErrInvalidRefresh
+	}
+	if err == nil {
+		slog.InfoContext(ctx, "session.logout", slog.String("outcome", "success"))
 	}
 	return err
 }

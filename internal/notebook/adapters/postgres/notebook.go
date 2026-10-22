@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -35,11 +37,13 @@ func NewNotebookRepository(db DB) *NotebookRepository {
 
 // Create вставляет строку; id и время создания выдаёт база.
 func (r *NotebookRepository) Create(ctx context.Context, n domain.Notebook) (domain.Notebook, error) {
+	started := time.Now()
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO notebooks (owner_id, name, file_key, cells_count) VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at`,
 		n.OwnerID, n.Name, n.FileKey, n.CellsCount,
 	).Scan(&n.ID, &n.CreatedAt, &n.UpdatedAt)
+	observability.LogStorage(ctx, "notebook.create", started, err)
 	if err != nil {
 		return domain.Notebook{}, fmt.Errorf("insert notebook: %w", err)
 	}
@@ -48,15 +52,18 @@ func (r *NotebookRepository) Create(ctx context.Context, n domain.Notebook) (dom
 
 // List отдаёт блокноты владельца, сначала недавно изменённые.
 func (r *NotebookRepository) List(ctx context.Context, ownerID int64) ([]domain.NotebookSummary, error) {
+	started := time.Now()
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, cells_count, updated_at FROM notebooks
 		WHERE owner_id = $1 ORDER BY updated_at DESC`,
 		ownerID,
 	)
 	if err != nil {
+		observability.LogStorage(ctx, "notebook.list", started, err)
 		return nil, fmt.Errorf("select notebooks: %w", err)
 	}
 	list, err := pgx.CollectRows(rows, scanSummary)
+	observability.LogStorage(ctx, "notebook.list", started, err)
 	if err != nil {
 		return nil, fmt.Errorf("scan notebooks: %w", err)
 	}
@@ -65,11 +72,16 @@ func (r *NotebookRepository) List(ctx context.Context, ownerID int64) ([]domain.
 
 // Get ищет блокнот по id только среди блокнотов владельца.
 func (r *NotebookRepository) Get(ctx context.Context, id, ownerID int64) (domain.Notebook, error) {
-	return scanNotebook(r.db.QueryRow(ctx, selectNotebook, id, ownerID))
+	started := time.Now()
+	n, err := scanNotebook(r.db.QueryRow(ctx, selectNotebook, id, ownerID))
+	observability.LogStorage(ctx, "notebook.get", started, err)
+	return n, err
 }
 
 // Modify выполняет fn под SELECT ... FOR UPDATE и сохраняет новое число блоков.
-func (r *NotebookRepository) Modify(ctx context.Context, id, ownerID int64, fn func(domain.Notebook) (int, error)) error {
+func (r *NotebookRepository) Modify(ctx context.Context, id, ownerID int64, fn func(domain.Notebook) (int, error)) (err error) {
+	started := time.Now()
+	defer func() { observability.LogStorage(ctx, "notebook.modify", started, err) }()
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)

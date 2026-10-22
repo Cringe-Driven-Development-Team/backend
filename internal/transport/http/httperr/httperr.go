@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 )
 
@@ -21,9 +22,8 @@ func Write(w http.ResponseWriter, status int, code api.ErrorCode, message string
 
 // Internal пишет причину в лог, а клиенту отдаёт 500 без подробностей.
 func Internal(w http.ResponseWriter, r *http.Request, err error) {
-	slog.ErrorContext(r.Context(), "internal error",
-		slog.String("path", r.URL.Path),
-		slog.String("error", err.Error()),
+	slog.ErrorContext(r.Context(), "http.internal_error",
+		slog.String("error_code", observability.ErrorCode(err)),
 	)
 	Write(w, http.StatusInternalServerError, api.Internal, "internal server error")
 }
