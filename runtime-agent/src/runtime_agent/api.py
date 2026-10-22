@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from .config import Settings
 from .containers import Containers
 from .journal import Journal
+from .lifecycle import complete_before_cancel
 from .models import AgentError, Execute, Inspect
 from .runtime import Agent
 
@@ -22,7 +23,7 @@ class HTTPGuard:
         app (Callable): Downstream ASGI application.
         expected (bytes): Expected bearer header encoded for constant-time comparison.
     """
-
+ по
     def __init__(self, app, token):
         """Configure the ASGI application and expected bearer credentials.
 
@@ -102,6 +103,9 @@ def create_app(settings=None, containers_factory=Containers):
     async def lifespan(app):
         """Acquire persistent state and manage agent startup and shutdown.
 
+        Finish resource cleanup before closing the journal, even when startup
+        or shutdown is cancelled repeatedly.
+
         Args:
             app (FastAPI): Application receiving its agent through app.state.
 
@@ -118,7 +122,7 @@ def create_app(settings=None, containers_factory=Containers):
         finally:
             try:
                 if agent:
-                    await agent.close()
+                    await complete_before_cancel(agent.close())
             finally:
                 journal.close()
 

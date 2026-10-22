@@ -2,6 +2,7 @@
 
 import asyncio
 import ipaddress
+import logging
 import os
 import secrets
 
@@ -10,7 +11,9 @@ from docker.errors import NotFound
 from docker.types import LogConfig
 
 from .jupyter import Jupyter
+from .lifecycle import complete_before_cancel
 
+log = logging.getLogger(__name__)
 LABEL = "ru.cellestial.runtime-agent"
 _ROOT_ERROR = "Run the agent as a dedicated non-root user in the docker group"
 
@@ -119,7 +122,9 @@ class Containers:
         """Start one restricted container and connect to its Jupyter server.
 
         Jupyter uses private TCP without published ports. A fresh container token
-        is generated, and startup failure triggers container cleanup.
+        is generated, and startup failure triggers container cleanup. Cancellation
+        waits for container creation and cleanup to finish, including repeated
+        cancellation, before propagating to the caller.
 
         Args:
             session_id (str): Canonical UUID of the assigned session.
@@ -129,6 +134,8 @@ class Containers:
             Jupyter: Open transport whose kernel has confirmed readiness.
 
         Raises:
+            asyncio.CancelledError: Startup was cancelled, after creation and
+                container cleanup have completed or cleanup has failed.
             docker.errors.DockerException: Network inspection or a container
                 operation fails.
             RuntimeError: The network is invalid or cleanup finds a foreign container.
@@ -141,40 +148,44 @@ class Containers:
         token = secrets.token_urlsafe(32)
         image = self.settings.python_image if language == "python" else self.settings.r_image
         try:
-            container = await asyncio.to_thread(
-                lambda: self.client.containers.run(
-                    image,
-                    name=self.name(session_id),
-                    detach=True,
-                    user="65532:65532",
-                    network=network.id,
-                    dns=[self.settings.kernel_dns],
-                    read_only=True,
-                    cap_drop=["ALL"],
-                    security_opt=["no-new-privileges:true"],
-                    sysctls={
-                        "net.ipv6.conf.all.disable_ipv6": "1",
-                        "net.ipv6.conf.default.disable_ipv6": "1",
-                    },
-                    init=True,
-                    mem_limit="1g",
-                    memswap_limit="1g",
-                    nano_cpus=1_000_000_000,
-                    pids_limit=128,
-                    labels={LABEL: self.instance_id, "ru.cellestial.session": session_id},
-                    tmpfs={
-                        "/workspace": "rw,nosuid,nodev,size=256m,mode=1777",
-                        "/tmp": "rw,nosuid,nodev,size=64m,mode=1777",
-                    },
-                    environment={
-                        "JUPYTER_TOKEN": token,
-                        "HOME": "/tmp",
-                        "JUPYTER_RUNTIME_DIR": "/tmp/jupyter",
-                        "JUPYTER_CONFIG_DIR": "/tmp/config",
-                    },
-                    working_dir="/workspace",
-                    log_config=LogConfig(type="local", config={"max-size": "1m", "max-file": "2"}),
-                ),
+            container = await complete_before_cancel(
+                asyncio.to_thread(
+                    lambda: self.client.containers.run(
+                        image,
+                        name=self.name(session_id),
+                        detach=True,
+                        user="65532:65532",
+                        network=network.id,
+                        dns=[self.settings.kernel_dns],
+                        read_only=True,
+                        cap_drop=["ALL"],
+                        security_opt=["no-new-privileges:true"],
+                        sysctls={
+                            "net.ipv6.conf.all.disable_ipv6": "1",
+                            "net.ipv6.conf.default.disable_ipv6": "1",
+                        },
+                        init=True,
+                        mem_limit="1g",
+                        memswap_limit="1g",
+                        nano_cpus=1_000_000_000,
+                        pids_limit=128,
+                        labels={LABEL: self.instance_id, "ru.cellestial.session": session_id},
+                        tmpfs={
+                            "/workspace": "rw,nosuid,nodev,size=256m,mode=1777",
+                            "/tmp": "rw,nosuid,nodev,size=64m,mode=1777",
+                        },
+                        environment={
+                            "JUPYTER_TOKEN": token,
+                            "HOME": "/tmp",
+                            "JUPYTER_RUNTIME_DIR": "/tmp/jupyter",
+                            "JUPYTER_CONFIG_DIR": "/tmp/config",
+                        },
+                        working_dir="/workspace",
+                        log_config=LogConfig(
+                            type="local", config={"max-size": "1m", "max-file": "2"}
+                        ),
+                    ),
+                )
             )
             await asyncio.to_thread(container.reload)
             address = container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
@@ -183,12 +194,19 @@ class Containers:
             try:
                 await transport.start(self.settings.startup_seconds)
             except BaseException:
-                await transport.close()
+                await complete_before_cancel(transport.close())
                 raise
             return transport
-        except BaseException:
-            await self.remove(session_id)
-            raise
+        except BaseException as startup_error:
+            try:
+                await complete_before_cancel(self.remove(session_id))
+            except Exception:
+                if not isinstance(startup_error, asyncio.CancelledError):
+                    raise
+                # Preserve cancellation; the owning runtime retries cleanup and
+                # records cleanup_failed before the journal is closed.
+                log.exception("Container cleanup failed after cancelled startup: %s", session_id)
+            raise startup_error
 
     async def alive(self, session_id):
         """Check whether the assigned container is running.
