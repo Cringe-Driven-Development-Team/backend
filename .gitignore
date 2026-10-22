@@ -265,3 +265,6 @@ runtime-agent/build/
 runtime-agent/dist/
 runtime-agent/**/__pycache__/
 runtime-agent/**/*.egg-info/
+
+# Superpowers plugin documentation
+docs/superpowers/
