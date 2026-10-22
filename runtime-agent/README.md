@@ -1,154 +1,154 @@
 # Runtime agent
 
-Один systemd-сервис на общей VPS управляет Docker-сессиями Python/R.
-Клиент этого API — доверенный backend, который проверяет права пользователей.
-Язык фиксируется при создании сессии. Каждая сессия имеет независимые память,
-очередь, workspace и журнал событий; выполнение внутри сессии последовательное.
-Сервис не обращается к Selectel, PostgreSQL или S3 и не изменяет ipynb.
+Одна VPS обслуживает одну назначенную пользовательскую сессию. Агент запускает
+один Docker-контейнер с одним kernel Python или R. Язык и UUID сессии передаются
+при запуске сервиса; переиспользование VPS и управление пулом принадлежат infra.
+Клиент API — доверенный backend, проверяющий права пользователей.
+Агент не создаёт VPS, не обращается к S3/PostgreSQL и не изменяет ipynb.
 
-## Разработка
+## Разработка и проверки
 
 Нужны Linux, Python 3.13 и Docker Engine с доступом служебного пользователя к socket.
-Агент запускается от непривилегированного пользователя; доступ к Docker доверяется
-только управляющему процессу. Запуск от root отклоняется.
-
-Из корня backend:
+Запуск агента от root запрещён. Docker Desktop должен поддерживать доступ хоста
+к IPv4 контейнера; основной целевой стенд — Linux Docker Engine.
 
 ```bash
 make agent-setup agent-lint agent-test agent-build
 make agent-images agent-integration
+make agent-test-jupyter  # настоящий Python kernel на локальном TCP без Docker
 ```
 
-`AGENT_PYTHON` и `AGENT_VENV` позволяют выбрать интерпретатор и каталог virtualenv.
-`make agent-test-jupyter` проверяет настоящий Python kernel без Docker.
-Docker-тесты проверяют также R, две независимые сессии, отсутствие сети, лимиты,
-OOM и восстановление после потери агента. CI запускает их на Linux с Docker.
+Зависимости устанавливаются только в `runtime-agent/.venv`.
+`AGENT_PYTHON` и `AGENT_VENV` переопределяют интерпретатор и virtualenv.
+Docker-тесты создают временную bridge-сеть для проверки протокола, изоляции
+файлов, лимитов, OOM и восстановления. Эта сеть не является production firewall.
+Сетевая приёмка выполняется отдельно: [контракт infra](../docs/runtime-agent-network.md).
 
-Локальный запуск после сборки образов:
+## Назначение и запуск
 
-```bash
-export RUNTIME_TOKEN=$(openssl rand -hex 32)
-export STATE_DIR=$(mktemp -d /tmp/ca-state.XXXXXX)
-export SOCKET_DIR=$(mktemp -d /tmp/ca-sock.XXXXXX)
-runtime-agent/.venv/bin/cellestial-runtime-agent
-```
+Infra заранее готовит VPS, образы, bridge-сеть, DNS и firewall. Перед выдачей VPS
+она задаёт `SESSION_ID`, `KERNEL_LANGUAGE`, `KERNEL_NETWORK`, `KERNEL_DNS` и свежий
+`RUNTIME_TOKEN` в защищённом env-файле, затем запускает сервис. Без корректной
+конфигурации и существующей IPv4 bridge-сети агент не стартует; fallback нет.
+Язык — `python|r`, UUID канонизируется. Наличие сети не доказывает наличие firewall.
 
-Один worker обязателен. Эксклюзивная блокировка STATE_DIR предотвращает запуск
-нескольких процессов с одним журналом. Каталоги состояния и socket должны быть
-выделены этому агенту; SOCKET_DIR должен быть коротким из-за лимита Unix-сокетов.
+Один worker обязателен. SQLite и эксклюзивная блокировка находятся в `STATE_DIR`.
+Другой UUID или язык при том же каталоге состояния отклоняются. Первый запуск
+создаёт kernel; повторный запуск агента очищает его прежние контейнеры, помечает
+незавершённые команды `UNKNOWN`, сессию — `STOPPED`. Kernel автоматически не
+восстанавливается и код не повторяется. Для новой сессии infra переустанавливает
+VPS из чистого образа; старый журнал перед этим забирает backend.
 
 ## API
 
-На всех HTTP-маршрутах (включая `/health`, `/openapi.json`) и WS handshake нужен
-`Authorization: Bearer <RUNTIME_TOKEN>`. API по умолчанию слушает `127.0.0.1:8000`.
-Схема HTTP доступна на защищённом `/openapi.json`; WS описан ниже.
+Все HTTP-маршруты, включая `/health` и `/openapi.json`, и WS handshake требуют
+`Authorization: Bearer <RUNTIME_TOKEN>`. По умолчанию агент слушает `127.0.0.1:8000`.
+Production-доступ из Go API, защищённый транспорт и firewall настраивает infra.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | `/health` | UUID сессии, язык, состояние, ready/draining, generation, активная команда, очередь |
+| POST | `/executions` | `{execution_id, code, timeout_seconds?}` → 202 |
+| GET | `/executions/{execution_id}` | Состояние и результат исполнения |
+| POST | `/variables` | `{execution_id}` → 202; инспекция в общей очереди |
+| POST | `/kernel/interrupt` | Прервать активную команду |
+| POST | `/kernel/restart` | Перезапустить свободный kernel, сохранив workspace |
+| POST | `/runtime/activity` | Продлить активность сессии |
+| POST | `/runtime/drain` | Запретить новые команды, отменить очередь, прервать активную |
+| POST | `/runtime/stop` | Остановить контейнер; журнал остаётся доступен |
+| GET | `/events?after=0` | Следующая страница, до 100 событий |
+| WS | `/events/ws?after=0` | Replay и последующие события |
 
 ```bash
-session_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
-curl --fail-with-body http://127.0.0.1:8000/sessions \
+curl --fail-with-body http://127.0.0.1:8000/executions \
   -H "Authorization: Bearer $RUNTIME_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"session_id\":\"$session_id\",\"language\":\"python\"}"
-
-# Дождаться state=READY через GET /sessions/{session_id}.
-curl --fail-with-body "http://127.0.0.1:8000/sessions/$session_id/executions" \
-  -H "Authorization: Bearer $RUNTIME_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"execution_id":"run-1","code":"x = 42\nprint(x)\nx * 2","timeout_seconds":60}'
-curl --fail-with-body "http://127.0.0.1:8000/sessions/$session_id/events?after=0" \
+  -d '{"execution_id":"run-1","code":"x = 42\nprint(x)\nx * 2"}'
+curl --fail-with-body http://127.0.0.1:8000/executions/run-1 \
   -H "Authorization: Bearer $RUNTIME_TOKEN"
 ```
 
-`POST /sessions` принимает UUID `session_id` и язык `python|r`, возвращает `202`.
-Повтор с тем же языком возвращает прежнюю сессию; другой язык — `409`.
-Остановленная сессия не запускается повторно: создайте новый UUID.
-`GET /health` показывает готовность агента и доступные слоты.
+`execution_id` — 1–128 символов; для URL используйте percent-encoding.
+Код — до 1 048 576 символов, HTTP body — до 2 MiB. Timeout — 1–86400 секунд,
+по умолчанию 300; инспекция — 5 секунд. Очередь — 100 ожидающих команд.
+Переполнение даёт `429`, недоступный/остановленный runtime — `503`.
+`/health` отвечает 503 после drain, stop, потери kernel или Docker.
 
-Пути ниже имеют префикс `/sessions/{session_id}`:
-
-| Метод | Суффикс | Назначение |
-| --- | --- | --- |
-| GET | пустой | Состояние, язык, generation, активная команда, очередь, причина остановки |
-| GET | `/health` | То же; HTTP 503, если сессия не принимает новые команды |
-| POST | `/activity` | Продлить активность |
-| POST | `/executions` | `{execution_id, code, timeout_seconds?}`, ответ 202 |
-| GET | `/executions/{execution_id}` | `{execution_id, state, result}` |
-| POST | `/variables` | `{execution_id}`, инспекция в общей очереди, ответ 202 |
-| POST | `/kernel/interrupt` | Прервать активную команду |
-| POST | `/kernel/restart` | Очистить память свободного kernel, сохранить workspace |
-| POST | `/runtime/drain` | Запретить новые команды, отменить очередь, прервать активную |
-| POST | `/runtime/stop` | Остановить сессию и удалить workspace; журнал остаётся |
-| GET | `/events?after=0` | `{events: [...]}`, до 100 событий |
-| WS | `/events/ws?after=0` | Replay и последующие события |
-
-`execution_id`: строка длиной 1–128 символов (в URL используйте percent-encoding).
-Код — до 1 048 576
-символов, HTTP body — до 2 MiB. Таймаут исполнения: 1–86400 секунд, по умолчанию
-300; таймаут инспекции — 5 секунд. Очередь — 100 ожидающих команд на сессию.
-Недостаток слотов/места в очереди даёт `429`, недоступная сессия — `503`.
-
-Идемпотентность scoped по `(session_id, execution_id)`: тот же запрос возвращает
-сохранённое состояние даже после остановки; другое содержимое — `409`.
-Вызывающий сервис сохраняет ID **до** отправки и повторяет его после сетевого сбоя.
-
-Состояния сессий: `STARTING`, `READY`, `DRAINING`, `STOPPED`, `FAILED`.
+Backend сохраняет execution_id до отправки. Повтор с теми же параметрами
+возвращает сохранённое состояние, включая после stop; другое содержимое — `409`.
 Состояния команд: `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `INTERRUPTED`,
-`TIMED_OUT`, `CANCELLED`, `UNKNOWN`. `UNKNOWN` означает отсутствие достоверного
-результата; такие команды автоматически не повторяются.
+`TIMED_OUT`, `CANCELLED`, `UNKNOWN`. UNKNOWN нельзя автоматически повторять.
+После stop, истечения простоя или сбоя новую сессию этот агент не принимает.
 
-## События и жизненный цикл
+## Вывод и события
 
-Каждое событие имеет `seq`, `session_id`, `execution_id` (или null), `kind`,
-`timestamp`. Для `kernel_message` дополнительно передаются `channel`, `msg_type`,
-`content`, `metadata`, `parent_msg_id`, `generation`, при необходимости
-`buffers_base64`. Сохраняются stream, MIME-вывод, display_id, clear/update и comm.
-UI widgets и формирование ipynb реализуются вызывающим сервисом.
+События содержат `seq`, `session_id`, `execution_id`, `kind`, `timestamp`.
+`kernel_message` включает channel, msg_type, content, metadata, parent_msg_id,
+generation и при наличии buffers_base64. Поздний вывод относится к исходной
+команде; неизвестный parent — к unattributed output.
 
-`seq` возрастает, может иметь пропуски и не сбрасывается при restart kernel.
-Backend фиксирует событие и свой курсор одной транзакцией, дедуплицирует по
-`(session_id, seq)`. Heartbeat WS каждые 15 секунд содержит `{kind:"heartbeat",
-after:...}` без seq. Медленный WS-клиент отключается после 10 секунд ожидания
-отправки; повторное подключение с последним курсором восстанавливает поток.
+`MAX_OUTPUT_BYTES` ограничивает суммарные UTF-8 JSON-данные kernel на команду:
+все типы сообщений, metadata, buffers, reply и нормализованный результат инспекции.
+Копии результата в таблице executions и событии состояния учитываются обе.
+Конверты событий и фиксированные служебные сводки не входят в этот бюджет;
+код принятой команды хранится отдельно и ограничен HTTP-валидацией.
+При превышении один раз появляется `output_truncated`, новые данные отбрасываются,
+а результат при необходимости заменяется `{status, output_truncated:true}`.
+Это не меняет состояние исполнения и не мешает обработать reply + idle.
+Для unattributed output действует отдельный бюджет на поколение kernel.
+Входящий кадр — до 32 MiB; stdout инспекции R в памяти — до 1 MiB.
 
-Поздний вывод сохраняет связь с исходным исполнением. Вывод с неизвестным parent
-передаётся как `unattributed_output`. Лимит сериализованных выводов — 10 MiB на
-команду, включая поздние сообщения; один `output_truncated` сообщает об отсечении.
-Для unattributed_output действует отдельный общий лимит на поколение kernel.
-Kernel продолжает исполняться после отсечения вывода. Транспорт принимает кадры
-до 32 MiB; нарушение протокола или потеря канала завершает сессию.
+Backend фиксирует события и свой курсор одной транзакцией, дедуплицируя по
+`(session_id, seq)`. WS heartbeat через 15 секунд не имеет seq; медленный клиент
+отключается после 10 секунд ожидания отправки. Переподключение использует последний
+сохранённый курсор. Несколько подписчиков получают независимые уведомления.
 
-Инспекция возвращает `{variables:[{name,type,preview}]}`: до 200 переменных,
-preview до 200 символов у простых значений, иначе null. Служебная инспекция
-не добавляет запись в историю и не передаёт свой stdout как вывод пользовательской
-ячейки. Ошибка инспекции отражается в результате команды.
+Инспекция возвращает до 200 переменных `{name,type,preview}`, preview до 200 символов
+для простых значений. Инспекция не добавляется в историю; её служебный вывод
+не выдаётся как вывод ячейки. Её итоговый результат также ограничен бюджетом.
 
-Через 15 минут простоя сессия останавливается с `reason=idle_timeout`.
-Новые команды, управляющие действия и `/activity` обновляют активность;
-чтение результатов и WS heartbeat — нет. Активное исполнение и очередь защищены
-от idle timeout; после завершения очередь получает полный новый интервал.
+## Жизненный цикл и поставка
 
-При timeout/interrupt агент ждёт подтверждения до 5 секунд, затем завершает
-сессию; неподтверждённое исполнение получает UNKNOWN. Потеря kernel/канала
-также останавливает сессию, неотправленные команды становятся CANCELLED.
-При перезапуске агента оставшиеся его контейнеры удаляются, незавершённые команды
-становятся UNKNOWN, прежние сессии — STOPPED с `reason=agent_restarted`.
-Неудачная очистка контейнера сохраняет занятый слот до успешного повтора.
+Простой 15 минут завершает контейнер. Команды, управление и `/runtime/activity`
+обновляют активность; чтение результатов и heartbeat — нет. Активное исполнение
+и очередь защищены от idle timeout. Timeout/interrupt ждёт подтверждения до 5 секунд;
+без подтверждения команда становится UNKNOWN, контейнер останавливается.
+Потеря kernel/канала завершает сессию. Ошибка удаления контейнера оставляет
+сессию DRAINING/cleanup_failed до успешного повтора monitor или recovery.
 
-## Поставка
+Контейнер работает с UID/GID 65532, без host mounts и опубликованных портов,
+с read-only rootfs, 1 CPU / 1 GiB RAM / 128 процессов, временными workspace
+256 MiB и /tmp 64 MiB. Изменение прав внутри контейнера не затрагивает файлы хоста.
+Агент обращается к Jupyter по закрытому TCP 8888 с отдельным токеном контейнера.
+Kernel и Jupyter находятся в одной пользовательской границе доверия; отдельный
+токен Jupyter не является секретом от собственного kernel. Токен агента и SQLite
+в контейнер не передаются. Уничтожить свой kernel пользователь может.
 
-`deploy/cellestial-agent.service` и `deploy/agent.env.example` — шаблоны для infra.
-Infra создаёт пользователя `cellestial-agent` с доступом к Docker, устанавливает
-Python-пакет и requirements.txt в `/opt/cellestial-agent/venv`, загружает образы,
-кладёт защищённый env-файл в `/etc/cellestial-agent/agent.env` и устанавливает unit.
-Контейнеры запускаются с UID/GID агента, но отдельными PID/mount/network namespaces.
-Журнал и главный токен никогда не монтируются в контейнеры.
+`deploy/cellestial-agent.service` и `deploy/agent.env.example` — шаблоны для infra,
+не production-выкатка. Настройки: HOST, PORT, RUNTIME_TOKEN, STATE_DIR, SESSION_ID,
+KERNEL_LANGUAGE, KERNEL_NETWORK, KERNEL_DNS, IDLE_TIMEOUT_SECONDS, MAX_OUTPUT_BYTES,
+PYTHON_IMAGE, R_IMAGE. Автоматического удаления истории нет.
 
-Настройки: `HOST`, `PORT`, `RUNTIME_TOKEN`, `STATE_DIR`, `SOCKET_DIR`,
-`MAX_SESSIONS` (1), `IDLE_TIMEOUT_SECONDS` (900), `MAX_OUTPUT_BYTES` (10485760),
-`PYTHON_IMAGE`, `R_IMAGE`. Infra выбирает MAX_SESSIONS с резервом ресурсов для
-Go API и БД. Каждый контейнер ограничен 1 CPU, 1 GiB RAM, 128 процессами;
-workspace временный (до 256 MiB), интернет отключён.
+При Docker Desktop WSL обычно не имеет маршрута к bridge IP контейнера; native
+`agent-integration` тогда завершится timeout. Тесты нужно запускать на Linux Engine
+или из доверенного runner в host network namespace Docker Engine. Это ограничение
+стенда не исправляется публикацией Jupyter-порта. Production-проверки требуют VPS.
 
-Журналы сохраняются до удаления каталога состояния оператором; автоматического
-удаления истории и протокола подтверждения доставки в этой версии нет.
-Токен агента даёт доступ ко всем сессиям; его получает только доверенный backend.
-В production доступность API, доставка образов и установка unit настраиваются
-в infra. Этот репозиторий не выполняет автоматическую выкатку агента.
+Пример доверенного runner (только разработка; Docker socket даёт ему полномочия хоста).
+В отличие от пользовательского kernel ему нужны socket и read-only исходники:
+
+```bash
+docker run --rm --network host --user "$(id -u):$(id -g)" \
+  --group-add "$(stat -c %g /var/run/docker.sock)" \
+  --mount "type=bind,source=$PWD/runtime-agent,target=/repo,readonly" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --entrypoint sh cellestial-kernel-python:local -c '
+    mkdir /tmp/agent
+    tar -C /repo --exclude=.venv --exclude=.serena --exclude=dist --exclude=build \
+      --exclude=__pycache__ --exclude=.pytest_cache --exclude=.ruff_cache -cf - . \
+      | tar -C /tmp/agent -xf -
+    python -m venv --system-site-packages /tmp/testenv
+    cd /tmp/agent
+    /tmp/testenv/bin/pip install --no-cache-dir -r requirements-dev.txt &&
+      RUN_DOCKER_TESTS=1 /tmp/testenv/bin/python -m pytest -q -m docker
+  '
+```

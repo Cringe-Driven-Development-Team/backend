@@ -1,12 +1,6 @@
 # Backend: инструкции для агента
 
-Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста.
-Правила работы с задачами, ветками и PR — в [README.md](README.md).
-Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
-в Codex и Claude Code используй командный скилл `cdd-tasks`.
-Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
-review ментора, кроме настроенного исключения YarikMix (см. README).
-Учебный repo — копия main без Actions и новых PR.
+Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
 ## Целевые продуктовые требования
 
@@ -24,11 +18,11 @@ review ментора, кроме настроенного исключения 
 - Go: версия в [go.mod](go.mod), зависимости через Go Modules (`go.mod`, `go.sum`).
 - HTTP: `net/http`, Gorilla mux; PostgreSQL: `pgx/v5/pgxpool`.
 - Локально: Docker Compose с Go API, PostgreSQL 18 и SeaweedFS (S3).
-- `runtime-agent/`: отдельный Python 3.13 сервис systemd; Docker-контейнер на сессию
-  Python/R на общей VPS. Сеть kernel отключена; SQLite и токен хранятся на хосте.
+- `runtime-agent/`: Python 3.13 сервис systemd; одна VPS, одна сессия, один контейнер/kernel.
+  SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
+  Jupyter — закрытый TCP без host mounts; сеть и firewall готовит infra по docs/runtime-agent-network.md.
 
-Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose.
-Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
@@ -45,6 +39,7 @@ make health           # GET /health; make logs — последние логи; 
 make run              # то же окружение с логами в терминале
 make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
 make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
+make agent-network-check # отдельная VPS с firewall infra; не обычный CI
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
@@ -91,7 +86,7 @@ request ID был на всех ответах, включая CSRF-отказы
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
-- Агент не создаёт VPS; язык выбирается при создании контейнерной сессии.
+- Агент не создаёт VPS; UUID сессии и язык назначаются перед запуском сервиса.
   Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
@@ -134,12 +129,7 @@ refactor(auth): вынести проверку токена в middleware
 
 ## Документация
 
-README содержит краткую, актуальную информацию о проекте и его использовании.
-Порядок выкатки конкретной задачи, временные зависимости и условия слияния
-описывай в задаче при необходимости, а не в README.
-Подробную общепроектную документацию размещай в репозитории организации
-[docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции
-backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
+README содержит краткую, актуальную информацию о проекте и его использовании. Порядок выкатки конкретной задачи, временные зависимости и условия слияния описывай в задаче при необходимости, а не в README. Подробную общепроектную документацию размещай в репозитории организации [docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
 
 ## Актуальность документа
 

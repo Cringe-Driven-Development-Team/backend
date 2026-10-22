@@ -10,11 +10,8 @@ Group=cellestial-agent
 SupplementaryGroups=docker
 EnvironmentFile=/etc/cellestial-agent/agent.env
 Environment=STATE_DIR=/var/lib/cellestial-agent
-Environment=SOCKET_DIR=/run/cellestial-agent
 StateDirectory=cellestial-agent
 StateDirectoryMode=0700
-RuntimeDirectory=cellestial-agent
-RuntimeDirectoryMode=0700
 ExecStart=/opt/cellestial-agent/venv/bin/cellestial-runtime-agent
 Restart=on-failure
 RestartSec=5

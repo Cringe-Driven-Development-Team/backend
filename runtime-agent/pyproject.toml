@@ -25,7 +25,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["docker: requires Docker and both kernel images", "jupyter: requires a local Jupyter Server"]
+markers = ["docker: requires Docker and both kernel images", "jupyter: requires a local Jupyter Server", "network: requires disposable VPS with infra firewall"]
 
 [tool.ruff]
 target-version = "py313"
@@ -36,3 +36,9 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ASYNC110"]
+
+[tool.pyright]
+include = ["src"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"

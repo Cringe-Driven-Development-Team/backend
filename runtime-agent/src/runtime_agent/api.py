@@ -3,7 +3,6 @@
 import asyncio
 import hmac
 from contextlib import asynccontextmanager
-from uuid import UUID
 
 import anyio
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
@@ -12,12 +11,17 @@ from fastapi.responses import JSONResponse
 from .config import Settings
 from .containers import Containers
 from .journal import Journal
-from .models import AgentError, CreateSession, Execute, Inspect
+from .models import AgentError, Execute, Inspect
 from .runtime import Agent
 
 
 class HTTPGuard:
-    """Authorize before reading a body, and bound memory before JSON validation."""
+    """Authorize before reading a body, and bound memory before JSON validation.
+
+    Attributes:
+        app (Callable): Downstream ASGI application.
+        expected (bytes): Expected bearer header encoded for constant-time comparison.
+    """
 
     def __init__(self, app, token):
         """Configure the ASGI application and expected bearer credentials.
@@ -138,112 +142,61 @@ def create_app(settings=None, containers_factory=Containers):
 
     @app.get("/health")
     async def health():
-        """Report agent readiness and session capacity.
+        """Report readiness and execution status for the assigned runtime.
 
         Returns:
-            JSONResponse: Health snapshot with HTTP 200 when ready, otherwise 503.
+            JSONResponse: Assignment snapshot including generation, active command
+            and queue size; HTTP 200 when ready, otherwise HTTP 503.
         """
-        agent = app.state.agent
-        return JSONResponse(
-            {
-                "ready": agent.ready,
-                "docker_available": agent.ready,
-                "active_sessions": agent.used_slots(),
-                "available_slots": max(0, settings.max_sessions - agent.used_slots()),
-            },
-            status_code=200 if agent.ready else 503,
-        )
-
-    @app.post("/sessions", status_code=202)
-    async def create_session(body: CreateSession):
-        """Accept an idempotent session creation request.
-
-        Args:
-            body (CreateSession): Validated session ID and selected kernel language.
-
-        Returns:
-            dict: New or existing session snapshot.
-        """
-        return app.state.agent.create(str(body.session_id), body.language)
-
-    @app.get("/sessions/{session_id}")
-    async def session(session_id: UUID):
-        """Read a session snapshot.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
-
-        Returns:
-            dict: Persisted and live session status.
-        """
-        return app.state.agent.snapshot(str(session_id))
-
-    @app.get("/sessions/{session_id}/health")
-    async def session_health(session_id: UUID):
-        """Report whether a session accepts new commands.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
-
-        Returns:
-            JSONResponse: Session snapshot with HTTP 200 when ready, otherwise 503.
-        """
-        snapshot = app.state.agent.snapshot(str(session_id))
+        snapshot = app.state.agent.snapshot()
         return JSONResponse(snapshot, status_code=200 if snapshot["ready"] else 503)
 
-    @app.post("/sessions/{session_id}/activity")
-    async def activity(session_id: UUID):
+    @app.post("/runtime/activity")
+    async def activity():
         """Refresh the activity clock of a live session.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
 
         Returns:
             dict: Updated session snapshot.
         """
-        app.state.agent.live(str(session_id)).touch()
-        return app.state.agent.snapshot(str(session_id))
+        app.state.agent.live().touch()
+        return app.state.agent.snapshot()
 
-    @app.post("/sessions/{session_id}/executions", status_code=202)
-    async def execute(session_id: UUID, body: Execute):
+    @app.post("/executions", status_code=202)
+    async def execute(body: Execute):
         """Accept a code execution request or retrieve its idempotent result.
 
         Args:
-            session_id (UUID): Session identifier from the request path.
             body (Execute): Validated code, execution ID, and timeout.
 
         Returns:
             dict: Execution ID, state, and decoded result, if available.
         """
-        return app.state.agent.accept(str(session_id), {**body.model_dump(), "kind": "execute"})
+        return app.state.agent.accept({**body.model_dump(), "kind": "execute"})
 
-    @app.get("/sessions/{session_id}/executions/{execution_id:path}")
-    async def execution(session_id: UUID, execution_id: str):
+    @app.get("/executions/{execution_id:path}")
+    async def execution(execution_id: str):
         """Read an execution state and its available result.
 
         Args:
-            session_id (UUID): Session identifier from the request path.
             execution_id (str): Command identifier within the session.
 
         Returns:
             dict: Execution ID, state, and decoded result, if available.
         """
-        app.state.agent.journal.session(str(session_id))
-        return app.state.agent.journal.execution(str(session_id), execution_id)
+        app.state.agent.journal.session(settings.session_id)
+        return app.state.agent.journal.execution(settings.session_id, execution_id)
 
-    @app.post("/sessions/{session_id}/variables", status_code=202)
-    async def variables(session_id: UUID, body: Inspect):
+    @app.post("/variables", status_code=202)
+    async def variables(body: Inspect):
         """Queue variable inspection with a five-second execution timeout.
 
         Args:
-            session_id (UUID): Session identifier from the request path.
             body (Inspect): Validated inspection execution ID.
 
         Returns:
             dict: Execution ID, state, and decoded result, if available.
         """
         return app.state.agent.accept(
-            str(session_id),
             {
                 "execution_id": body.execution_id,
                 "kind": "inspect",
@@ -251,58 +204,46 @@ def create_app(settings=None, containers_factory=Containers):
             },
         )
 
-    @app.post("/sessions/{session_id}/kernel/interrupt")
-    async def interrupt(session_id: UUID):
+    @app.post("/kernel/interrupt")
+    async def interrupt():
         """Request interruption of the active execution.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
 
         Returns:
             dict: Acknowledgement that interruption was requested.
         """
-        await app.state.agent.live(str(session_id)).interrupt()
+        await app.state.agent.live().interrupt()
         return {"interrupt_requested": True}
 
-    @app.post("/sessions/{session_id}/kernel/restart")
-    async def restart(session_id: UUID):
+    @app.post("/kernel/restart")
+    async def restart():
         """Restart a ready, idle kernel and reset its memory.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
 
         Returns:
             dict: New kernel generation UUID.
         """
-        runtime = app.state.agent.live(str(session_id))
+        runtime = app.state.agent.live()
         await runtime.restart()
         return {"generation": runtime.generation}
 
-    @app.post("/sessions/{session_id}/runtime/drain")
-    async def drain(session_id: UUID):
+    @app.post("/runtime/drain")
+    async def drain():
         """Stop accepting work and interrupt the active execution.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
 
         Returns:
             dict: Acknowledgement that draining was requested.
         """
-        await app.state.agent.live(str(session_id)).drain()
+        await app.state.agent.live().drain()
         return {"draining": True}
 
-    @app.post("/sessions/{session_id}/runtime/stop")
-    async def stop(session_id: UUID):
+    @app.post("/runtime/stop")
+    async def stop():
         """Stop a session and report whether resource cleanup completed.
-
-        Args:
-            session_id (UUID): Session identifier from the request path.
 
         Returns:
             JSONResponse: Stopped flag and generation; HTTP 503 while cleanup remains
             pending.
         """
-        snapshot = await app.state.agent.stop_session(str(session_id))
+        snapshot = await app.state.agent.stop_session()
         return JSONResponse(
             {
                 "stopped": snapshot["state"] in ("STOPPED", "FAILED"),
@@ -311,22 +252,21 @@ def create_app(settings=None, containers_factory=Containers):
             status_code=503 if snapshot["state"] == "DRAINING" else 200,
         )
 
-    @app.get("/sessions/{session_id}/events")
-    async def events(session_id: UUID, after: int = Query(default=0, ge=0, le=2**63 - 1)):
+    @app.get("/events")
+    async def events(after: int = Query(default=0, ge=0, le=2**63 - 1)):
         """Read a page of events after an exclusive sequence cursor.
 
         Args:
-            session_id (UUID): Session identifier from the request path.
             after (int): Last received sequence number, or zero for the first page.
 
         Returns:
             dict: An events list containing up to 100 journal records.
         """
-        app.state.agent.journal.session(str(session_id))
-        return {"events": app.state.agent.journal.events(str(session_id), after)}
+        app.state.agent.journal.session(settings.session_id)
+        return {"events": app.state.agent.journal.events(settings.session_id, after)}
 
-    @app.websocket("/sessions/{session_id}/events/ws")
-    async def stream(ws: WebSocket, session_id: UUID):
+    @app.websocket("/events/ws")
+    async def stream(ws: WebSocket):
         """Authenticate a WebSocket and stream replayed and new session events.
 
         Invalid credentials, cursors, or missing sessions reject the handshake. The stream
@@ -334,7 +274,6 @@ def create_app(settings=None, containers_factory=Containers):
 
         Args:
             ws (WebSocket): Connection carrying the bearer header and optional after cursor.
-            session_id (UUID): Session identifier from the request path.
         """
         expected = ("Bearer " + settings.token).encode("ascii")
         if not hmac.compare_digest(ws.headers.get("authorization", "").encode(), expected):
@@ -345,7 +284,7 @@ def create_app(settings=None, containers_factory=Containers):
             after = int(ws.query_params.get("after", "0"))
             if not 0 <= after <= 2**63 - 1:
                 raise ValueError()
-            agent.journal.session(str(session_id))
+            agent.journal.session(settings.session_id)
         except (ValueError, AgentError):
             await ws.close(code=1008)
             return
@@ -362,7 +301,7 @@ def create_app(settings=None, containers_factory=Containers):
             nonlocal after
             while True:
                 wakeup.clear()
-                batch = agent.journal.events(str(session_id), after)
+                batch = agent.journal.events(settings.session_id, after)
                 if batch:
                     for event in batch:
                         await asyncio.wait_for(ws.send_json(event), 10)

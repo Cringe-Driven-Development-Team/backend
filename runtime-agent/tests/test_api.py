@@ -1,5 +1,3 @@
-from uuid import uuid4
-
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -13,9 +11,8 @@ async def test_authentication_validation_and_body_limit(env):
     agent, _, client = env
     assert (await client.get("/health", headers={"Authorization": "Bearer bad"})).status_code == 401
     assert (await client.get("/missing", headers={"Authorization": ""})).status_code == 401
-    assert (await client.get("/health")).json()["available_slots"] == 1
-    sid, _ = await new_session(agent)
-    path = f"/sessions/{sid}"
+    assert (await client.get("/health")).json()["ready"]
+    path = ""
     assert (
         await client.post(
             path + "/executions", json={"execution_id": "a", "code": "", "timeout_seconds": 0}
@@ -32,10 +29,7 @@ async def test_authentication_validation_and_body_limit(env):
     assert (await client.get(path + "/events?after=-1")).status_code == 422
     assert (await client.get(path + "/events?after=999999999999999999999")).status_code == 422
     assert (await client.get(path + "/executions/missing")).status_code == 404
-    assert (
-        await client.post("/sessions", json={"session_id": sid, "language": "r"})
-    ).status_code == 409
-    assert (await client.post(path + "/activity")).status_code == 200
+    assert (await client.post("/runtime/activity")).status_code == 200
     assert (await client.post(path + "/runtime/stop")).json()["stopped"]
     assert (await client.post(path + "/runtime/stop")).json()["stopped"]
     assert (await client.get(path + "/health")).status_code == 503
@@ -48,22 +42,19 @@ async def test_event_pagination_is_scoped(env):
     for i in range(110):
         agent.journal.event(sid, "test", value=i)
     await session.finish()
-    other, _ = await new_session(agent)
-    response = await client.get(f"/sessions/{sid}/events")
+    response = await client.get("/events")
     first = response.json()["events"]
     assert len(first) == 100
-    second = await client.get(f"/sessions/{sid}/events?after={first[-1]['seq']}")
+    second = await client.get(f"/events?after={first[-1]['seq']}")
     assert second.json()["events"][0]["seq"] > first[-1]["seq"]
     assert all(e["session_id"] == sid for e in first + second.json()["events"])
-    assert all(e["session_id"] == other for e in agent.journal.events(other, 0))
+    assert all(e["session_id"] == sid for e in second.json()["events"])
 
 
 def test_websocket_auth_replay_and_multiple_subscribers(settings):
     app = create_app(settings, FakeContainers)
     with TestClient(app, headers=AUTH) as client:
-        sid = str(uuid4())
-        client.post("/sessions", json={"session_id": sid, "language": "python"})
-        path = f"/sessions/{sid}/events/ws"
+        path = "/events/ws"
         for suffix, headers in [
             ("", {"Authorization": "bad"}),
             ("?after=-1", AUTH),
@@ -77,7 +68,7 @@ def test_websocket_auth_replay_and_multiple_subscribers(settings):
             assert first_event["seq"] > 0
             with client.websocket_connect(path, headers=AUTH) as second:
                 assert second.receive_json() == first_event
-        cursor = client.get(f"/sessions/{sid}/events").json()["events"][-1]["seq"]
+        cursor = client.get("/events").json()["events"][-1]["seq"]
         with client.websocket_connect(path + f"?after={cursor}", headers=AUTH) as ws:
-            client.post(f"/sessions/{sid}/runtime/drain")
+            client.post("/runtime/drain")
             assert ws.receive_json()["state"] == "DRAINING"

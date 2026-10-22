@@ -10,20 +10,10 @@ from dataclasses import dataclass, field
 
 from . import inspection
 from .journal import encode
+from .jupyter import Jupyter
 from .models import AgentError
 
 log = logging.getLogger(__name__)
-OUTPUT_TYPES = {
-    "stream",
-    "display_data",
-    "execute_result",
-    "update_display_data",
-    "clear_output",
-    "error",
-    "comm_open",
-    "comm_msg",
-    "comm_close",
-}
 
 
 class KernelDiedError(ConnectionError):
@@ -61,6 +51,27 @@ class Session:
 
     The queue worker and control methods share a lock for dispatch and interrupts.
     Persisted message correlations also associate late output with completed commands.
+
+    Attributes:
+        agent (Agent): Coordinator owning this single runtime.
+        id (str): Canonical UUID of the assigned session.
+        language (str): Fixed kernel language, python or r.
+        journal (Journal): Persistent commands, state and event journal.
+        settings (Settings): Resource limits and lifecycle deadlines.
+        lock (asyncio.Lock): Serializes dispatch and kernel control operations.
+        queue (asyncio.Queue): Pending execution and inspection commands.
+        transport (Jupyter | None): Open kernel transport after successful startup.
+        generation (str | None): UUID changed on kernel startup or restart.
+        active (Active | None): Tracker for the dispatched command.
+        pending (dict | None): Dequeued command awaiting dispatch or completion.
+        worker (asyncio.Task | None): Sequential command processing task.
+        reader (asyncio.Task | None): Kernel channel reader task.
+        ready (bool): Whether the kernel is available for execution.
+        draining (bool): Whether new commands are rejected.
+        closed (bool): Whether container cleanup has completed.
+        unattributed_bytes (int): Output bytes stored for unknown parent IDs.
+        unattributed_truncated (bool): Whether that generation's budget is exhausted.
+        last_activity (float): Monotonic timestamp used for idle expiration.
     """
 
     def __init__(self, agent, session_id, language):
@@ -78,13 +89,12 @@ class Session:
         self.settings = agent.settings
         self.lock = asyncio.Lock()
         self.queue = asyncio.Queue(maxsize=100)
-        self.transport = None
+        self.transport: Jupyter | None = None
         self.generation = None
         self.active = None
         self.pending = None
         self.worker = None
         self.reader = None
-        self.starter = None
         self.ready = False
         self.draining = False
         self.closed = False
@@ -157,6 +167,7 @@ class Session:
 
         Kernel death and malformed or lost channels fail the session and trigger cleanup.
         """
+        assert self.transport is not None
         try:
             while True:
                 self.on_message(await self.transport.receive())
@@ -203,10 +214,7 @@ class Session:
         if row is not None:
             inspect = json.loads(row["command"])["kind"] == "inspect"
             if not inspect:
-                if kind in OUTPUT_TYPES:
-                    self.journal.output(self.id, row, payload, self.settings.max_output_bytes)
-                else:
-                    self.journal.event(self.id, "kernel_message", row["id"], **payload)
+                self.journal.output(self.id, row, payload, self.settings.max_output_bytes)
             active = self.active
             if active is not None and active.msg_id == parent:
                 if inspect and kind == "stream" and content.get("name") == "stdout":
@@ -219,7 +227,7 @@ class Session:
                     active.idle |= content.get("execution_state") == "idle"
                 if active.reply is not None and active.idle:
                     active.done.set()
-        elif channel == "iopub" and kind in OUTPUT_TYPES:
+        else:
             size = len(encode(payload).encode())
             if (
                 self.unattributed_bytes + size <= self.settings.max_output_bytes
@@ -243,6 +251,7 @@ class Session:
         Completion requires both reply and idle messages. Unconfirmed timeouts or execution
         failures stop the session; cancellation records UNKNOWN for dispatched work.
         """
+        assert self.transport is not None
         while True:
             command = await self.queue.get()
             self.pending = command
@@ -282,6 +291,8 @@ class Session:
                                 active.done.wait(), self.settings.interrupt_seconds
                             )
                 reply = active.reply
+                if reply is None:
+                    raise KernelDiedError("Missing kernel reply")
                 if timed_out:
                     state, result = "TIMED_OUT", reply
                 elif active.interrupted:
@@ -294,7 +305,9 @@ class Session:
                         result = inspection.result(reply, self.language, active.stdout)
                     except (ValueError, KeyError, SyntaxError):
                         state, result = "FAILED", {"reason": "invalid_inspection_result"}
-                self.journal.transition(self.id, execution_id, state, result)
+                self.journal.transition(
+                    self.id, execution_id, state, result, limit=self.settings.max_output_bytes
+                )
             except asyncio.CancelledError:
                 self.journal.transition(
                     self.id,
@@ -333,6 +346,7 @@ class Session:
         if active is None or active.done.is_set():
             return
         active.interrupted = True
+        assert self.transport is not None
         await self.transport.interrupt()
         await asyncio.wait_for(active.done.wait(), self.settings.interrupt_seconds)
 
@@ -384,6 +398,7 @@ class Session:
                 ):
                     raise AgentError(409, "Restart requires a ready, idle session")
                 self.ready = False
+                assert self.reader is not None and self.transport is not None
                 self.reader.cancel()
                 await asyncio.gather(self.reader, return_exceptions=True)
                 await self.transport.restart(self.settings.startup_seconds)
@@ -406,7 +421,7 @@ class Session:
         """Stop tasks and remove the container while preserving the event journal.
 
         Repeated calls on a closed session are harmless. Failed container removal leaves the
-        session DRAINING and its capacity reserved for a monitor-driven cleanup retry.
+        session DRAINING for a monitor-driven cleanup retry.
 
         Args:
             state (str): Terminal session state to record after successful cleanup.
@@ -433,13 +448,13 @@ class Session:
             try:
                 await self.agent.containers.remove(self.id)
             except Exception:
-                # Keep the slot occupied until cleanup succeeds. The monitor retries.
+                # Keep the runtime unavailable until cleanup succeeds. The monitor retries.
                 log.exception("Container cleanup failed: %s", self.id)
-                self.agent.cleanup_pending[self.id] = (state, reason)
+                self.agent.cleanup_pending = (state, reason)
                 self.journal.session_state(self.id, "DRAINING", "cleanup_failed")
                 self.agent.notify()
                 return
-            self.agent.cleanup_pending.pop(self.id, None)
+            self.agent.cleanup_pending = None
             self.journal.session_state(self.id, state, reason)
             self.journal.event(self.id, "runtime_stopped", generation=self.generation)
             self.closed = True
@@ -447,213 +462,205 @@ class Session:
 
 
 class Agent:
-    """Own the session registry, shared journal, and lifecycle monitor."""
+    """Own exactly one assigned runtime and its persistent journal.
+
+    The first startup creates a kernel. Later process startups recover the
+    journal and leave the previous assignment stopped without replaying code.
+
+    Attributes:
+        settings (Settings): Immutable assignment and resource configuration.
+        journal (Journal): Exclusively owned persistent execution journal.
+        containers (Containers): Backend owning the assignment's container.
+        session (Session): The single assigned runtime.
+        cleanup_pending (tuple[str, str] | None): Final state and reason to retry
+            after container removal fails.
+        subscribers (set[asyncio.Event]): Independent event-stream wakeups.
+        stopping (bool): Whether shutdown has started.
+        ready (bool): Whether Docker recovery and the latest health check passed.
+        monitor (asyncio.Task | None): Background lifecycle monitor.
+        started (bool): Whether startup passed recovery and may clean resources.
+    """
 
     def __init__(self, settings, journal, containers):
-        """Initialize the coordinator without recovering or starting sessions.
+        """Initialize one runtime without starting Docker operations or tasks.
 
         Args:
-            settings (Settings): Validated agent configuration.
-            journal (Journal): Open, exclusively owned persistent journal.
-            containers (Containers): Container backend, or an implementation of the same
-                interface.
+            settings (Settings): Validated immutable assignment configuration.
+            journal (Journal): Open journal owned by this process.
+            containers (Containers): Container backend or compatible implementation.
         """
         self.settings = settings
         self.journal = journal
         self.containers = containers
-        self.sessions = {}
-        self.cleanup_pending = {}
+        self.session = Session(self, settings.session_id, settings.language)
+        self.cleanup_pending: tuple[str, str] | None = None
         self.subscribers = set()
         self.stopping = False
         self.ready = False
         self.monitor = None
+        self.started = False
 
     def notify(self):
-        # Each subscriber owns its wakeup; one reader cannot clear another's signal.
-        """Wake each event subscriber independently to avoid lost notifications."""
+        """Wake each subscriber independently."""
         for wakeup in self.subscribers:
             wakeup.set()
 
     async def start(self):
-        """Remove stale resources, recover persisted state, and start monitoring.
+        """Recover owned resources and start a kernel only for a new assignment.
 
-        Readiness is enabled only after Docker recovery and journal recovery succeed.
+        Validate journal ownership before cleanup. An existing assignment is
+        recovered as stopped, and pending commands are never dispatched again.
+        Kernel startup failures are recorded by Session.start instead of replayed.
+
+        Raises:
+            RuntimeError: STATE_DIR belongs to a different session or language,
+                contains multiple assignments, or the network is invalid.
+            docker.errors.DockerException: Docker health or resource recovery fails.
+            sqlite3.Error: Assignment metadata or recovery cannot be persisted.
         """
+        rows = self.journal.db.execute("SELECT id,language FROM sessions").fetchall()
+        if rows and (
+            len(rows) != 1
+            or rows[0]["id"] != self.settings.session_id
+            or rows[0]["language"] != self.settings.language
+        ):
+            raise RuntimeError("STATE_DIR belongs to another session; reprovision the VPS")
         await self.containers.ping()
         await self.containers.recover()
         self.journal.recover()
+        self.started = True
         self.ready = True
-        self.monitor = asyncio.create_task(self.watch(), name="session-monitor")
+        if rows:
+            # Never restart a completed or interrupted assignment on process reboot.
+            self.session.closed = True
+        else:
+            self.journal.create(self.session.id, self.session.language)
+            await self.session.start()
+        self.monitor = asyncio.create_task(self.watch(), name="runtime-monitor")
 
-    def used_slots(self):
-        """Count sessions still reserving container capacity.
-
-        Returns:
-            int: Number of sessions not yet successfully closed, including startups and
-            cleanup retries.
-        """
-        return sum(not session.closed for session in self.sessions.values())
-
-    def create(self, session_id, language):
-        """Reserve capacity and schedule session startup, or return a previous session.
-
-        Args:
-            session_id (str): Canonical UUID of the session.
-            language (str): Validated kernel language, python or r.
+    def snapshot(self):
+        """Combine persisted assignment state with current runtime status.
 
         Returns:
-            dict: Current session snapshot; new sessions initially have STARTING state.
+            dict: Assignment metadata, session_id, readiness, draining status,
+            active execution ID and number of waiting commands.
 
         Raises:
-            AgentError: The language conflicts (409), capacity is exhausted (429), or the
-                agent is unavailable (503).
+            AgentError: The configured session has not been recorded in the journal.
         """
-        try:
-            existing = self.journal.session(session_id)
-        except AgentError:
-            existing = None
-        if existing:
-            if existing["language"] != language:
-                raise AgentError(409, "session_id already used for another language")
-            return self.snapshot(session_id)
-        if not self.ready or self.stopping:
-            raise AgentError(503, "Agent is unavailable")
-        if self.used_slots() >= self.settings.max_sessions:
-            raise AgentError(429, "Session capacity reached")
-        self.journal.create(session_id, language)
-        session = Session(self, session_id, language)
-        self.sessions[session_id] = session
-        session.starter = asyncio.create_task(session.start(), name=f"start:{session_id}")
-        return self.snapshot(session_id)
-
-    def snapshot(self, session_id):
-        """Combine persisted metadata with current in-memory execution status.
-
-        Args:
-            session_id (str): Canonical UUID of the session.
-
-        Returns:
-            dict: Session metadata, readiness, draining flag, active execution ID, and queue
-            size.
-
-        Raises:
-            AgentError: The session does not exist (HTTP 404).
-        """
-        result = self.journal.session(session_id)
-        session = self.sessions.get(session_id)
+        runtime = self.session
+        result = self.journal.session(runtime.id)
         return {
             **result,
-            "ready": bool(session and session.ready and not session.draining),
-            "draining": result["state"] == "DRAINING",
-            "active_execution_id": session.active.command["execution_id"]
-            if session and session.active
+            "session_id": runtime.id,
+            "ready": self.ready and runtime.ready and not runtime.draining and not self.stopping,
+            "draining": runtime.draining or result["state"] == "DRAINING",
+            "active_execution_id": runtime.active.command["execution_id"]
+            if runtime.active
             else None,
-            "queued": session.queued() if session else 0,
+            "queued": runtime.queued(),
         }
 
-    def live(self, session_id):
-        """Look up an in-memory session that has not been closed.
-
-        Args:
-            session_id (str): Canonical UUID of the session.
+    def live(self):
+        """Return the assigned runtime if the agent is available.
 
         Returns:
-            Session: Session object, which may still be starting or draining.
+            Session: Assigned runtime, which may be draining.
 
         Raises:
-            AgentError: The session is unknown (404) or no longer running in this process
-                (503).
+            AgentError: The agent is unavailable, stopping or the runtime is closed
+                (HTTP 503).
         """
-        self.journal.session(session_id)
-        session = self.sessions.get(session_id)
-        if session is None or session.closed:
-            raise AgentError(503, "Session is stopped")
-        return session
+        if not self.ready or self.stopping or self.session.closed:
+            raise AgentError(503, "Runtime is stopped or unavailable")
+        return self.session
 
-    def accept(self, session_id, command):
-        """Resolve an idempotent retry or submit a command to a live session.
+    def accept(self, command):
+        """Resolve an idempotent retry or queue a command on the live runtime.
+
+        Retries can retrieve persisted results even after the runtime stops.
 
         Args:
-            session_id (str): Canonical UUID of the session.
-            command (dict): Validated command including execution_id, kind, and
-                timeout_seconds.
+            command (dict): Validated execution or inspection request containing
+                execution_id, kind and timeout_seconds.
 
         Returns:
-            dict: Execution ID, state, and decoded result, if available.
+            dict: Execution ID, current state and available result.
 
         Raises:
-            AgentError: The session is missing (404), the ID conflicts (409), the queue is
-                full (429), or the session is unavailable (503).
+            AgentError: The ID is reused for different content (409), the queue
+                is full (429), or the runtime is unavailable (503).
         """
-        self.journal.session(session_id)
-        if self.journal.existing(session_id, command):
-            return self.journal.execution(session_id, command["execution_id"])
-        return self.live(session_id).accept(command)
+        sid = self.session.id
+        if self.journal.existing(sid, command):
+            return self.journal.execution(sid, command["execution_id"])
+        return self.live().accept(command)
 
-    async def stop_session(self, session_id):
-        """Wait for startup and stop a session without discarding its journal.
+    async def stop_session(self):
+        """Stop the assigned runtime while retaining its journal.
 
-        Args:
-            session_id (str): Canonical UUID of the session.
+        Repeated stops are harmless. Container cleanup failures leave the runtime
+        in DRAINING until a later cleanup attempt succeeds.
 
         Returns:
-            dict: Session snapshot after cleanup has been attempted.
+            dict: Assignment snapshot after the cleanup attempt.
+        """
+        await self.session.finish()
+        return self.snapshot()
+
+    async def check_session(self):
+        """Retry cleanup, detect container death and expire an idle runtime.
+
+        Active executions, queued work and locked control operations prevent idle
+        expiration. Closed runtimes are left unchanged.
 
         Raises:
-            AgentError: The session does not exist (HTTP 404).
+            docker.errors.DockerException: Docker cannot inspect container health.
+            sqlite3.Error: A lifecycle transition cannot be persisted.
         """
-        self.journal.session(session_id)
-        session = self.sessions.get(session_id)
-        if session:
-            # Never cancel a Docker create running in a thread: wait, then remove it.
-            await asyncio.shield(session.starter)
-            await session.finish()
-        return self.snapshot(session_id)
-
-    async def check_sessions(self):
-        """Retry cleanup and stop dead or idle sessions during one monitor pass."""
-        for session in list(self.sessions.values()):
-            if session.closed or not session.starter.done():
-                continue
-            if session.id in self.cleanup_pending:
-                await session.finish(*self.cleanup_pending[session.id])
-                continue
-            if session.lock.locked():
-                continue
-            if not await self.containers.alive(session.id):
-                await session.finish("FAILED", "kernel_died")
+        runtime = self.session
+        if runtime.closed:
+            return
+        if self.cleanup_pending:
+            await runtime.finish(*self.cleanup_pending)
+        elif not runtime.lock.locked():
+            if not await self.containers.alive(runtime.id):
+                await runtime.finish("FAILED", "kernel_died")
             elif (
-                not session.active
-                and not session.pending
-                and session.queue.empty()
-                and time.monotonic() - session.last_activity >= self.settings.idle_seconds
+                not runtime.active
+                and not runtime.pending
+                and runtime.queue.empty()
+                and time.monotonic() - runtime.last_activity >= self.settings.idle_seconds
             ):
-                await session.finish("STOPPED", "idle_timeout")
+                await runtime.finish("STOPPED", "idle_timeout")
 
     async def watch(self):
-        """Periodically check Docker and session health until cancelled.
+        """Monitor Docker health and the assigned runtime until cancellation.
 
-        Unexpected monitor errors are logged and disable agent readiness until a later
-        successful check.
+        Unexpected check failures are logged and mark the agent unavailable. The
+        next successful iteration restores availability without replaying commands.
         """
         while True:
             await asyncio.sleep(self.settings.monitor_seconds)
             try:
                 await self.containers.ping()
                 self.ready = not self.stopping
-                await self.check_sessions()
+                await self.check_session()
             except Exception:
                 self.ready = False
-                log.exception("Session monitor failed")
+                log.exception("Runtime monitor failed")
 
     async def close(self):
-        """Reject new work, await startups, stop sessions, and close the Docker client."""
+        """Stop monitoring, release owned resources and close the Docker client.
+
+        An assignment rejected during startup is not stopped or modified. The
+        persistent journal is closed separately by the application's lifespan.
+        """
         self.stopping = True
         self.ready = False
         if self.monitor:
             self.monitor.cancel()
             await asyncio.gather(self.monitor, return_exceptions=True)
-        # Startups are bounded; waiting prevents orphan containers after shutdown.
-        await asyncio.gather(*(s.starter for s in self.sessions.values()), return_exceptions=True)
-        await asyncio.gather(*(s.finish(reason="agent_stopping") for s in self.sessions.values()))
+        if self.started:
+            await self.session.finish()
         await self.containers.close()

@@ -21,16 +21,18 @@ make down    # volumes сохраняются
 
 ## Агент исполнения Python/R
 
-[runtime-agent](runtime-agent/README.md) — отдельный Python 3.13 сервис под systemd
-на общей VPS. Создаёт изолированные Docker-сессии с Python или R, принимает команды
-через внутренний HTTP/WebSocket API и хранит журнал SQLite. Сессии работают без сети,
-с лимитами 1 CPU / 1 GiB RAM; простой 15 минут завершает сессию.
+[runtime-agent](runtime-agent/README.md) — Python 3.13 сервис systemd на выделенной
+VPS пользовательской сессии. Запускает один контейнер с одним Python или R kernel,
+принимает команды через внутренний HTTP/WebSocket API и хранит журнал SQLite.
+UUID сессии и язык задаются при запуске; лимиты — 1 CPU / 1 GiB RAM, простой — 15 минут.
+Контейнер без host mounts; связь агента с Jupyter — закрытый TCP без публикации порта.
+Доступ kernel к интернету ограничивает firewall infra по [контракту сети](docs/runtime-agent-network.md).
 
-Локальные проверки: `make agent-setup agent-lint agent-test agent-build`.
-Для проверки настоящих kernel нужны Docker и `make agent-images agent-integration`.
-Можно проверить транспорт с локальным Python kernel: `make agent-test-jupyter`.
-CI отдельно проверяет агент и оба образа. Установка systemd-сервиса относится к
-`infra`; создание VPS и интеграция с Go API, пользователями и ipynb сюда не входят.
+Проверки: `make agent-setup agent-lint agent-test agent-build`;
+с Docker — `make agent-images agent-integration`; локальный Python kernel —
+`make agent-test-jupyter`. Сетевая приёмка на отдельной VPS — `make agent-network-check`.
+Production-установка, firewall и пул VPS принадлежат `infra`; интеграция с Go API,
+пользователями и ipynb выполняется отдельно.
 
 ## Код и документация
 

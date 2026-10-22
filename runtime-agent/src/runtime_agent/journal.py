@@ -32,6 +32,11 @@ class Journal:
     Use only from the owning event-loop thread. State transitions and their associated
     events commit together. A filesystem lock prevents a second process owning the
     directory.
+
+    Attributes:
+        lock (io.TextIOWrapper): Open file holding the exclusive process lock.
+        db (sqlite3.Connection): SQLite connection used by the event-loop thread.
+        instance_id (str): Persistent agent UUID used to label owned containers.
     """
 
     def __init__(self, directory):
@@ -281,7 +286,7 @@ class Journal:
             "result": json.loads(row["result"]) if row["result"] else None,
         }
 
-    def transition(self, session_id, execution_id, state, result=None):
+    def transition(self, session_id, execution_id, state, result=None, *, limit=None):
         """Commit an execution state change and its event.
 
         Args:
@@ -289,8 +294,19 @@ class Journal:
             execution_id (str): Command identifier within the session.
             state (str): New persisted state.
             result (object | None): JSON-serializable result or failure details.
+            limit (int | None): Cumulative output budget in bytes. When set,
+                charge both stored result copies and replace an oversized result
+                with a fixed truncation summary. None skips budget accounting for
+                trusted lifecycle transitions.
         """
         with self.db:
+            if limit is not None and result is not None:
+                # Results are stored twice: in executions and in the state event.
+                if not self._charge(
+                    session_id, execution_id, 2 * len(encode(result).encode()), limit
+                ):
+                    status = "ok" if state == "SUCCEEDED" else "error"
+                    result = {"status": status, "output_truncated": True}
             self.db.execute(
                 "UPDATE executions SET state=?, result=? WHERE session_id=? AND id=?",
                 (state, encode(result), session_id, execution_id),
@@ -336,6 +352,45 @@ class Journal:
             (session_id, generation, msg_id),
         ).fetchone()
 
+    def _charge(self, session_id, execution_id, size, limit):
+        """Reserve output bytes within the caller-owned transaction.
+
+        Read current counters from SQLite so multiple writes cannot use a stale
+        budget. The first excess reservation records output_truncated; later
+        reservations for that execution are rejected without another notification.
+
+        Args:
+            session_id (str): Canonical UUID of the session.
+            execution_id (str): Execution whose output budget is charged.
+            size (int): Serialized UTF-8 bytes to reserve, including stored copies.
+            limit (int): Maximum cumulative output bytes for this execution.
+
+        Returns:
+            bool: True if the bytes were reserved in the current transaction;
+            False if the output is already truncated or the reservation exceeds it.
+
+        Raises:
+            sqlite3.Error: Budget counters or the truncation event cannot be written.
+        """
+        row = self.db.execute(
+            "SELECT output_bytes,truncated FROM executions WHERE session_id=? AND id=?",
+            (session_id, execution_id),
+        ).fetchone()
+        if row["truncated"]:
+            return False
+        if row["output_bytes"] + size > limit:
+            self.db.execute(
+                "UPDATE executions SET truncated=1 WHERE session_id=? AND id=?",
+                (session_id, execution_id),
+            )
+            self._event(session_id, "output_truncated", execution_id, limit=limit)
+            return False
+        self.db.execute(
+            "UPDATE executions SET output_bytes=output_bytes+? WHERE session_id=? AND id=?",
+            (size, session_id, execution_id),
+        )
+        return True
+
     def output(self, session_id, row, payload, limit):
         """Persist output within its cumulative budget or mark truncation once.
 
@@ -347,19 +402,7 @@ class Journal:
         """
         size = len(encode(payload).encode())
         with self.db:
-            if row["truncated"]:
-                return
-            if row["output_bytes"] + size > limit:
-                self.db.execute(
-                    "UPDATE executions SET truncated=1 WHERE session_id=? AND id=?",
-                    (session_id, row["id"]),
-                )
-                self._event(session_id, "output_truncated", row["id"], limit=limit)
-            else:
-                self.db.execute(
-                    "UPDATE executions SET output_bytes=output_bytes+? WHERE session_id=? AND id=?",
-                    (size, session_id, row["id"]),
-                )
+            if self._charge(session_id, row["id"], size, limit):
                 self._event(session_id, "kernel_message", row["id"], **payload)
 
     def unfinished(self, session_id, state, reason):

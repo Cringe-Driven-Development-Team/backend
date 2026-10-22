@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import socket
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -49,8 +50,8 @@ class LocalJupyter:
         pass
 
     async def start(self, sid, language):
-        directory = self.settings.socket_dir / sid
-        directory.mkdir()
+        directory = self.settings.state_dir.parent / "local-jupyter" / sid
+        directory.mkdir(parents=True)
         config = Path(__file__).parents[1] / "images/jupyter_server_config.py"
         log = self.logs[sid] = (directory / "server.log").open("w+")
         environment = {
@@ -59,12 +60,16 @@ class LocalJupyter:
             "JUPYTER_RUNTIME_DIR": str(directory / "runtime"),
             "JUPYTER_CONFIG_DIR": str(directory / "config"),
         }
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
         self.processes[sid] = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
             "jupyter_server",
             f"--config={config}",
-            f"--ServerApp.sock={directory / 'jupyter.sock'}",
+            "--ServerApp.ip=127.0.0.1",
+            f"--ServerApp.port={port}",
             f"--ServerApp.root_dir={directory}",
             "--ServerApp.allow_root=True",
             env=environment,
@@ -72,7 +77,7 @@ class LocalJupyter:
             stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
-        transport = Jupyter(directory / "jupyter.sock", "local-test-only", language)
+        transport = Jupyter(f"http://127.0.0.1:{port}", "local-test-only", language)
         try:
             await transport.start(30)
             return transport
@@ -114,7 +119,9 @@ async def real_agent(settings, request):
         if os.environ.get("RUN_DOCKER_TESTS") != "1":
             pytest.skip("Set RUN_DOCKER_TESTS=1 for Docker integration")
         factory = Containers
-    settings = replace(settings, max_sessions=2, interrupt_seconds=5, monitor_seconds=0.1)
+    if backend == "docker":
+        settings = request.getfixturevalue("docker_settings")
+    settings = replace(settings, interrupt_seconds=5, monitor_seconds=0.1)
     app = create_app(settings, factory)
     async with app.router.lifespan_context(app):
         yield app.state.agent, backend
@@ -128,36 +135,54 @@ async def test_real_execution_inspection_interrupt_restart(real_agent, language)
     if backend == "local" and language == "r":
         pytest.skip("R is provided by the Docker image")
     sid, session = await new_session(agent, language)
-    assert session.ready, agent.snapshot(sid)
+    assert session.ready, agent.snapshot()
     code = "x = 42\nprint(x)\nx * 2" if language == "python" else "x <- 42; print(x); x * 2"
-    agent.accept(sid, command(code=code))
+    agent.accept(command(code=code))
     assert (await completed(agent, sid, "run-1"))["state"] == "SUCCEEDED"
-    assert agent.accept(sid, command(code=code))["state"] == "SUCCEEDED"
-    agent.accept(sid, {"execution_id": "inspect", "kind": "inspect", "timeout_seconds": 5.0})
+    assert agent.accept(command(code=code))["state"] == "SUCCEEDED"
+    agent.accept({"execution_id": "inspect", "kind": "inspect", "timeout_seconds": 5.0})
     variables = await completed(agent, sid, "inspect")
     assert variables["state"] == "SUCCEEDED", variables
     x = next(v for v in variables["result"]["variables"] if v["name"] == "x")
     assert x["preview"] == "42"
-    agent.accept(sid, command("next", "x + 1"))
+    agent.accept(command("next", "x + 1"))
     assert (await completed(agent, sid, "next"))["state"] == "SUCCEEDED"
     error_code = "raise ValueError('expected')" if language == "python" else "stop('expected')"
-    agent.accept(sid, command("error", error_code))
+    agent.accept(command("error", error_code))
     assert (await completed(agent, sid, "error"))["state"] == "FAILED"
+    # Large real Python/R exceptions must not bypass the persistent budget via reply.
+    previous = session.settings
+    session.settings = replace(previous, max_output_bytes=1024)
+    large_error = (
+        "raise ValueError('x' * 200000)"
+        if language == "python"
+        else "stop(paste(rep('x', 200000L), collapse=''))"
+    )
+    agent.accept(command("large-error", large_error))
+    large_result = await completed(agent, sid, "large-error")
+    assert large_result["state"] == "FAILED"
+    assert large_result["result"]["output_truncated"]
+    assert all(
+        len(str(event)) < 3000
+        for event in all_events(agent, sid)
+        if event.get("execution_id") == "large-error"
+    )
+    session.settings = previous
     rich = (
         "from IPython.display import display\ndisplay({'text/html': '<b>hi</b>'}, raw=True)"
         if language == "python"
         else "IRdisplay::display_html('<b>hi</b>')"
     )
-    agent.accept(sid, command("rich", rich))
+    agent.accept(command("rich", rich))
     assert (await completed(agent, sid, "rich"))["state"] == "SUCCEEDED"
     assert any(
         e.get("content", {}).get("data", {}).get("text/html") == "<b>hi</b>"
         for e in all_events(agent, sid)
     )
     sleep = "import time; time.sleep(20)" if language == "python" else "Sys.sleep(20)"
-    agent.accept(sid, command("timeout", sleep, 1.0))
+    agent.accept(command("timeout", sleep, 1.0))
     assert (await completed(agent, sid, "timeout"))["state"] == "TIMED_OUT"
-    agent.accept(sid, command("interrupt", sleep))
+    agent.accept(command("interrupt", sleep))
     async with asyncio.timeout(5):
         while session.active is None:
             await asyncio.sleep(0.01)
@@ -167,7 +192,7 @@ async def test_real_execution_inspection_interrupt_restart(real_agent, language)
     generation = session.generation
     await session.restart()
     assert generation != session.generation
-    agent.accept(sid, command("cleared", "x"))
+    agent.accept(command("cleared", "x"))
     assert (await completed(agent, sid, "cleared"))["state"] == "FAILED"
     # IRkernel replaces quit()/q() with an ask_exit payload for the frontend;
     # kill the process directly to exercise kernel death before an execute_reply.
@@ -176,116 +201,141 @@ async def test_real_execution_inspection_interrupt_restart(real_agent, language)
         if language == "python"
         else "tools::pskill(Sys.getpid(), signal = 9L)"
     )
-    agent.accept(sid, command("crash", crash))
+    agent.accept(command("crash", crash))
     assert (await completed(agent, sid, "crash"))["state"] == "UNKNOWN"
     async with asyncio.timeout(10):
         while not session.closed:
             await asyncio.sleep(0.01)
     assert session.closed
-    assert agent.snapshot(sid)["reason"] == "kernel_died"
+    assert agent.snapshot()["reason"] == "kernel_died"
     assert all_events(agent, sid)[-1]["kind"] == "runtime_stopped"
 
 
-@pytest.mark.docker
-async def test_docker_isolation_limits_and_kernel_death(settings):
+@pytest.fixture
+def docker_settings(settings):
+    """Protocol-test network only: this does not install or prove production firewall."""
     if os.environ.get("RUN_DOCKER_TESTS") != "1":
         pytest.skip("Set RUN_DOCKER_TESTS=1")
-    settings = replace(settings, max_sessions=2, monitor_seconds=0.1)
-    app = create_app(settings)
+    from uuid import uuid4
+
+    import docker
+
+    client = docker.from_env()
+    network = client.networks.create(
+        "cellestial-test-" + uuid4().hex[:12],
+        driver="bridge",
+        enable_ipv6=False,
+        labels={"ru.cellestial.test": "protocol"},
+    )
+    try:
+        yield replace(settings, kernel_network=network.name)
+    finally:
+        network.remove()
+        client.close()
+
+
+@pytest.mark.docker
+async def test_docker_limits_no_mounts_and_permission_tampering(docker_settings):
+    app = create_app(docker_settings)
     async with app.router.lifespan_context(app):
         agent = app.state.agent
-        sid, first = await new_session(agent)
-        other, second = await new_session(agent)
-        assert first.ready and second.ready
+        sid, runtime = await new_session(agent)
+        assert runtime.ready
         container = await asyncio.to_thread(
             agent.containers.client.containers.get, agent.containers.name(sid)
         )
         config = container.attrs["HostConfig"]
-        assert config["NetworkMode"] == "none"
         assert config["ReadonlyRootfs"]
         assert config["Memory"] == config["MemorySwap"] == 1024**3
         assert config["NanoCpus"] == 1_000_000_000
         assert config["PidsLimit"] == 128
-        code = """import os, socket
+        assert not config.get("Binds")
+        assert not config.get("PortBindings")
+        assert container.attrs["Config"]["User"] == "65532:65532"
+        assert not any(mount.get("Type") == "bind" for mount in container.attrs["Mounts"])
+        code = """import os
 from pathlib import Path
 assert 'RUNTIME_TOKEN' not in os.environ
 assert not Path('/var/run/docker.sock').exists()
+assert not Path('/control').exists()
 assert not Path('/var/lib/cellestial-agent').exists()
+for base in ('/workspace', '/tmp'):
+    directory = Path(base) / 'hostile'
+    directory.mkdir()
+    os.chmod(directory, 0)
+# The root-owned tmpfs mount itself is not owned by the kernel user.
 try:
-    socket.create_connection(('1.1.1.1', 443), timeout=1)
-except OSError:
+    os.chmod('/workspace', 0)
+except PermissionError:
     pass
 else:
-    raise AssertionError('network must be disabled')
-x = 42
-Path('/workspace/only-first').write_text('private')
+    raise AssertionError('kernel must not own the workspace mount')
 """
-        agent.accept(sid, command(code=code))
+        agent.accept(command(code=code))
         assert (await completed(agent, sid, "run-1"))["state"] == "SUCCEEDED"
-        agent.accept(
-            other,
-            command(
-                code="from pathlib import Path\n"
-                "assert not Path('/workspace/only-first').exists()\n"
-                "assert 'x' not in globals()"
-            ),
-        )
-        assert (await completed(agent, other, "run-1"))["state"] == "SUCCEEDED"
-        agent.accept(sid, command("oom", "blob = bytearray(2 * 1024**3)"))
-        assert (await completed(agent, sid, "oom"))["state"] == "UNKNOWN"
-        async with asyncio.timeout(30):
-            while not first.closed:
-                await asyncio.sleep(0.05)
-        assert second.ready
+        await runtime.finish()
+        assert runtime.closed
+        assert not await agent.containers.alive(sid)
+        assert agent.snapshot()["reason"] == "requested"
 
 
 @pytest.mark.docker
-async def test_docker_recovery_removes_only_owned_containers(settings):
-    if os.environ.get("RUN_DOCKER_TESTS") != "1":
-        pytest.skip("Set RUN_DOCKER_TESTS=1")
-    from runtime_agent.journal import Journal
+async def test_docker_oom_stops_runtime(docker_settings):
+    app = create_app(docker_settings)
+    async with app.router.lifespan_context(app):
+        agent = app.state.agent
+        sid, runtime = await new_session(agent)
+        agent.accept(command("oom", "blob = bytearray(2 * 1024**3)"))
+        assert (await completed(agent, sid, "oom"))["state"] == "UNKNOWN"
+        async with asyncio.timeout(30):
+            while not runtime.closed:
+                await asyncio.sleep(0.05)
 
+
+@pytest.mark.docker
+async def test_docker_recovery_removes_only_owned_containers(docker_settings):
+    from runtime_agent.journal import Journal
+    from runtime_agent.runtime import Agent
+
+    settings = docker_settings
     journal = Journal(settings.state_dir)
     backend = Containers(settings, journal.instance_id)
-    agent = None
-    foreign = None
+    agent = Agent(settings, journal, backend)
+    foreign = await asyncio.to_thread(
+        backend.client.containers.run,
+        settings.python_image,
+        ["sleep", "120"],
+        detach=True,
+        network_mode="none",
+        labels={"ru.cellestial.runtime-agent": "another-agent"},
+    )
     try:
-        from runtime_agent.runtime import Agent
-
-        agent = Agent(settings, journal, backend)
         await agent.start()
-        foreign = await asyncio.to_thread(
-            backend.client.containers.run,
-            settings.python_image,
-            ["sleep", "60"],
-            detach=True,
-            network_mode="none",
-            labels={"ru.cellestial.runtime-agent": "another-agent"},
-        )
-        sid, session = await new_session(agent)
-        assert session.ready
-        agent.accept(sid, command(code="import time; time.sleep(20)"))
+        sid, runtime = await new_session(agent)
+        agent.accept(command(code="import time; time.sleep(60)"))
         async with asyncio.timeout(5):
-            while not session.active:
+            while not runtime.active:
                 await asyncio.sleep(0.01)
-        # Simulate an ungraceful agent loss without cleaning its container/state.
-        agent.monitor.cancel()
-        session.worker.cancel()
-        session.reader.cancel()
-        await asyncio.gather(agent.monitor, session.worker, session.reader, return_exceptions=True)
-        await session.transport.close()
+        # Simulate process loss without graceful container removal or completed journal state.
+        tasks = [agent.monitor, runtime.worker, runtime.reader]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await runtime.transport.close()
         journal.transition(sid, "run-1", "RUNNING")
-        await backend.recover()
-        journal.recover()
-        await asyncio.to_thread(foreign.reload)
-        assert foreign.status == "running"
-        assert not await backend.alive(sid)
-        assert journal.execution(sid, "run-1")["state"] == "UNKNOWN"
-        assert journal.session(sid)["reason"] == "agent_restarted"
-        session.closed = True
-    finally:
-        if foreign is not None:
-            await asyncio.to_thread(foreign.remove, force=True, v=True)
-        if agent:
-            await agent.close()
+        await backend.close()
         journal.close()
+        app = create_app(settings)
+        async with app.router.lifespan_context(app):
+            recovered = app.state.agent
+            await asyncio.to_thread(foreign.reload)
+            assert foreign.status == "running"
+            assert not await recovered.containers.alive(sid)
+            assert recovered.journal.execution(sid, "run-1")["state"] == "UNKNOWN"
+            assert recovered.snapshot()["reason"] == "agent_restarted"
+            assert not recovered.session.ready
+    finally:
+        await asyncio.to_thread(foreign.remove, force=True, v=True)
+        if not journal.lock.closed:
+            await agent.close()
+            journal.close()

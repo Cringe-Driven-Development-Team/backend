@@ -1,7 +1,6 @@
 """Define validated API command models and application errors."""
 
-from typing import Annotated, Literal
-from uuid import UUID
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,18 +11,6 @@ class Command(BaseModel):
     """Reject unknown command fields and non-finite numeric values."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-
-
-class CreateSession(Command):
-    """Describe an idempotent request to create a kernel session.
-
-    Attributes:
-        session_id (UUID): Client-generated session identifier.
-        language (str): Kernel language, python or r.
-    """
-
-    session_id: UUID
-    language: Literal["python", "r"]
 
 
 class Execute(Command):

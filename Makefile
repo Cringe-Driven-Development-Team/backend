@@ -79,7 +79,7 @@ AGENT_PYTHON ?= python3.13
 AGENT_VENV ?= $(CURDIR)/runtime-agent/.venv
 AGENT_BIN := $(AGENT_VENV)/bin
 
-.PHONY: agent-setup agent-lint agent-test agent-test-jupyter agent-build agent-images agent-integration
+.PHONY: agent-setup agent-lint agent-test agent-test-jupyter agent-build agent-images agent-integration agent-network-check
 
 agent-setup:
 	$(AGENT_PYTHON) -m venv $(AGENT_VENV)
@@ -105,3 +105,7 @@ agent-images:
 
 agent-integration:
 	cd runtime-agent && RUN_DOCKER_TESTS=1 $(AGENT_BIN)/python -m pytest -q -m docker
+
+# Requires infra-provisioned firewall and live probe endpoints; never runs in regular CI.
+agent-network-check:
+	cd runtime-agent && RUN_NETWORK_TESTS=1 $(AGENT_BIN)/python -m pytest -q -m network

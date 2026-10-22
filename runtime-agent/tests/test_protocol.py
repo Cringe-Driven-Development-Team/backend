@@ -25,3 +25,36 @@ def test_default_binary_protocol_preserves_buffers():
 def test_invalid_binary_frames(frame):
     with pytest.raises(ValueError):
         decode_message(frame)
+
+
+async def test_jupyter_does_not_follow_redirects_to_host_services():
+    """A kernel-controlled Jupyter response must not turn the host agent into a proxy."""
+    from aiohttp import web
+
+    from runtime_agent.jupyter import Jupyter
+
+    visited = []
+
+    async def redirect(request):
+        raise web.HTTPFound("/host-service")
+
+    async def target(request):
+        visited.append(True)
+        return web.json_response({})
+
+    app = web.Application()
+    app.router.add_get("/api/kernelspecs", redirect)
+    app.router.add_get("/host-service", target)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = runner.addresses[0][1]
+    transport = Jupyter(f"http://127.0.0.1:{port}", "test", "python")
+    try:
+        with pytest.raises(ValueError, match="redirect"):
+            await transport.start(0.2)
+        assert not visited
+    finally:
+        await transport.close()
+        await runner.cleanup()

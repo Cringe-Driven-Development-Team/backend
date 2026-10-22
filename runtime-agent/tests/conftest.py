@@ -1,6 +1,4 @@
 import asyncio
-import tempfile
-from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -98,16 +96,18 @@ class FakeContainers:
 
 
 @pytest.fixture
-def settings(tmp_path):
-    # Unix paths must fit sockaddr_un even with pytest's long test directory names.
-    with tempfile.TemporaryDirectory(prefix="ca-", dir="/tmp") as directory:
-        yield Settings(
-            token=TOKEN,
-            state_dir=tmp_path / "state",
-            socket_dir=Path(directory),
-            monitor_seconds=60,
-            interrupt_seconds=0.05,
-        )
+def settings(tmp_path, request):
+    params = getattr(getattr(request.node, "callspec", None), "params", {})
+    return Settings(
+        token=TOKEN,
+        state_dir=tmp_path / "state",
+        session_id=str(uuid4()),
+        language=params.get("language", "python"),
+        kernel_network="cellestial-kernel-test",
+        kernel_dns="1.1.1.1",
+        monitor_seconds=60,
+        interrupt_seconds=0.05,
+    )
 
 
 @pytest.fixture
@@ -127,11 +127,9 @@ async def until(predicate):
             await asyncio.sleep(0.001)
 
 
-async def new_session(agent, language="python"):
-    sid = str(uuid4())
-    agent.create(sid, language)
-    await agent.sessions[sid].starter
-    return sid, agent.sessions[sid]
+async def new_session(agent, language=None):
+    assert language is None or agent.session.language == language
+    return agent.session.id, agent.session
 
 
 def command(eid="run-1", code="print(42)", timeout=300.0):
