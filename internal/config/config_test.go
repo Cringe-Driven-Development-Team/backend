@@ -1,12 +1,36 @@
 package config
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestLogLevel(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  slog.Level
+	}{{"", slog.LevelInfo}, {"debug", slog.LevelDebug}, {"info", slog.LevelInfo}, {"warn", slog.LevelWarn}, {"error", slog.LevelError}} {
+		t.Run(tc.value, func(t *testing.T) {
+			values := map[string]string{"JWT_SECRET": "jwt", "CSRF_SECRET": "csrf", "S3_NOTEBOOKS_BUCKET": "bucket"}
+			if tc.value != "" {
+				values["LOG_LEVEL"] = tc.value
+			}
+			got, err := LoadFrom(settings(values))
+			if err != nil || got.LogLevel != tc.want {
+				t.Fatalf("level=%v err=%v", got.LogLevel, err)
+			}
+		})
+	}
+	values := map[string]string{"JWT_SECRET": "jwt", "CSRF_SECRET": "csrf", "S3_NOTEBOOKS_BUCKET": "bucket", "LOG_LEVEL": "trace-SECRET"}
+	_, err := LoadFrom(settings(values))
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("invalid level error=%v", err)
+	}
+}
 
 func settings(values map[string]string) func(string) (string, bool) {
 	return func(key string) (string, bool) { v, ok := values[key]; return v, ok }

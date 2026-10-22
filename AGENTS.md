@@ -2,6 +2,11 @@
 
 Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
+## Code Review Rules
+
+- Пиши заголовки и пояснения замечаний к PR на русском языке.
+  Имена файлов, идентификаторы, команды и метки приоритета сохраняй без перевода.
+
 ## Целевые продуктовые требования
 
 - Регистрация и авторизация с валидацией; профиль пользователя.

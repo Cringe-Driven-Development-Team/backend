@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -55,6 +56,7 @@ func (uc *NotebookUsecase) Create(ctx context.Context, ownerID int64, name strin
 		return domain.Notebook{}, err
 	}
 	n.Cells = cells
+	slog.InfoContext(ctx, "notebook.create", slog.String("outcome", "success"), slog.Int64("notebook_id", n.ID))
 	return n, nil
 }
 
@@ -94,17 +96,22 @@ func (uc *NotebookUsecase) CreateCell(ctx context.Context, id, ownerID int64, ki
 	if err != nil {
 		return domain.Cell{}, err
 	}
+	slog.InfoContext(ctx, "notebook.cell_create", slog.String("outcome", "success"), slog.Int64("notebook_id", id))
 	return cell, nil
 }
 
 // DeleteCell возвращает ErrCellNotFound, если блока с таким index нет.
 func (uc *NotebookUsecase) DeleteCell(ctx context.Context, id, ownerID int64, index int) error {
-	return uc.modify(ctx, id, ownerID, func(cells []domain.Cell) ([]domain.Cell, error) {
+	err := uc.modify(ctx, id, ownerID, func(cells []domain.Cell) ([]domain.Cell, error) {
 		if index < 0 || index >= len(cells) {
 			return nil, ErrCellNotFound
 		}
 		return slices.Delete(cells, index, index+1), nil
 	})
+	if err == nil {
+		slog.InfoContext(ctx, "notebook.cell_delete", slog.String("outcome", "success"), slog.Int64("notebook_id", id))
+	}
+	return err
 }
 
 // modify меняет блоки через change, пока строка блокнота заблокирована.

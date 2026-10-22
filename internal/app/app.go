@@ -39,7 +39,7 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to connect to database: %w", err)
+		return nil, nil, startupError("database_connect", fmt.Errorf("unable to connect to database: %w", err))
 	}
 	ready := false
 	defer func() {
@@ -49,12 +49,12 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 	}()
 
 	if err = pool.Ping(ctx); err != nil {
-		return nil, nil, fmt.Errorf("database ping failed: %w", err)
+		return nil, nil, startupError("database_connect", fmt.Errorf("database ping failed: %w", err))
 	}
 	slog.Info("connected to postgres successfully")
 
 	if err = migrations.Up(ctx, pool); err != nil {
-		return nil, nil, err
+		return nil, nil, startupError("database_migrate", err)
 	}
 
 	csrf := security.NewCSRFSigner([]byte(cfg.CSRFSecret))
@@ -64,7 +64,7 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 
 	s3Client, err := notebooks3.NewClient(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, startupError("s3_client", err)
 	}
 	notebookUsecase := notebookusecase.NewNotebookUsecase(
 		notebookpostgres.NewNotebookRepository(pool),

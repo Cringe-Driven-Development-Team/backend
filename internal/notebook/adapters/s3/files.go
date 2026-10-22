@@ -14,6 +14,7 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 )
 
 // NewClient берёт регион, ключи и адрес из переменных AWS_*.
@@ -43,6 +44,7 @@ func NewFileStorage(client *awss3.Client, bucket string) *FileStorage {
 
 // Get возвращает usecase.ErrFileNotFound, если ключа нет.
 func (s *FileStorage) Get(ctx context.Context, key string) ([]byte, error) {
+	started := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 	out, err := s.client.GetObject(ctx, &awss3.GetObjectInput{
@@ -51,13 +53,16 @@ func (s *FileStorage) Get(ctx context.Context, key string) ([]byte, error) {
 	})
 	var noKey *types.NoSuchKey
 	if errors.As(err, &noKey) {
+		observability.LogStorage(ctx, "notebook.get_object", started, err)
 		return nil, usecase.ErrFileNotFound
 	}
 	if err != nil {
+		observability.LogStorage(ctx, "notebook.get_object", started, err)
 		return nil, fmt.Errorf("get object %s: %w", key, err)
 	}
 	defer out.Body.Close()
 	data, err := io.ReadAll(out.Body)
+	observability.LogStorage(ctx, "notebook.get_object", started, err)
 	if err != nil {
 		return nil, fmt.Errorf("read object %s: %w", key, err)
 	}
@@ -66,6 +71,7 @@ func (s *FileStorage) Get(ctx context.Context, key string) ([]byte, error) {
 
 // Put записывает файл, заменяя прежний с тем же ключом.
 func (s *FileStorage) Put(ctx context.Context, key string, data []byte) error {
+	started := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 	_, err := s.client.PutObject(ctx, &awss3.PutObjectInput{
@@ -74,6 +80,7 @@ func (s *FileStorage) Put(ctx context.Context, key string, data []byte) error {
 		Body:        bytes.NewReader(data),
 		ContentType: aws.String("application/x-ipynb+json"),
 	})
+	observability.LogStorage(ctx, "notebook.put_object", started, err)
 	if err != nil {
 		return fmt.Errorf("put object %s: %w", key, err)
 	}

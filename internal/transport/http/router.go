@@ -22,6 +22,7 @@ func NewRouter(srv Server, tokens security.TokenParser, corsOrigins []string, cs
 	}
 
 	r := mux.NewRouter()
+	r.Use(middleware.RecordRoute)
 	r.NotFoundHandler = http.HandlerFunc(httperr.NotFound)
 	r.MethodNotAllowedHandler = http.HandlerFunc(httperr.MethodNotAllowed)
 
