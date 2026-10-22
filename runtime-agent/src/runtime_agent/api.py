@@ -23,7 +23,7 @@ class HTTPGuard:
         app (Callable): Downstream ASGI application.
         expected (bytes): Expected bearer header encoded for constant-time comparison.
     """
- по
+
     def __init__(self, app, token):
         """Configure the ASGI application and expected bearer credentials.
 
