@@ -78,12 +78,14 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 security, cookies, principal и httperr; `internal/{user,notebook}/delivery/http`
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
+`API_AUTH_MODE=legacy` по умолчанию сохраняет старый клиент; `bff` использует JSON-токены.
+S2S (`BFF_S2S_REQUIRED`) проверяется до Bearer; `/health` исключён.
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
 `internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
 Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
 используй `r.Context()`. Порядок: request ID → logging → recover → CORS →
-CSRF/Authenticate → Validator. Общие middleware оборачивают весь роутер, чтобы
+CSRF/Authenticate → Validator в legacy; в bff — S2S → Bearer → Validator без CORS/CSRF. Общие middleware оборачивают весь роутер, чтобы
 request ID был на всех ответах, включая CSRF-отказы, preflight, 404 и 405.
 
 ## Границы backend и эксплуатация

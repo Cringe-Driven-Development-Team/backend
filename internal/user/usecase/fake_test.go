@@ -102,8 +102,8 @@ func (r *fakeRepo) DeleteSession(_ context.Context, tokenHash string) (int64, ti
 // fakeTokens выдаёт предсказуемый access-токен.
 type fakeTokens struct{}
 
-func (fakeTokens) Issue(userID int64) (string, error) {
-	return "access-" + strconv.FormatInt(userID, 10), nil
+func (fakeTokens) IssueAccess(userID int64) (string, time.Time, error) {
+	return "access-" + strconv.FormatInt(userID, 10), time.Now().Add(time.Minute), nil
 }
 
 func (r *fakeRepo) SessionByTokenHash(_ context.Context, tokenHash string) (int64, time.Time, error) {

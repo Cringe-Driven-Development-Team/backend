@@ -79,9 +79,21 @@ APIDOG_BRANCH_ID=<id ветки> make generate
 
 - **Авторизация задаётся на самой ручке.** Auth, выставленный на папке, в Apidog работает,
   но в экспорт (а значит, в `security` и в сгенерированный код) не попадает.
-  Для закрытой ручки: **Design → Auth → Security Scheme → схема cookie-авторизации**
-  (`type: apiKey`, `in: cookie`, `name: access_token`)
+  Для закрытой ручки: **Design → Auth → Security Scheme → схема `bearerAuth`**
+  (`type: http`, `scheme: bearer`). Register/login/refresh — явное No Auth
 - **Удаления через sprint-ветку не работают.** Удалить ресурс в ветке — значит просто
   перестать его переопределять: он продолжает приходить из `main` и в экспорт, и в
   `make generate`, а при слиянии не удаляется. Ненужные ручки и схемы удаляются
   в `main` отдельно, после слияния.
+
+
+## Контракт BFF и совместимость
+
+`main` Apidog описывает серверный режим `API_AUTH_MODE=bff`: токены в JSON,
+Bearer на данных и logout, refresh-токен в JSON-теле refresh/logout.
+`X-BFF-Key` описан как необязательный параметр, поскольку его обязательность
+определяет `BFF_S2S_REQUIRED`; отказ middleware всегда `403 s2s_forbidden`.
+Сохранённая в `internal/transport/http/legacy/openapi.json` прежняя спецификация
+используется только для временного режима `legacy` и не экспортируется в Apidog.
+Не расширяйте её новыми возможностями. Основной контракт и сгенерированный код
+по-прежнему обновляются исключительно через Apidog и `make generate`.

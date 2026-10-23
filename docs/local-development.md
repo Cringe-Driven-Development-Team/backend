@@ -19,7 +19,7 @@ make run           # API, PostgreSQL и SeaweedFS через Docker Compose
 
 ```bash
 cp -n .env.example .env
-# В .env задайте JWT_SECRET и CSRF_SECRET: два разных случайных значения.
+# В legacy задайте JWT_SECRET и CSRF_SECRET: два разных случайных значения.
 # Например, каждое получите командой: openssl rand -hex 32
 make doctor
 make up           # PostgreSQL + SeaweedFS + API, ожидание health до 120 секунд
@@ -110,3 +110,7 @@ Apidog-токен нужен только для изменения контра
 6. В PR запишите версии клиентов/gopls, результаты MCP, doctor, health и проверок.
    Недоступный клиент отмечайте как непроверенный; запуск MCP сам по себе
    не подтверждает интеграцию с обоими клиентами. Правила ревью и исключение YarikMix — в [README](../README.md#как-работать-с-задачами).
+
+В `API_AUTH_MODE=bff` нужен только `JWT_SECRET`; cookie/CSRF/CORS выключены.
+Для проверки двух VPS задайте `BFF_S2S_REQUIRED=true` и `BFF_API_KEY`.
+Режим по умолчанию — `legacy`. Контракт и ротация ключей: [авторизация](authentication.md).
