@@ -256,3 +256,15 @@ internal/transport/http/api/openapi.yaml
 
 # Личные разрешения Claude Code
 .claude/settings.local.json
+
+# Python runtime agent
+runtime-agent/.venv/
+runtime-agent/.pytest_cache/
+runtime-agent/.ruff_cache/
+runtime-agent/build/
+runtime-agent/dist/
+runtime-agent/**/__pycache__/
+runtime-agent/**/*.egg-info/
+
+# Superpowers plugin documentation
+docs/superpowers/

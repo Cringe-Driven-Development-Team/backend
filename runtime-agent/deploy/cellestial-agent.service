@@ -1,0 +1,27 @@
+[Unit]
+Description=Cellestial Python/R runtime agent
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+User=cellestial-agent
+Group=cellestial-agent
+SupplementaryGroups=docker
+EnvironmentFile=/etc/cellestial-agent/agent.env
+Environment=STATE_DIR=/var/lib/cellestial-agent
+StateDirectory=cellestial-agent
+StateDirectoryMode=0700
+ExecStart=/opt/cellestial-agent/venv/bin/cellestial-runtime-agent
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

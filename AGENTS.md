@@ -1,12 +1,6 @@
 # Backend: инструкции для агента
 
-Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста.
-Правила работы с задачами, ветками и PR — в [README.md](README.md).
-Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации;
-в Codex и Claude Code используй командный скилл `cdd-tasks`.
-Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`,
-review ментора, кроме настроенного исключения YarikMix (см. README).
-Учебный repo — копия main без Actions и новых PR.
+Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
 ## Code Review Rules
 
@@ -29,9 +23,11 @@ review ментора, кроме настроенного исключения 
 - Go: версия в [go.mod](go.mod), зависимости через Go Modules (`go.mod`, `go.sum`).
 - HTTP: `net/http`, Gorilla mux; PostgreSQL: `pgx/v5/pgxpool`.
 - Локально: Docker Compose с Go API, PostgreSQL 18 и SeaweedFS (S3).
+- `runtime-agent/`: Python 3.13 сервис systemd; одна VPS, одна сессия, один контейнер/kernel.
+  SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
+  Jupyter — закрытый TCP без host mounts; сеть и firewall готовит infra по docs/runtime-agent-network.md.
 
-Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose.
-Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
@@ -46,6 +42,9 @@ make check            # tidy, сборка всех пакетов, race-тес�
 make up               # собрать и запустить API, PostgreSQL, SeaweedFS; ждать health
 make health           # GET /health; make logs — последние логи; make down — остановка
 make run              # то же окружение с логами в терминале
+make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
+make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
+make agent-network-check # отдельная VPS с firewall infra; не обычный CI
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
@@ -62,6 +61,10 @@ make run              # то же окружение с логами в терм
 после чтения Go-файла — `go_file_context`, перед изменением символа —
 `go_symbol_references`, после изменений — `go_diagnostics` и тесты пакета.
 Если MCP недоступен, явно укажи это; `rg`, `go vet` и тесты дают запасной путь.
+Для Python: Serena `initial_instructions` → `activate_project` для `runtime-agent/`;
+через `serena_repl` изучи `s.info("lsp")`, затем `s.lsp.get_symbols_overview` / `find_symbol`.
+Перед изменением символа — `s.lsp.find_referencing_symbols`; после — диагностика файла,
+Pyright с Python из `runtime-agent/.venv` и тесты агента. Без MCP — явно укажи это и используй `rg`, Pyright и тесты.
 Перед PR нужны `make check` и `make docker-build`; результаты и ограничения — в PR.
 
 ## Паттерны кода
@@ -92,6 +95,8 @@ request ID был на всех ответах, включая CSRF-отказы
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
+- Агент не создаёт VPS; UUID сессии и язык назначаются перед запуском сервиса.
+  Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие
@@ -133,12 +138,7 @@ refactor(auth): вынести проверку токена в middleware
 
 ## Документация
 
-README содержит краткую, актуальную информацию о проекте и его использовании.
-Порядок выкатки конкретной задачи, временные зависимости и условия слияния
-описывай в задаче при необходимости, а не в README.
-Подробную общепроектную документацию размещай в репозитории организации
-[docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции
-backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
+README содержит краткую, актуальную информацию о проекте и его использовании. Порядок выкатки конкретной задачи, временные зависимости и условия слияния описывай в задаче при необходимости, а не в README. Подробную общепроектную документацию размещай в репозитории организации [docs](https://github.com/Cringe-Driven-Development-Team/docs). Локальные инструкции backend по запуску, API и CI размещай в `docs/`, оставляя README коротким навигатором.
 
 ## Актуальность документа
 
