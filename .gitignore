@@ -268,3 +268,6 @@ runtime-agent/**/*.egg-info/
 
 # Superpowers plugin documentation
 docs/superpowers/
+
+# Local Apidog CLI metadata
+.apidog/

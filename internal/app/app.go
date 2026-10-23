@@ -27,13 +27,19 @@ import (
 
 // newServer собирает приложение; вызывающий закрывает ресурсы после остановки.
 func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
-	corsOrigins, err := middleware.ParseCORSOrigins(cfg.CORSOrigins)
-	if err != nil {
-		return nil, nil, err
-	}
-	appOrigin, err := middleware.ParseAppOrigin(cfg.AppOrigin)
-	if err != nil {
-		return nil, nil, err
+	bff := cfg.AuthMode == "bff"
+	var corsOrigins []string
+	var appOrigin string
+	var err error
+	if !bff {
+		corsOrigins, err = middleware.ParseCORSOrigins(cfg.CORSOrigins)
+		if err != nil {
+			return nil, nil, err
+		}
+		appOrigin, err = middleware.ParseAppOrigin(cfg.AppOrigin)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	dbURL := cfg.PostgresURL()
 
@@ -57,7 +63,10 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 		return nil, nil, startupError("database_migrate", err)
 	}
 
-	csrf := security.NewCSRFSigner([]byte(cfg.CSRFSecret))
+	var csrf *security.CSRFSigner
+	if !bff {
+		csrf = security.NewCSRFSigner([]byte(cfg.CSRFSecret))
+	}
 	tokens := usersecurity.NewAccessToken([]byte(cfg.JWTSecret), cfg.AccessTTL)
 	userRepo := postgres.NewUserRepository(pool)
 	userUsecase := usecase.NewUserUsecase(userRepo, userRepo, tokens, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, cfg.RefreshTTL)
@@ -71,12 +80,12 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 		notebooks3.NewFileStorage(s3Client, cfg.NotebooksBucket),
 		ipynb.Codec{},
 	)
-	srv := httptransport.Server{
-		UserHandler: userdelivery.NewHandler(userUsecase,
-			cookies.Config{AccessPath: httptransport.BaseURL, RefreshPath: httptransport.BaseURL + "/auth", AccessTTL: cfg.AccessTTL, CSRFTTL: cfg.RefreshTTL, Secure: cfg.CookieSecure}, csrf),
-		NotebookHandler: notebookdelivery.NewHandler(notebookUsecase),
+	userHandler := userdelivery.NewBFFHandler(userUsecase)
+	if !bff {
+		userHandler = userdelivery.NewHandler(userUsecase, cookies.Config{AccessPath: httptransport.BaseURL, RefreshPath: httptransport.BaseURL + "/auth", AccessTTL: cfg.AccessTTL, CSRFTTL: cfg.RefreshTTL, Secure: cfg.CookieSecure}, csrf)
 	}
-	router, err := httptransport.NewRouter(srv, tokens, corsOrigins, csrf, cfg.RefreshTTL, userdelivery.NewRefreshResolver(userUsecase), appOrigin)
+	srv := httptransport.Server{UserHandler: userHandler, NotebookHandler: notebookdelivery.NewHandler(notebookUsecase)}
+	router, err := httptransport.NewRouter(srv, tokens, corsOrigins, csrf, cfg.RefreshTTL, userdelivery.NewRefreshResolver(userUsecase), appOrigin, httptransport.BFFOptions{Enabled: bff, S2SRequired: cfg.BFFS2SRequired, Keys: []string{cfg.BFFAPIKey, cfg.BFFAPIKeyPrevious}})
 	if err != nil {
 		return nil, nil, err
 	}

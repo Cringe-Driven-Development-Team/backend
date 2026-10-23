@@ -49,12 +49,15 @@ if command -v docker >/dev/null 2>&1; then
             config_env=$(docker compose config --environment 2>/dev/null) || config_env=''
             jwt=$(printf '%s\n' "$config_env" | awk '/^JWT_SECRET=/{sub(/^[^=]*=/,""); print}')
             csrf=$(printf '%s\n' "$config_env" | awk '/^CSRF_SECRET=/{sub(/^[^=]*=/,""); print}')
-            for secret in JWT_SECRET CSRF_SECRET; do
+            auth_mode=$(printf '%s\n' "$config_env" | awk '/^API_AUTH_MODE=/{sub(/^[^=]*=/,""); print}')
+            required_secrets=JWT_SECRET
+            if [ "${auth_mode:-legacy}" != bff ]; then required_secrets="$required_secrets CSRF_SECRET"; fi
+            for secret in $required_secrets; do
                 if [ "$secret" = JWT_SECRET ]; then value=$jwt; else value=$csrf; fi
                 if [ -n "$value" ]; then ok "$secret задан"; else fail "$secret пуст — скопируйте .env.example в .env и задайте отдельный случайный секрет (docs/local-development.md)"; fi
             done
-            if [ -n "$jwt" ] && [ "$jwt" = "$csrf" ]; then fail 'JWT_SECRET и CSRF_SECRET должны отличаться'; fi
-            unset config_env jwt csrf value
+            if [ "${auth_mode:-legacy}" != bff ] && [ -n "$jwt" ] && [ "$jwt" = "$csrf" ]; then fail 'JWT_SECRET и CSRF_SECRET должны отличаться'; fi
+            unset config_env jwt csrf value auth_mode required_secrets
         else fail 'Compose configuration — проверьте .env и выполните docker compose config --quiet'; fi
     else fail 'установите Docker Compose v2 с поддержкой up --wait'; fi
 fi

@@ -1,4 +1,63 @@
-# Авторизация и CSRF
+# Авторизация: BFF и совместимость
+
+
+Режим выбирается при запуске через `API_AUTH_MODE`. По умолчанию `legacy`,
+чтобы обычный deploy backend сохранял работу текущего браузерного клиента.
+`bff` включает принятый серверный контракт Apidog. Режимы не смешиваются в одном
+процессе; переключение не требует миграций БД.
+
+## Серверный режим BFF
+
+При `API_AUTH_MODE=bff`:
+
+| Запрос | Успешный ответ |
+| --- | --- |
+| `POST /api/v1/auth/register`, JSON `Credentials` | `201 {user, tokens}` |
+| `POST /api/v1/auth/login`, JSON `Credentials` | `200 {user, tokens}` |
+| `POST /api/v1/auth/refresh`, JSON `{refresh_token}` | `200 TokenPair` |
+| `POST /api/v1/auth/logout`, JSON `{refresh_token}`, Bearer | `204` без тела |
+
+`TokenPair` содержит `access_token`, `refresh_token`, `access_expires_in` и
+`refresh_expires_in`. Сроки — целые секунды оставшейся жизни выданных токенов,
+округлённые вверх. Access соответствует подписанному JWT `exp`; refresh — сроку
+сессии в хранилище. Refresh выполняет ротацию, старый токен становится недействителен.
+Тела refresh/logout обязательны; отсутствующее или пустое поле — `400 validation_error`,
+невалидный refresh — `401 unauthorized`.
+
+Все ручки данных и logout требуют `Authorization: Bearer <access_token>`.
+Access из cookie игнорируется, fallback на cookie отсутствует. Register, login и
+refresh не требуют access. Ответы не устанавливают cookie; CORS и CSRF не
+подключаются. `CSRF_SECRET`, `COOKIE_SECURE`, `APP_ORIGIN`, `CORS_ALLOWED_ORIGINS`
+в BFF-режиме не используются. TTL обоих токенов должен быть не меньше секунды.
+
+### Проверка сервиса и ротация
+
+`BFF_S2S_REQUIRED=true` требует `API_AUTH_MODE=bff` и непустой `BFF_API_KEY`.
+Каждый запрос к `/api/v1`, включая register/login/refresh и OPTIONS, должен иметь
+ровно один `X-BFF-Key`. Проверка идёт до Bearer, разбора JSON и валидации параметров.
+Отказ: `403 {"code":"s2s_forbidden","message":"service access forbidden"}`.
+BFF должен трактовать его как инфраструктурную ошибку: без refresh и удаления сессии.
+Ключи и токены не записываются в логи.
+
+Go принимает `BFF_API_KEY` и, если задан, `BFF_API_KEY_PREVIOUS`. Для ротации:
+сначала разрешить новый ключ как текущий, сохранив старый как предыдущий; затем
+перевести BFF на новый; после проверки удалить предыдущий. Конфигурация применяется
+при перезапуске. Предыдущий ключ без текущего запрещён.
+
+На одной VPS допустимо `BFF_S2S_REQUIRED=false`: используется только Bearer,
+а изоляцию Go обеспечивает сеть Compose. `GET /health` не требует ни ключа,
+ни Bearer. Доступ извне к нему и API ограничивает infra.
+
+### Переключение и откат
+
+После merge backend остаётся в `legacy`. Согласованное включение BFF и Caddy,
+ограничение сетевого доступа к Go и включение S2S выполняются с infra#58/infra#59.
+Проверить health, login, данные, refresh и logout через BFF. Проверку того, что
+ошибка S2S не очищает сессию BFF, выполнить совместно с frontend#2.
+При откате маршрутизации вернуть `API_AUTH_MODE=legacy` и
+`BFF_S2S_REQUIRED=false`, восстановив настройки cookie/CSRF/CORS. SQL Down не нужен.
+
+## Временный браузерный режим legacy
 
 API принимает access-токен только из cookie `access_token`; заголовок
 `Authorization` для авторизации не используется и в ответах не возвращается.
@@ -19,7 +78,7 @@ Cookie `access_token` и `refresh_token` имеют `HttpOnly` и `SameSite=Lax`
 Успешный logout удаляет cookie авторизации с исходными путями, отзывает refresh-сессию
 и выдаёт новый анонимный CSRF-токен.
 
-Для запуска нужен отдельный от `JWT_SECRET` обязательный `CSRF_SECRET`.
+Для запуска в `legacy` нужен отдельный от `JWT_SECRET` обязательный `CSRF_SECRET`.
 
 API выдаёт `__Host-csrf`, если её нет в запросе (кроме OPTIONS), в том числе на 401/403.
 Для действующей access/refresh-сессии выдаётся подписанный токен; анонимная cookie

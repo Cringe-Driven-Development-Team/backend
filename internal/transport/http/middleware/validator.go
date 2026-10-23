@@ -39,7 +39,9 @@ func requireUser(_ context.Context, input *openapi3filter.AuthenticationInput) e
 	if scheme == nil {
 		return errUnsupportedSecurity
 	}
-	if input.SecuritySchemeName != "cookieAuth" || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "access_token" {
+	cookie := input.SecuritySchemeName == "cookieAuth" && scheme.Type == "apiKey" && scheme.In == "cookie" && scheme.Name == "access_token"
+	bearer := input.SecuritySchemeName == "bearerAuth" && scheme.Type == "http" && scheme.Scheme == "bearer"
+	if !cookie && !bearer {
 		return errUnsupportedSecurity
 	}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/cookies"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/legacy"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/security"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
@@ -35,7 +36,8 @@ type fakeUsecase struct {
 	sess usecase.Session
 	err  error
 	// gotID запоминает, какой id хендлер достал из контекста.
-	gotID int64
+	gotID      int64
+	gotRefresh string
 }
 
 func (f *fakeUsecase) Register(context.Context, string, string) (domain.User, usecase.Session, error) {
@@ -46,7 +48,8 @@ func (f *fakeUsecase) Login(context.Context, string, string) (domain.User, useca
 	return f.user, f.sess, f.err
 }
 
-func (f *fakeUsecase) Refresh(context.Context, string) (usecase.Session, error) {
+func (f *fakeUsecase) Refresh(_ context.Context, token string) (usecase.Session, error) {
+	f.gotRefresh = token
 	return f.sess, f.err
 }
 
@@ -78,24 +81,27 @@ type testServer struct {
 // проверяется хендлер вместе со сгенерированным кодом и httperr.
 func newRouter(uc usecase.Usecase) http.Handler {
 	h := NewHandler(uc, cookies.Config{CSRFTTL: time.Hour, AccessPath: "/api/v1", RefreshPath: "/api/v1/auth", AccessTTL: 15 * time.Minute}, testCSRF())
+	router := mux.NewRouter()
+	h.RegisterLegacyRoutes(router, "/api/v1", nil)
 	strict := api.NewStrictHandlerWithOptions(testServer{h, notebookdelivery.NewHandler(nil)}, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  httperr.RequestError,
 		ResponseErrorHandlerFunc: httperr.ResponseError,
 	})
-	return api.HandlerWithOptions(strict, api.GorillaServerOptions{
+	return security.Authenticate(fakeTokens{})(api.HandlerWithOptions(strict, api.GorillaServerOptions{
 		BaseURL:          "/api/v1",
-		BaseRouter:       mux.NewRouter(),
+		BaseRouter:       router,
 		Middlewares:      []api.MiddlewareFunc{security.Authenticate(fakeTokens{})},
 		ErrorHandlerFunc: httperr.RequestError,
-	})
+	}))
 }
 
 func newSession(userID int64) usecase.Session {
 	return usecase.Session{
-		UserID:       userID,
-		AccessToken:  "access-" + strconv.FormatInt(userID, 10),
-		RefreshToken: "new-refresh",
-		ExpiresAt:    time.Now().Add(time.Hour),
+		UserID:          userID,
+		AccessToken:     "access-" + strconv.FormatInt(userID, 10),
+		RefreshToken:    "new-refresh",
+		ExpiresAt:       time.Now().Add(time.Hour),
+		AccessExpiresAt: time.Now().Add(15 * time.Minute),
 	}
 }
 
@@ -357,7 +363,9 @@ func TestHandlerSessionCookies(t *testing.T) {
 				uc := &fakeUsecase{user: domain.User{ID: 1, Login: "bob"}, sess: newSession(1)}
 				handler := NewHandler(uc, cookies.Config{CSRFTTL: time.Hour, AccessPath: "/api/v1", RefreshPath: "/api/v1/auth", AccessTTL: 15 * time.Minute, Secure: secure}, testCSRF())
 				strict := api.NewStrictHandlerWithOptions(testServer{handler, notebookdelivery.NewHandler(nil)}, nil, api.StrictHTTPServerOptions{})
-				router := api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1"})
+				muxRouter := mux.NewRouter()
+				handler.RegisterLegacyRoutes(muxRouter, "/api/v1", nil)
+				router := api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1", BaseRouter: muxRouter})
 				req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/"+operation, strings.NewReader(`{"login":"bob","password":"password123"}`))
 				req.Header.Set("Content-Type", "application/json")
 				req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "old-refresh"})
@@ -382,7 +390,7 @@ func TestHandlerSessionCookies(t *testing.T) {
 
 func TestHandlerCookieSessionLifecycle(t *testing.T) {
 	uc := &fakeUsecase{user: domain.User{ID: 1, Login: "bob"}, sess: newSession(1)}
-	spec, err := api.GetSpec()
+	spec, err := legacy.GetSpec()
 	if err != nil {
 		t.Fatal(err)
 	}

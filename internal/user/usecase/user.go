@@ -108,7 +108,7 @@ func (uc *UserUsecase) CurrentUser(ctx context.Context, id int64) (domain.User, 
 }
 
 func (uc *UserUsecase) startSession(ctx context.Context, userID int64) (Session, error) {
-	access, err := uc.tokens.Issue(userID)
+	access, accessExpiresAt, err := uc.tokens.IssueAccess(userID)
 	if err != nil {
 		return Session{}, err
 	}
@@ -117,7 +117,7 @@ func (uc *UserUsecase) startSession(ctx context.Context, userID int64) (Session,
 	if err := uc.sessions.CreateSession(ctx, userID, hash, expiresAt); err != nil {
 		return Session{}, err
 	}
-	return Session{UserID: userID, AccessToken: access, RefreshToken: refresh, ExpiresAt: expiresAt}, nil
+	return Session{UserID: userID, AccessToken: access, AccessExpiresAt: accessExpiresAt, RefreshToken: refresh, ExpiresAt: expiresAt}, nil
 }
 
 func (uc *UserUsecase) RefreshUserID(ctx context.Context, refreshToken string) (int64, error) {

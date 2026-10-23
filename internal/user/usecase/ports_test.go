@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 )
@@ -15,13 +16,13 @@ func (h failedHasher) Compare(string, string) (bool, error) { return false, h.er
 
 type failedIssuer struct{ err error }
 
-func (i failedIssuer) Issue(int64) (string, error) { return "", i.err }
+func (i failedIssuer) IssueAccess(int64) (string, time.Time, error) { return "", time.Time{}, i.err }
 
 type countingIssuer struct{ calls int }
 
-func (i *countingIssuer) Issue(userID int64) (string, error) {
+func (i *countingIssuer) IssueAccess(userID int64) (string, time.Time, error) {
 	i.calls++
-	return (fakeTokens{}).Issue(userID)
+	return (fakeTokens{}).IssueAccess(userID)
 }
 
 func TestPasswordHashFailureDoesNotCreateUser(t *testing.T) {

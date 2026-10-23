@@ -17,7 +17,7 @@ func TestRequireUserRejectsUnsupportedSecurityScheme(t *testing.T) {
 		scheme           *openapi3.SecurityScheme
 		allowed          bool
 	}{
-		{"legacy bearer", "bearerAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, false},
+		{"bearer contract", "bearerAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, true},
 		{"cookie contract", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "cookie", Name: "access_token"}, true},
 		{"unknown scheme", "unreviewedAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, false},
 		{"wrong cookie", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "cookie", Name: "refresh_token"}, false},
@@ -39,9 +39,9 @@ func TestContractOperationSecurityPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true, "LogoutUser": true}
-	// Logout uses refresh/CSRF and does not require a live access token.
-	protected := map[string]bool{"GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
+	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true}
+	// BFF logout requires Bearer in addition to the refresh body.
+	protected := map[string]bool{"LogoutUser": true, "GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
 	seen := 0
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {

@@ -5,6 +5,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
@@ -31,5 +32,5 @@ type Usecase interface {
 }
 
 type TokenIssuer interface {
-	Issue(userID int64) (string, error)
+	IssueAccess(userID int64) (token string, expiresAt time.Time, err error)
 }
