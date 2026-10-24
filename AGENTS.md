@@ -2,6 +2,12 @@
 
 Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
+## Учебный проект: совместимость и прод
+
+Живых пользователей нет; прод проверяют примерно раз в месяц. Временный простой между выкладками допустим.
+Без прямого требования владельца не добавляй в задачи и код legacy, старый API, поэтапный деплой и высокий uptime.
+Локально независимые фронт/бэк не связывай `Blocked by`; проверь интеграцию после обеих задач. К проверке прод должен работать.
+
 ## Code Review Rules
 
 - Пиши заголовки и пояснения замечаний к PR на русском языке.
@@ -110,8 +116,6 @@ request ID был на всех ответах, включая CSRF-отказы
 - Merge в `main` требует review ментора, кроме YarikMix; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
-- API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
-  где клиент перестал ими пользоваться; проверять на ревью Apidog.
 
 Фактический [CI backend](.github/workflows/ci.yml) публикует
 `ghcr.io/cringe-driven-development-team/backend`: теги `sha-<short>` и `main`,
