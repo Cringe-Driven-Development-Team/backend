@@ -2,6 +2,22 @@
 
 Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
+## Общепроектная wiki
+
+[OpenWiki в docs](https://github.com/Cringe-Driven-Development-Team/docs/tree/main/openwiki) — производный указатель; начни с [quickstart](https://github.com/Cringe-Driven-Development-Team/docs/blob/main/openwiki/quickstart.md).
+Обращайся к wiki при конкретном общепроектном вопросе или неясности; не загружай её в начале каждой задачи.
+При наличии MCP используй `openwiki_search` / `openwiki_read` с `root` — абсолютным Git-корнем актуального локального клона `docs`, а не компонента.
+Без MCP читай `openwiki/quickstart.md` и найденные Markdown-страницы напрямую; без wiki или при исчезнувшем пути ищи в `docs`.
+Перед использованием проверь актуальность клона и в его корне выполни `bun run wiki:check --against <SHA>`, передав полный актуальный SHA `docs/main`.
+Если wiki устарела, используй её только для поиска путей. Каждое нужное утверждение сверь с каноническим документом на актуальном SHA; исходный SHA wiki не подтверждает текущий код.
+Факты о реализации проверяй по актуальному коду компонента и контракту API; состояние прода — по стенду.
+
+## Учебный проект: совместимость и прод
+
+Живых пользователей нет; прод проверяют примерно раз в месяц. Временный простой между выкладками допустим.
+Без прямого требования владельца не добавляй в задачи и код legacy, старый API, поэтапный деплой и высокий uptime.
+Локально независимые фронт/бэк не связывай `Blocked by`; проверь интеграцию после обеих задач. К проверке прод должен работать.
+
 ## Code Review Rules
 
 - Пиши заголовки и пояснения замечаний к PR на русском языке.
@@ -47,12 +63,7 @@ make agent-images agent-integration # Docker-образы Python/R и интег
 make agent-network-check # отдельная VPS с firewall infra; не обычный CI
 ```
 
-`make test` и CI используют `scripts/test.sh`: тестируются все пакеты с
-`-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов).
-Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`,
-`migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается.
-Последняя строка — итоговое покрытие; CI пишет ту же строку в summary.
-Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
+`make test` и CI используют `scripts/test.sh`: тестируются все пакеты с `-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов). Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`, `migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается. Последняя строка — итоговое покрытие; CI пишет ту же строку в summary. Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
 
 Запускай клиент агента из корня backend с `go.mod`, включая отдельный worktree.
 Настройка Codex/Claude Code, gopls и сценарий новой сессии — в
@@ -69,9 +80,7 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 
 ## Паттерны кода
 
-В `cmd/` размещай только точки входа в приложение; допустим README с описанием
-микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай
-в `internal/` (сборка и запуск API — `internal/app`).
+В `cmd/` размещай только точки входа в приложение; допустим README с описанием микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай в `internal/` (сборка и запуск API — `internal/app`).
 
 Карта кода: `cmd/main` → `internal/app` (сборка и запуск), `internal/config` — окружение.
 `internal/transport/http` — роутер, `/health`, API-генерация, middleware,
@@ -81,10 +90,7 @@ security, cookies, principal и httperr; `internal/{user,notebook}/delivery/http
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
 `internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
-Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика
-используй `r.Context()`. Порядок: request ID → logging → recover → CORS →
-CSRF/Authenticate → Validator. Общие middleware оборачивают весь роутер, чтобы
-request ID был на всех ответах, включая CSRF-отказы, preflight, 404 и 405.
+Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика используй `r.Context()`. Порядок: request ID → logging → recover → CORS → CSRF/Authenticate → Validator. Общие middleware оборачивают весь роутер, чтобы request ID был на всех ответах, включая CSRF-отказы, preflight, 404 и 405.
 
 ## Границы backend и эксплуатация
 
@@ -110,8 +116,6 @@ request ID был на всех ответах, включая CSRF-отказы
 - Merge в `main` требует review ментора, кроме YarikMix; отдельного approval environment нет.
   Деплой только из `main`, без отмены выполняющейся выкатки.
 - Откат — тот же playbook с прежним SHA-тегом, без автоматических миграций Down.
-- API N+1 обслуживает клиента N: ручки и поля не удалять в том же релизе,
-  где клиент перестал ими пользоваться; проверять на ревью Apidog.
 
 Фактический [CI backend](.github/workflows/ci.yml) публикует
 `ghcr.io/cringe-driven-development-team/backend`: теги `sha-<short>` и `main`,
