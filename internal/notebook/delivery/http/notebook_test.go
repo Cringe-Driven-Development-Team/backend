@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,45 +20,8 @@ import (
 	userdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/http"
 	"github.com/google/go-cmp/cmp"
 	"github.com/gorilla/mux"
+	"go.uber.org/mock/gomock"
 )
-
-// fakeUsecase отдаёт заранее заданный результат.
-type fakeUsecase struct {
-	list     []domain.NotebookSummary
-	notebook domain.Notebook
-	cell     domain.Cell
-	err      error
-	// gotIndex запоминает, какой index хендлер передал в CreateCell.
-	gotIndex *int
-}
-
-func (f *fakeUsecase) List(context.Context, int64) ([]domain.NotebookSummary, error) {
-	return f.list, f.err
-}
-
-func (f *fakeUsecase) Create(context.Context, int64, string) (domain.Notebook, error) {
-	return f.notebook, f.err
-}
-
-func (f *fakeUsecase) Get(context.Context, int64, int64) (domain.Notebook, error) {
-	return f.notebook, f.err
-}
-
-func (f *fakeUsecase) CreateCell(_ context.Context, _, _ int64, _ domain.CellKind, index *int) (domain.Cell, error) {
-	f.gotIndex = index
-	return f.cell, f.err
-}
-
-func (f *fakeUsecase) DeleteCell(context.Context, int64, int64, int) error {
-	return f.err
-}
-
-// fakeTokens понимает токены вида "access-<id>".
-type fakeTokens struct{}
-
-func (fakeTokens) Parse(token string) (int64, error) {
-	return strconv.ParseInt(strings.TrimPrefix(token, "access-"), 10, 64)
-}
 
 type notebookHandler = Handler
 
@@ -85,15 +47,18 @@ func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 		BaseRouter: mux.NewRouter(),
 		Middlewares: []api.MiddlewareFunc{
 			middleware.Validator(spec, "/api/v1"),
-			security.Authenticate(fakeTokens{}),
+			security.Authenticate(testTokens(t)),
 		},
 		ErrorHandlerFunc: httperr.RequestError,
 	})
 }
 
+type notebookRequestKey struct{}
+
 func do(t *testing.T, uc usecase.Usecase, method, path, body string, withToken bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, "/api/v1"+path, strings.NewReader(body))
+	req = req.WithContext(context.WithValue(req.Context(), notebookRequestKey{}, t.Name()))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -149,7 +114,24 @@ func TestErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(t, &fakeUsecase{err: tt.err}, tt.method, tt.path, tt.body, !tt.noToken)
+			uc := NewMockUsecase(gomock.NewController(t))
+			if tt.err != nil {
+				switch {
+				case tt.method == http.MethodGet:
+					uc.EXPECT().Get(gomock.Any(), int64(1), int64(1)).Return(domain.Notebook{}, tt.err)
+				case tt.method == http.MethodDelete:
+					uc.EXPECT().DeleteCell(gomock.Any(), int64(1), int64(1), 7).Return(tt.err)
+				case tt.path == "/notebooks":
+					uc.EXPECT().Create(gomock.Any(), int64(1), "   ").Return(domain.Notebook{}, tt.err)
+				default:
+					var body api.CreateCellRequest
+					if err := json.Unmarshal([]byte(tt.body), &body); err != nil {
+						t.Fatal(err)
+					}
+					uc.EXPECT().CreateCell(gomock.Any(), int64(1), int64(1), domain.CellKind(body.Kind), body.Index).Return(domain.Cell{}, tt.err)
+				}
+			}
+			rec := do(t, uc, tt.method, tt.path, tt.body, !tt.noToken)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d; body %s", rec.Code, tt.wantStatus, rec.Body)
@@ -181,7 +163,9 @@ func TestListNotebooks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(t, &fakeUsecase{list: tt.list}, http.MethodGet, "/notebooks", "", true)
+			uc := NewMockUsecase(gomock.NewController(t))
+			uc.EXPECT().List(gomock.Any(), int64(1)).Return(tt.list, nil)
+			rec := do(t, uc, http.MethodGet, "/notebooks", "", true)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body)
@@ -195,10 +179,13 @@ func TestListNotebooks(t *testing.T) {
 
 func TestCreateAndGetNotebook(t *testing.T) {
 	created := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
-	uc := &fakeUsecase{notebook: domain.Notebook{
+	notebook := domain.Notebook{
 		ID: 3, Name: "a", CreatedAt: created, UpdatedAt: created,
 		Cells: []domain.Cell{{ID: "c1", Kind: domain.CellKindCode}},
-	}}
+	}
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().Create(gomock.Any(), int64(1), "a").Return(notebook, nil)
+	uc.EXPECT().Get(gomock.Any(), int64(3), int64(1)).Return(notebook, nil)
 	want := api.Notebook{
 		Id: 3, Name: "a", CreatedAt: created, UpdatedAt: created,
 		Cells: []api.Cell{{Id: "c1", Kind: api.CellKindCode, Source: ""}},
@@ -226,7 +213,9 @@ func TestCreateAndGetNotebook(t *testing.T) {
 }
 
 func TestCreateCell(t *testing.T) {
-	uc := &fakeUsecase{cell: domain.Cell{ID: "c2", Kind: domain.CellKindMarkdown}}
+	uc := NewMockUsecase(gomock.NewController(t))
+	index := 0
+	uc.EXPECT().CreateCell(gomock.Any(), int64(3), int64(1), domain.CellKindMarkdown, &index).Return(domain.Cell{ID: "c2", Kind: domain.CellKindMarkdown}, nil)
 	rec := do(t, uc, http.MethodPost, "/notebooks/3/cells", `{"kind":"markdown","index":0}`, true)
 
 	if rec.Code != http.StatusCreated {
@@ -239,13 +228,13 @@ func TestCreateCell(t *testing.T) {
 	if diff := cmp.Diff(api.Cell{Id: "c2", Kind: api.CellKindMarkdown}, got); diff != "" {
 		t.Errorf("тело ответа (-want +got):\n%s", diff)
 	}
-	if uc.gotIndex == nil || *uc.gotIndex != 0 {
-		t.Errorf("index = %v, want 0: хендлер не передал его в usecase", uc.gotIndex)
-	}
+
 }
 
 func TestDeleteCell(t *testing.T) {
-	rec := do(t, &fakeUsecase{}, http.MethodDelete, "/notebooks/3/cells/0", "", true)
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().DeleteCell(gomock.Any(), int64(3), int64(1), 0).Return(nil)
+	rec := do(t, uc, http.MethodDelete, "/notebooks/3/cells/0", "", true)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204; body %s", rec.Code, rec.Body)
@@ -253,4 +242,12 @@ func TestDeleteCell(t *testing.T) {
 	if rec.Body.Len() != 0 {
 		t.Errorf("у 204 есть тело: %s", rec.Body)
 	}
+}
+
+func testTokens(t *testing.T) *MockTokenParser {
+	t.Helper()
+	tokens := NewMockTokenParser(gomock.NewController(t))
+	// Routing helpers may receive requests with or without a cookie.
+	tokens.EXPECT().Parse("access-1").Return(int64(1), nil).AnyTimes()
+	return tokens
 }

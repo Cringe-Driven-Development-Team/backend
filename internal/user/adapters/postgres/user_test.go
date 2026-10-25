@@ -11,25 +11,8 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type failureRow struct{ err error }
-
-func (r failureRow) Scan(...any) error { return r.err }
-
-type failureDB struct{ err error }
-
-func (db failureDB) QueryRow(context.Context, string, ...any) pgx.Row { //nolint:ireturn // required by Querier
-	return failureRow(db)
-}
-func (db failureDB) Query(context.Context, string, ...any) (pgx.Rows, error) { //nolint:ireturn // required by Querier
-	return nil, db.err
-}
-func (db failureDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, db.err
-}
 
 func TestCreateUserLogsSQLStateWithoutSensitiveInputs(t *testing.T) {
 	var out bytes.Buffer
@@ -38,7 +21,9 @@ func TestCreateUserLogsSQLStateWithoutSensitiveInputs(t *testing.T) {
 	old := slog.Default()
 	slog.SetDefault(slog.New(observability.NewHandler(slog.NewJSONHandler(&out, &slog.HandlerOptions{Level: &level}))))
 	t.Cleanup(func() { slog.SetDefault(old) })
-	repo := NewUserRepository(failureDB{&pgconn.PgError{Code: "23505", Detail: "SECRET-detail"}})
+	db := newPool(t)
+	db.ExpectQuery(createUserSQL).WithArgs("SECRET-login", "SECRET-hash").WillReturnError(&pgconn.PgError{Code: "23505", Detail: "SECRET-detail"})
+	repo := NewUserRepository(db)
 	_, err := repo.CreateUser(observability.WithRequestID(context.Background(), "req-db"), "SECRET-login", "SECRET-hash")
 	if !errors.Is(err, usecase.ErrLoginTaken) {
 		t.Fatalf("error=%v", err)
@@ -57,7 +42,16 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 	slog.SetDefault(slog.New(observability.NewHandler(slog.NewJSONHandler(&out, &slog.HandlerOptions{Level: &level}))))
 	t.Cleanup(func() { slog.SetDefault(old) })
 	ctx := observability.WithRequestID(context.Background(), "req-db")
-	repo := NewUserRepository(failureDB{errors.New("SECRET-db")})
+	db := newPool(t)
+	failure := errors.New("SECRET-db")
+	expires := time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)
+	db.ExpectQuery(createUserSQL).WithArgs("SECRET-login", "SECRET-hash").WillReturnError(failure)
+	db.ExpectQuery(byLoginSQL).WithArgs("SECRET-login").WillReturnError(failure)
+	db.ExpectQuery(byIDSQL).WithArgs(int64(1)).WillReturnError(failure)
+	db.ExpectExec(createSessionSQL).WithArgs(int64(1), "SECRET-hash", expires).WillReturnError(failure)
+	db.ExpectQuery(deleteSessionSQL).WithArgs("SECRET-hash").WillReturnError(failure)
+	db.ExpectQuery(sessionByHashSQL).WithArgs("SECRET-hash").WillReturnError(failure)
+	repo := NewUserRepository(db)
 	for _, tc := range []struct {
 		operation string
 		call      func() error
@@ -65,12 +59,12 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 		{"user.create", func() error { _, err := repo.CreateUser(ctx, "SECRET-login", "SECRET-hash"); return err }},
 		{"user.by_login", func() error { _, _, err := repo.UserByLogin(ctx, "SECRET-login"); return err }},
 		{"user.by_id", func() error { _, err := repo.UserByID(ctx, 1); return err }},
-		{"session.create", func() error { return repo.CreateSession(ctx, 1, "SECRET-hash", time.Now()) }},
+		{"session.create", func() error { return repo.CreateSession(ctx, 1, "SECRET-hash", expires) }},
 		{"session.delete", func() error { _, _, err := repo.DeleteSession(ctx, "SECRET-hash"); return err }},
 		{"session.by_token", func() error { _, _, err := repo.SessionByTokenHash(ctx, "SECRET-hash"); return err }},
 	} {
 		out.Reset()
-		if err := tc.call(); err == nil {
+		if err := tc.call(); !errors.Is(err, failure) {
 			t.Fatalf("%s unexpectedly succeeded", tc.operation)
 		}
 		log := out.String()

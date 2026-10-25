@@ -13,7 +13,8 @@ import (
 
 var errS3Down = errors.New("s3 is down")
 
-// fakeMeta хранит строки блокнотов в памяти; мьютекс заменяет блокировку строки.
+// Stateful fixtures support the create/edit/read and logging flows.
+// Their mutex protects fixture maps; it does not prove database atomicity.
 type fakeMeta struct {
 	mu        sync.Mutex
 	notebooks map[int64]domain.Notebook
