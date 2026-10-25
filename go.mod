@@ -14,7 +14,9 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
 	github.com/oapi-codegen/runtime v1.7.0
+	github.com/pashagolub/pgxmock/v5 v5.2.0
 	github.com/pressly/goose/v3 v3.28.0
+	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.57.0
 )
 
@@ -58,4 +60,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+tool (
+	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+	go.uber.org/mock/mockgen
+)

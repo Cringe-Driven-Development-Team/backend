@@ -1,7 +1,6 @@
 package httptransport
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,78 +19,15 @@ import (
 	userdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
+	"go.uber.org/mock/gomock"
 )
 
-// Неиспользуемые методы встроенных интерфейсов не должны вызываться в этих тестах.
-type csrfUsers struct {
-	usecase.Usecase
-	session   usecase.Session
-	mutations int
-	lookupErr error
-}
-
-func (u *csrfUsers) Login(context.Context, string, string) (domain.User, usecase.Session, error) {
-	return domain.User{ID: 1, Login: "bob"}, u.session, nil
-}
-func (u *csrfUsers) Register(ctx context.Context, login, password string) (domain.User, usecase.Session, error) {
-	return u.Login(ctx, login, password)
-}
-func (u *csrfUsers) CurrentUser(context.Context, int64) (domain.User, error) {
-	return domain.User{ID: 1, Login: "bob"}, nil
-}
-func (u *csrfUsers) RefreshUserID(_ context.Context, refresh string) (int64, error) {
-	if u.lookupErr != nil {
-		return 0, u.lookupErr
-	}
-	if refresh != u.session.RefreshToken || refresh == "" {
-		return 0, usecase.ErrInvalidRefresh
-	}
-	return u.session.UserID, nil
-}
-func (u *csrfUsers) Refresh(ctx context.Context, refresh string) (usecase.Session, error) {
-	if _, err := u.RefreshUserID(ctx, refresh); err != nil {
-		return usecase.Session{}, err
-	}
-	u.mutations++
-	u.session.RefreshToken += "-rotated"
-	return u.session, nil
-}
-func (u *csrfUsers) Logout(ctx context.Context, refresh string) error {
-	if _, err := u.RefreshUserID(ctx, refresh); err != nil {
-		return err
-	}
-	u.mutations++
-	u.session.RefreshToken = ""
-	return nil
-}
-
-type csrfNotebooks struct{ notebookusecase.Usecase }
-
-func (csrfNotebooks) Create(_ context.Context, ownerID int64, name string) (notebookmodels.Notebook, error) {
-	if ownerID != 1 {
-		panic("user context lost")
-	}
-	return notebookmodels.Notebook{ID: 1, Name: name}, nil
-}
-func (csrfNotebooks) CreateCell(_ context.Context, _, ownerID int64, kind notebookmodels.CellKind, _ *int) (notebookmodels.Cell, error) {
-	if ownerID != 1 {
-		panic("user context lost")
-	}
-	return notebookmodels.Cell{ID: "cell", Kind: kind}, nil
-}
-func (csrfNotebooks) DeleteCell(_ context.Context, _, ownerID int64, _ int) error {
-	if ownerID != 1 {
-		panic("user context lost")
-	}
-	return nil
-}
-
-func csrfRouter(t *testing.T) (http.Handler, *security.CSRFSigner, *csrfUsers, string, string) {
+func csrfRouter(t *testing.T, notebooks ...notebookusecase.Usecase) (http.Handler, *security.CSRFSigner, *csrfUsers, string, string) {
 	t.Helper()
-	return csrfRouterOrigins(t, []string{"https://cellestial.ru"}, middleware.DefaultAppOrigin)
+	return csrfRouterOrigins(t, []string{"https://cellestial.ru"}, middleware.DefaultAppOrigin, notebooks...)
 }
 
-func csrfRouterOrigins(t *testing.T, corsOrigins []string, appOrigin string) (http.Handler, *security.CSRFSigner, *csrfUsers, string, string) {
+func csrfRouterOrigins(t *testing.T, corsOrigins []string, appOrigin string, notebooks ...notebookusecase.Usecase) (http.Handler, *security.CSRFSigner, *csrfUsers, string, string) {
 	t.Helper()
 	tokens := usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour)
 	access, err := tokens.Issue(1)
@@ -104,9 +40,15 @@ func csrfRouterOrigins(t *testing.T, corsOrigins []string, appOrigin string) (ht
 	}
 	csrf := security.NewCSRFSigner([]byte("csrf-test-secret"))
 	users := &csrfUsers{session: usecase.Session{UserID: 1, AccessToken: access, RefreshToken: "refresh", ExpiresAt: time.Now().Add(30 * 24 * time.Hour)}}
+	var notebook notebookusecase.Usecase
+	if len(notebooks) > 0 {
+		notebook = notebooks[0]
+	} else {
+		notebook = NewMockNotebookUsecase(gomock.NewController(t))
+	}
 	handler, err := NewRouter(Server{
 		UserHandler:     userdelivery.NewHandler(users, cookies.Config{AccessPath: BaseURL, RefreshPath: BaseURL + "/auth", AccessTTL: time.Hour, CSRFTTL: 30 * 24 * time.Hour, Secure: true}, csrf),
-		NotebookHandler: notebookdelivery.NewHandler(csrfNotebooks{}),
+		NotebookHandler: notebookdelivery.NewHandler(notebook),
 	}, tokens, corsOrigins, csrf, 30*24*time.Hour, userdelivery.NewRefreshResolver(users), appOrigin)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +108,8 @@ func assertCSRFError(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 func TestRouterCSRFBootstrap(t *testing.T) {
-	handler, csrf, _, _, _ := csrfRouter(t)
+	f := newRouterFixture(t)
+	handler, csrf := f.handler, f.csrf
 	for _, tt := range []struct {
 		method, path string
 		status       int
@@ -210,7 +153,8 @@ func TestRouterCSRFBootstrap(t *testing.T) {
 }
 
 func TestRouterCSRFMutations(t *testing.T) {
-	handler, csrf, _, access, _ := csrfRouter(t)
+	f := newRouterFixture(t)
+	handler, csrf, access := f.handler, f.csrf, f.access
 	valid := csrf.Signed(1)
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		for _, invalid := range []string{"missing", "empty", "missing cookie", "empty cookie", "mismatch", "anonymous", "other user", "bad signature", "duplicate header", "duplicate cookie"} {
@@ -248,6 +192,10 @@ func TestRouterCSRFMutations(t *testing.T) {
 			})
 		}
 	}
+	notebooks := f.notebooks
+	notebooks.EXPECT().Create(gomock.Any(), int64(1), "Notebook").Return(notebookmodels.Notebook{ID: 1, Name: "Notebook"}, nil)
+	notebooks.EXPECT().CreateCell(gomock.Any(), int64(1), int64(1), notebookmodels.CellKindCode, (*int)(nil)).Return(notebookmodels.Cell{ID: "cell", Kind: notebookmodels.CellKindCode}, nil)
+	notebooks.EXPECT().DeleteCell(gomock.Any(), int64(1), int64(1), 0).Return(nil)
 	for _, tt := range []struct {
 		method, path string
 		status       int
@@ -263,7 +211,9 @@ func TestRouterCSRFMutations(t *testing.T) {
 	if rec.Code != 401 {
 		t.Fatalf("missing access should remain 401: %d %s", rec.Code, rec.Body)
 	}
-	rec = serveCSRF(handler, csrfRequest("GET", BaseURL+"/users/me", "", access, ""))
+	// User lookup is checked by the dedicated strict router fixture.
+	f.users.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil)
+	rec = serveCSRF(f.handler, csrfRequest("GET", BaseURL+"/users/me", "", access, ""))
 	if rec.Code != 200 {
 		t.Fatalf("GET needs no CSRF: %d", rec.Code)
 	}
@@ -337,7 +287,11 @@ func TestRouterCSRFOrigin(t *testing.T) {
 	for _, operation := range []string{"login", "register", "refresh"} {
 		for _, origin := range []string{"https://evil.example", "https://avatars.cellestial.ru", "null", "https://cellestial.ru", ""} {
 			t.Run(operation+"/"+origin, func(t *testing.T) {
-				handler, csrf, _, _, _ := csrfRouter(t)
+				f := newRouterFixture(t)
+				handler, csrf := f.handler, f.csrf
+				if origin == "" || origin == "https://cellestial.ru" {
+					expectSessionRequest(f, operation, true)
+				}
 				token := csrf.Anonymous()
 				if operation == "refresh" {
 					token = csrf.Signed(1)
@@ -363,7 +317,8 @@ func TestRouterCSRFOrigin(t *testing.T) {
 }
 
 func TestRouterCSRFBeforeGeneratedParameters(t *testing.T) {
-	handler, csrf, _, _, _ := csrfRouter(t)
+	f := newRouterFixture(t)
+	handler, csrf := f.handler, f.csrf
 	// Отсутствие обязательной refresh-cookie не должно скрыть отказ CSRF за 401.
 	for _, operation := range []string{"refresh", "logout"} {
 		rec := serveCSRF(handler, csrfRequest("POST", BaseURL+"/auth/"+operation, "", "", ""))

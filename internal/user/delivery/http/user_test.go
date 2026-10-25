@@ -2,7 +2,6 @@ package delivery
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,45 +25,8 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 	"github.com/google/go-cmp/cmp"
 	"github.com/gorilla/mux"
+	"go.uber.org/mock/gomock"
 )
-
-// fakeUsecase отдаёт заранее заданный результат: хендлер проверяется
-// отдельно от бизнес-логики.
-type fakeUsecase struct {
-	user domain.User
-	sess usecase.Session
-	err  error
-	// gotID запоминает, какой id хендлер достал из контекста.
-	gotID int64
-}
-
-func (f *fakeUsecase) Register(context.Context, string, string) (domain.User, usecase.Session, error) {
-	return f.user, f.sess, f.err
-}
-
-func (f *fakeUsecase) Login(context.Context, string, string) (domain.User, usecase.Session, error) {
-	return f.user, f.sess, f.err
-}
-
-func (f *fakeUsecase) Refresh(context.Context, string) (usecase.Session, error) {
-	return f.sess, f.err
-}
-
-func (f *fakeUsecase) Logout(context.Context, string) error {
-	return f.err
-}
-
-func (f *fakeUsecase) CurrentUser(_ context.Context, id int64) (domain.User, error) {
-	f.gotID = id
-	return f.user, f.err
-}
-
-// fakeTokens понимает токены вида "access-<id>".
-type fakeTokens struct{}
-
-func (fakeTokens) Parse(token string) (int64, error) {
-	return strconv.ParseInt(strings.TrimPrefix(token, "access-"), 10, 64)
-}
 
 // Встроить два типа с именем Handler нельзя, поэтому псевдоним.
 type userHandler = Handler
@@ -76,7 +38,7 @@ type testServer struct {
 
 // newRouter собирает сервер как в main, но без валидатора:
 // проверяется хендлер вместе со сгенерированным кодом и httperr.
-func newRouter(uc usecase.Usecase) http.Handler {
+func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 	h := NewHandler(uc, cookies.Config{CSRFTTL: time.Hour, AccessPath: "/api/v1", RefreshPath: "/api/v1/auth", AccessTTL: 15 * time.Minute}, testCSRF())
 	strict := api.NewStrictHandlerWithOptions(testServer{h, notebookdelivery.NewHandler(nil)}, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  httperr.RequestError,
@@ -85,7 +47,7 @@ func newRouter(uc usecase.Usecase) http.Handler {
 	return api.HandlerWithOptions(strict, api.GorillaServerOptions{
 		BaseURL:          "/api/v1",
 		BaseRouter:       mux.NewRouter(),
-		Middlewares:      []api.MiddlewareFunc{security.Authenticate(fakeTokens{})},
+		Middlewares:      []api.MiddlewareFunc{security.Authenticate(testTokens(t))},
 		ErrorHandlerFunc: httperr.RequestError,
 	})
 }
@@ -174,7 +136,22 @@ func TestHandlerErrors(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 
-			newRouter(&fakeUsecase{err: tt.err}).ServeHTTP(rec, req)
+			uc := NewMockUsecase(gomock.NewController(t))
+			if tt.err != nil {
+				switch tt.path {
+				case "/auth/register":
+					uc.EXPECT().Register(gomock.Any(), "alice", "password123").Return(domain.User{}, usecase.Session{}, tt.err)
+				case "/auth/login":
+					uc.EXPECT().Login(gomock.Any(), "alice", "wrong-password").Return(domain.User{}, usecase.Session{}, tt.err)
+				case "/auth/refresh":
+					uc.EXPECT().RefreshUserID(gomock.Any(), tt.refresh).Return(int64(0), tt.err)
+				case "/auth/logout":
+					uc.EXPECT().RefreshUserID(gomock.Any(), tt.refresh).Return(int64(0), tt.err)
+				case "/users/me":
+					uc.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{}, tt.err)
+				}
+			}
+			newRouter(t, uc).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d; body %s", rec.Code, tt.wantStatus, rec.Body)
@@ -200,11 +177,12 @@ func TestHandlerLoginVerificationFailure(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
 	failure := errors.New("unsupported password hash version")
-	uc := &fakeUsecase{err: observability.WithCode(fmt.Errorf("compare password: %w", failure), "password_compare_failed")}
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().Login(gomock.Any(), "alice", "password123").Return(domain.User{}, usecase.Session{}, observability.WithCode(fmt.Errorf("compare password: %w", failure), "password_compare_failed"))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"login":"alice","password":"password123"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	newRouter(uc).ServeHTTP(rec, req)
+	newRouter(t, uc).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500; body %s", rec.Code, rec.Body)
@@ -232,13 +210,14 @@ func TestHandlerLoginVerificationFailure(t *testing.T) {
 
 func TestHandlerRegister(t *testing.T) {
 	u := domain.User{ID: 1, Login: "bob"}
-	uc := &fakeUsecase{user: u, sess: newSession(u.ID)}
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().Register(gomock.Any(), "bob", "password123").Return(u, newSession(u.ID), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"login":"bob","password":"password123"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	newRouter(uc).ServeHTTP(rec, req)
+	newRouter(t, uc).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body)
@@ -254,13 +233,17 @@ func TestHandlerRegister(t *testing.T) {
 }
 
 func TestHandlerRefreshAndLogout(t *testing.T) {
-	uc := &fakeUsecase{sess: newSession(1)}
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().RefreshUserID(gomock.Any(), "old-refresh").Return(int64(1), nil)
+	uc.EXPECT().Refresh(gomock.Any(), "old-refresh").Return(newSession(1), nil)
+	uc.EXPECT().RefreshUserID(gomock.Any(), "old-refresh").Return(int64(1), nil)
+	uc.EXPECT().Logout(gomock.Any(), "old-refresh").Return(nil)
 	post := func(path string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1"+path, nil)
 		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "old-refresh"})
 		req.Header.Set(security.CSRFHeaderName, testCSRF().Signed(1))
 		rec := httptest.NewRecorder()
-		newRouter(uc).ServeHTTP(rec, req)
+		newRouter(t, uc).ServeHTTP(rec, req)
 		return rec
 	}
 
@@ -279,19 +262,18 @@ func TestHandlerRefreshAndLogout(t *testing.T) {
 
 func TestHandlerGetCurrentUser(t *testing.T) {
 	u := domain.User{ID: 1, Login: "alice"}
-	uc := &fakeUsecase{user: u}
+	uc := NewMockUsecase(gomock.NewController(t))
+	uc.EXPECT().CurrentUser(gomock.Any(), u.ID).Return(u, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: "access-" + strconv.FormatInt(u.ID, 10)})
 	rec := httptest.NewRecorder()
 
-	newRouter(uc).ServeHTTP(rec, req)
+	newRouter(t, uc).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body)
 	}
-	if uc.gotID != u.ID {
-		t.Errorf("хендлер взял id %d, want %d из токена", uc.gotID, u.ID)
-	}
+
 	var got api.User
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
@@ -354,7 +336,19 @@ func TestHandlerSessionCookies(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		for _, operation := range []string{"login", "register", "refresh", "logout"} {
 			t.Run(operation+"/secure="+strconv.FormatBool(secure), func(t *testing.T) {
-				uc := &fakeUsecase{user: domain.User{ID: 1, Login: "bob"}, sess: newSession(1)}
+				uc := NewMockUsecase(gomock.NewController(t))
+				switch operation {
+				case "login":
+					uc.EXPECT().Login(gomock.Any(), "bob", "password123").Return(domain.User{ID: 1, Login: "bob"}, newSession(1), nil)
+				case "register":
+					uc.EXPECT().Register(gomock.Any(), "bob", "password123").Return(domain.User{ID: 1, Login: "bob"}, newSession(1), nil)
+				case "refresh":
+					uc.EXPECT().RefreshUserID(gomock.Any(), "old-refresh").Return(int64(1), nil)
+					uc.EXPECT().Refresh(gomock.Any(), "old-refresh").Return(newSession(1), nil)
+				case "logout":
+					uc.EXPECT().RefreshUserID(gomock.Any(), "old-refresh").Return(int64(1), nil)
+					uc.EXPECT().Logout(gomock.Any(), "old-refresh").Return(nil)
+				}
 				handler := NewHandler(uc, cookies.Config{CSRFTTL: time.Hour, AccessPath: "/api/v1", RefreshPath: "/api/v1/auth", AccessTTL: 15 * time.Minute, Secure: secure}, testCSRF())
 				strict := api.NewStrictHandlerWithOptions(testServer{handler, notebookdelivery.NewHandler(nil)}, nil, api.StrictHTTPServerOptions{})
 				router := api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1"})
@@ -381,12 +375,13 @@ func TestHandlerSessionCookies(t *testing.T) {
 }
 
 func TestHandlerCookieSessionLifecycle(t *testing.T) {
-	uc := &fakeUsecase{user: domain.User{ID: 1, Login: "bob"}, sess: newSession(1)}
+	uc := NewMockUsecase(gomock.NewController(t))
+	gomock.InOrder(uc.EXPECT().Login(gomock.Any(), "bob", "password123").Return(domain.User{ID: 1, Login: "bob"}, newSession(1), nil), uc.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil), uc.EXPECT().RefreshUserID(gomock.Any(), "new-refresh").Return(int64(1), nil), uc.EXPECT().Logout(gomock.Any(), "new-refresh").Return(nil))
 	spec, err := api.GetSpec()
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := security.Authenticate(fakeTokens{})(middleware.Validator(spec, "/api/v1")(newRouter(uc)))
+	router := security.Authenticate(testTokens(t))(middleware.Validator(spec, "/api/v1")(newRouter(t, uc)))
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -429,6 +424,10 @@ func TestHandlerCookieSessionLifecycle(t *testing.T) {
 
 func testCSRF() *security.CSRFSigner { return security.NewCSRFSigner([]byte("test-csrf-secret")) }
 
-func (f *fakeUsecase) RefreshUserID(context.Context, string) (int64, error) {
-	return f.sess.UserID, f.err
+func testTokens(t *testing.T) *MockTokenParser {
+	t.Helper()
+	tokens := NewMockTokenParser(gomock.NewController(t))
+	// Routing helpers also serve anonymous requests; token parsing is optional here.
+	tokens.EXPECT().Parse("access-1").Return(int64(1), nil).AnyTimes()
+	return tokens
 }

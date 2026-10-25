@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 )
 
-type refreshResolverFunc func(context.Context, string) (RefreshIdentity, error)
-
-func (f refreshResolverFunc) ResolveRefresh(ctx context.Context, token string) (RefreshIdentity, error) {
-	return f(ctx, token)
-}
 func TestRefreshGuardUsesResolvedOwner(t *testing.T) {
 	signer := NewCSRFSigner([]byte("secret"))
 	token := signer.Signed(7)
@@ -28,12 +25,8 @@ func TestRefreshGuardUsesResolvedOwner(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			type key struct{}
 			ctx := context.WithValue(context.Background(), key{}, "preserved")
-			resolver := refreshResolverFunc(func(got context.Context, refresh string) (RefreshIdentity, error) {
-				if got.Value(key{}) != "preserved" || refresh != "refresh" {
-					t.Error("lookup lost context or token")
-				}
-				return tt.identity, tt.lookupErr
-			})
+			resolver := NewMockRefreshUserResolver(gomock.NewController(t))
+			resolver.EXPECT().ResolveRefresh(ctx, "refresh").Return(tt.identity, tt.lookupErr)
 			guard := NewCSRFGuard(signer, resolver)
 			if err := guard.CheckRefresh(ctx, "refresh", &token); !errors.Is(err, tt.wantErr) {
 				t.Fatalf("error = %v, want %v", err, tt.wantErr)

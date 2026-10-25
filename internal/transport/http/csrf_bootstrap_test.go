@@ -6,12 +6,16 @@ import (
 	"strconv"
 	"testing"
 
+	notebookmodels "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/security"
+	"go.uber.org/mock/gomock"
 )
 
 func TestCSRFRestoreExistingAccessSession(t *testing.T) {
 	for _, existing := range []bool{false, true} {
-		handler, csrf, _, access, _ := csrfRouter(t)
+		notebooks := NewMockNotebookUsecase(gomock.NewController(t))
+		notebooks.EXPECT().Create(gomock.Any(), int64(1), "Notebook").Return(notebookmodels.Notebook{ID: 1, Name: "Notebook"}, nil)
+		handler, csrf, _, access, _ := csrfRouter(t, notebooks)
 		token := ""
 		if existing {
 			token = csrf.Anonymous()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
 
 func TestSuccessfulUserActionsLogOnceWithoutSecrets(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSuccessfulUserActionsLogOnceWithoutSecrets(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(old) })
 	ctx := observability.WithRequestID(context.Background(), "req-user")
 	repo := newFakeRepo()
-	uc := NewUserUsecase(repo, repo, fakeTokens{}, usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, flowIssuer(t, 3), usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
 	_, registered, err := uc.Register(ctx, "alice-SECRET", "password-SECRET")
 	if err != nil {
 		t.Fatal(err)
@@ -48,11 +49,11 @@ func TestSuccessfulUserActionsLogOnceWithoutSecrets(t *testing.T) {
 }
 
 func TestPasswordCompareFailureHasSafeCode(t *testing.T) {
-	repo := newFakeRepo()
-	repo.addUser("alice", "password")
+	f := newUserFixture(t)
 	source := errors.New("SECRET-password-hash")
-	uc := NewUserUsecase(repo, repo, fakeTokens{}, failedHasher{source}, usersecurity.RefreshTokens{}, refreshTTL)
-	_, _, err := uc.Login(context.Background(), "alice", "password")
+	f.users.EXPECT().UserByLogin(context.Background(), "alice").Return(domain.User{ID: 7}, "hash", nil)
+	f.passwords.EXPECT().Compare("hash", "password").Return(false, source)
+	_, _, err := f.uc.Login(context.Background(), "alice", "password")
 	if !errors.Is(err, source) || observability.ErrorCode(err) != "password_compare_failed" {
 		t.Fatalf("code=%q err=%v", observability.ErrorCode(err), err)
 	}
