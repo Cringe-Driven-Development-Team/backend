@@ -109,3 +109,7 @@ agent-integration:
 # Requires infra-provisioned firewall and live probe endpoints; never runs in regular CI.
 agent-network-check:
 	cd runtime-agent && RUN_NETWORK_TESTS=1 $(AGENT_BIN)/python -m pytest -q -m network
+
+.PHONY: generate-mocks
+generate-mocks:
+	bash scripts/generate-mocks.sh

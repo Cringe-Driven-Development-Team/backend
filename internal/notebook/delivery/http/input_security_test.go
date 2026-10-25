@@ -9,17 +9,8 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
+	"go.uber.org/mock/gomock"
 )
-
-type textUsecase struct {
-	fakeUsecase
-	gotName string
-}
-
-func (uc *textUsecase) Create(ctx context.Context, ownerID int64, name string) (domain.Notebook, error) {
-	uc.gotName = name
-	return uc.fakeUsecase.Create(ctx, ownerID, name)
-}
 
 func TestNotebookTextJSONRoundTrip(t *testing.T) {
 	for _, text := range []string{
@@ -29,11 +20,12 @@ func TestNotebookTextJSONRoundTrip(t *testing.T) {
 	} {
 		t.Run(text, func(t *testing.T) {
 			now := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
-			uc := &textUsecase{fakeUsecase: fakeUsecase{
-				notebook: domain.Notebook{ID: 1, Name: text, CreatedAt: now, UpdatedAt: now,
-					Cells: []domain.Cell{{ID: "cell", Kind: domain.CellKindMarkdown, Source: text}}},
-				list: []domain.NotebookSummary{{ID: 1, Name: text, UpdatedAt: now}},
-			}}
+			notebook := domain.Notebook{ID: 1, Name: text, CreatedAt: now, UpdatedAt: now,
+				Cells: []domain.Cell{{ID: "cell", Kind: domain.CellKindMarkdown, Source: text}}}
+			uc := NewMockUsecase(gomock.NewController(t))
+			uc.EXPECT().Create(gomock.Cond(func(ctx context.Context) bool { return ctx.Value(notebookRequestKey{}) == t.Name() }), int64(1), text).Return(notebook, nil)
+			uc.EXPECT().List(gomock.Cond(func(ctx context.Context) bool { return ctx.Value(notebookRequestKey{}) == t.Name() }), int64(1)).Return([]domain.NotebookSummary{{ID: 1, Name: text, UpdatedAt: now}}, nil)
+			uc.EXPECT().Get(gomock.Cond(func(ctx context.Context) bool { return ctx.Value(notebookRequestKey{}) == t.Name() }), int64(1), int64(1)).Return(notebook, nil)
 			body, err := json.Marshal(api.CreateNotebookRequest{Name: text})
 			if err != nil {
 				t.Fatal(err)
@@ -68,15 +60,13 @@ func TestNotebookTextJSONRoundTrip(t *testing.T) {
 					t.Fatalf("response changed text: %+v", notebook)
 				}
 			}
-			if uc.gotName != text {
-				t.Fatalf("handler changed input: %q, want %q", uc.gotName, text)
-			}
+
 		})
 	}
 }
 
 func TestValidationErrorWithHTMLIsJSON(t *testing.T) {
-	rec := do(t, &fakeUsecase{}, http.MethodPost, "/notebooks/1/cells", `{"kind":"<img src=x onerror=alert(1)>"}`, true)
+	rec := do(t, NewMockUsecase(gomock.NewController(t)), http.MethodPost, "/notebooks/1/cells", `{"kind":"<img src=x onerror=alert(1)>"}`, true)
 	var result api.Error
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)

@@ -2,123 +2,143 @@ package postgres
 
 import (
 	"context"
-	"strconv"
-	"strings"
+	"errors"
 	"testing"
-	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
-	"github.com/google/go-cmp/cmp"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
-type capturedQuery struct {
-	sql  string
-	args []any
-}
-
-type notebookQueryCapture struct {
-	DB
-	queries []capturedQuery
-}
-
-func (db *notebookQueryCapture) QueryRow(_ context.Context, sql string, args ...any) pgx.Row { //nolint:ireturn // required by DB
-	db.queries = append(db.queries, capturedQuery{sql, args})
-	return captureRow{}
-}
-
-func (db *notebookQueryCapture) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) { //nolint:ireturn // required by DB
-	db.queries = append(db.queries, capturedQuery{sql, args})
-	return failedRows{}, nil
-}
-
-func (db *notebookQueryCapture) Begin(context.Context) (pgx.Tx, error) { //nolint:ireturn // required by DB
-	return captureTx{db: db}, nil
-}
-
-type captureRow struct{}
-
-func (captureRow) Scan(dest ...any) error {
-	for _, d := range dest {
-		switch v := d.(type) {
-		case *int64:
-			*v = 17
-		case *int:
-			*v = 1
-		case *string:
-			*v = "fixture"
-		case *time.Time:
-			*v = time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
-		}
-	}
-	return nil
-}
-
-type captureTx struct {
-	pgx.Tx
-	db *notebookQueryCapture
-}
-
-func (tx captureTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row { //nolint:ireturn // required by pgx.Tx
-	return tx.db.QueryRow(ctx, sql, args...)
-}
-
-func (tx captureTx) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	tx.db.queries = append(tx.db.queries, capturedQuery{sql, args})
-	return pgconn.NewCommandTag("UPDATE 1"), nil
-}
-
-func (captureTx) Commit(context.Context) error   { return nil }
-func (captureTx) Rollback(context.Context) error { return nil }
-
 func TestNotebookRepositoryParameterizedQueries(t *testing.T) {
+	db := newPool(t)
+	r := NewNotebookRepository(db)
 	ctx := context.Background()
 	payload := "x'); DROP TABLE notebooks; --"
-	for _, tc := range []struct {
-		name string
-		args [][]any
-		call func(*NotebookRepository) error
-	}{
-		{"create", [][]any{{int64(23), payload, "notebooks/file.ipynb", 1}}, func(r *NotebookRepository) error {
-			_, err := r.Create(ctx, domain.Notebook{OwnerID: 23, Name: payload, FileKey: "notebooks/file.ipynb", CellsCount: 1})
-			return err
-		}},
-		{"list", [][]any{{int64(23)}}, func(r *NotebookRepository) error { _, err := r.List(ctx, 23); return err }},
-		{"get", [][]any{{int64(17), int64(23)}}, func(r *NotebookRepository) error { _, err := r.Get(ctx, 17, 23); return err }},
-		{"modify", [][]any{{int64(17), int64(23)}, {int64(17), 3}}, func(r *NotebookRepository) error {
-			return r.Modify(ctx, 17, 23, func(domain.Notebook) (int, error) { return 3, nil })
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			db := &notebookQueryCapture{}
-			if err := tc.call(NewNotebookRepository(db)); err != nil {
-				t.Fatal(err)
+	db.ExpectQuery(createSQL).WithArgs(int64(23), payload, "notebooks/file.ipynb", 1).WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(int64(17), fixtureTime(), fixtureTime()))
+	n, err := r.Create(ctx, domain.Notebook{OwnerID: 23, Name: payload, FileKey: "notebooks/file.ipynb", CellsCount: 1})
+	if err != nil || n.ID != 17 || n.Name != payload || !n.CreatedAt.Equal(fixtureTime()) || !n.UpdatedAt.Equal(fixtureTime()) {
+		t.Fatalf("notebook=%v err=%v", n, err)
+	}
+	db.ExpectQuery(listSQL).WithArgs(int64(23)).WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells_count", "updated_at"}).AddRow(int64(17), payload, 1, fixtureTime())).RowsWillBeClosed()
+	list, err := r.List(ctx, 23)
+	if err != nil || len(list) != 1 || list[0].Name != payload || list[0].ID != 17 || list[0].CellsCount != 1 || !list[0].UpdatedAt.Equal(fixtureTime()) {
+		t.Fatalf("list=%v err=%v", list, err)
+	}
+	db.ExpectQuery(getSQL).WithArgs(int64(17), int64(23)).WillReturnRows(notebookRows())
+	n, err = r.Get(ctx, 17, 23)
+	if err != nil || n.ID != 17 || n.OwnerID != 23 || n.Name != "SECRET-name" || n.FileKey != "SECRET-key" || n.CellsCount != 1 || !n.CreatedAt.Equal(fixtureTime()) || !n.UpdatedAt.Equal(fixtureTime()) {
+		t.Fatalf("notebook=%v err=%v", n, err)
+	}
+}
+
+func TestNotebookListRows(t *testing.T) {
+	for _, name := range []string{"empty", "scan", "late error"} {
+		t.Run(name, func(t *testing.T) {
+			db := newPool(t)
+			r := NewNotebookRepository(db)
+			rows := pgxmock.NewRows([]string{"id", "name", "cells_count", "updated_at"})
+			source := errors.New("iteration failed")
+			switch name {
+			case "scan":
+				rows.AddRow("not-an-id", "name", 1, fixtureTime())
+			case "late error":
+				rows.AddRow(int64(17), "name", 1, fixtureTime()).AddRow(int64(18), "other", 2, fixtureTime()).RowError(1, source)
 			}
-			if len(db.queries) != len(tc.args) {
-				t.Fatalf("got %d queries, want %d", len(db.queries), len(tc.args))
+			db.ExpectQuery(listSQL).WithArgs(int64(23)).WillReturnRows(rows).RowsWillBeClosed()
+			got, err := r.List(context.Background(), 23)
+			switch name {
+			case "empty":
+				if err != nil || got == nil || len(got) != 0 {
+					t.Fatalf("list=%v err=%v", got, err)
+				}
+			case "scan":
+				if err == nil {
+					t.Fatal("expected scan failure")
+				}
+			case "late error":
+				if !errors.Is(err, source) {
+					t.Fatal(err)
+				}
 			}
-			for i, q := range db.queries {
-				if diff := cmp.Diff(tc.args[i], q.args); diff != "" {
-					t.Fatalf("query %d arguments (-want +got):\n%s", i, diff)
+		})
+	}
+}
+
+func TestNotebookGetNotFound(t *testing.T) {
+	db := newPool(t)
+	db.ExpectQuery(getSQL).WithArgs(int64(17), int64(99)).WillReturnError(pgx.ErrNoRows)
+	_, err := NewNotebookRepository(db).Get(context.Background(), 17, 99)
+	if !errors.Is(err, usecase.ErrNotebookNotFound) {
+		t.Fatal(err)
+	}
+}
+
+func TestNotebookModifyTransactions(t *testing.T) {
+	for _, stage := range []string{"success", "begin", "missing", "select", "callback", "update", "commit", "rollback"} {
+		t.Run(stage, func(t *testing.T) {
+			db := newPool(t)
+			r := NewNotebookRepository(db)
+			source := errors.New(stage + " failed")
+			var want error
+			called := false
+			begin := db.ExpectBegin()
+			if stage == "begin" {
+				begin.WillReturnError(source)
+				want = source
+			} else {
+				q := db.ExpectQuery(lockSQL).WithArgs(int64(17), int64(23))
+				switch stage {
+				case "missing":
+					q.WillReturnError(pgx.ErrNoRows)
+					want = usecase.ErrNotebookNotFound
+				case "select":
+					q.WillReturnError(source)
+					want = source
+				default:
+					q.WillReturnRows(notebookRows())
 				}
-				if strings.Contains(q.sql, payload) {
-					t.Fatalf("name interpolated into SQL: %s", q.sql)
-				}
-				for j := range tc.args[i] {
-					if !strings.Contains(q.sql, "$"+strconv.Itoa(j+1)) {
-						t.Fatalf("argument %d has no placeholder: %s", j+1, q.sql)
+				if stage != "missing" && stage != "select" {
+					if stage == "callback" {
+						want = source
+					} else {
+						upd := db.ExpectExec(updateSQL).WithArgs(int64(17), 3)
+						if stage == "update" {
+							upd.WillReturnError(source)
+							want = source
+						} else {
+							upd.WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+							commit := db.ExpectCommit()
+							if stage == "commit" {
+								commit.WillReturnError(source)
+								want = source
+							}
+						}
 					}
 				}
-				if (tc.name == "get" || tc.name == "modify") && i == 0 && !strings.Contains(q.sql, "id = $1 AND owner_id = $2") {
-					t.Fatalf("owner restriction lost: %s", q.sql)
+				// The repository always defers Rollback, including after Commit.
+				rollback := db.ExpectRollback()
+				if stage == "rollback" {
+					rollback.WillReturnError(source)
 				}
-				if tc.name == "list" && !strings.Contains(q.sql, "WHERE owner_id = $1") {
-					t.Fatalf("list owner restriction lost: %s", q.sql)
+			}
+			err := r.Modify(context.Background(), 17, 23, func(n domain.Notebook) (int, error) {
+				called = true
+				if n.ID != 17 || n.OwnerID != 23 || n.FileKey != "SECRET-key" || n.CellsCount != 1 {
+					t.Fatalf("callback notebook=%+v", n)
 				}
-				if tc.name == "modify" && i == 0 && !strings.HasSuffix(q.sql, " FOR UPDATE") {
-					t.Fatalf("row lock lost: %s", q.sql)
+				if stage == "callback" {
+					return 0, source
 				}
+				return 3, nil
+			})
+			if !errors.Is(err, want) {
+				t.Fatalf("err=%v want=%v", err, want)
+			}
+			shouldCall := stage != "begin" && stage != "missing" && stage != "select"
+			if called != shouldCall {
+				t.Fatalf("callback=%v want=%v", called, shouldCall)
 			}
 		})
 	}

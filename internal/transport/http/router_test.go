@@ -2,18 +2,23 @@ package httptransport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
+	notebookdomain "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 )
 
 func TestRouterRequestIDOnEveryResponse(t *testing.T) {
-	handler, csrf, _, access, _ := csrfRouter(t)
+	base := newRouterFixture(t)
+	csrf, access := base.csrf, base.access
 	for _, tt := range []struct {
 		name, method, path, token, access, origin string
 		status                                    int
@@ -28,11 +33,18 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 		{name: "not found", method: "GET", path: "/missing", status: 404},
 		{name: "method not allowed", method: "POST", path: "/health", status: 405},
 		{name: "invalid parameter", method: "GET", path: BaseURL + "/notebooks/invalid", status: 400},
-		// Тестовый usecase не реализует List: panic должен превратиться в ответ 500 с request ID.
+		// Явная паника зависимости должна превратиться в 500 с request ID.
 		{name: "recovered panic", method: "GET", path: BaseURL + "/notebooks", access: access, status: 500},
 	} {
 		for _, requestID := range []string{"", "client-request-id"} {
 			t.Run(tt.name+"/"+requestID, func(t *testing.T) {
+				f := newRouterFixture(t)
+				if tt.name == "success" {
+					f.users.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil)
+				}
+				if tt.name == "recovered panic" {
+					f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(_ context.Context, _ int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
+				}
 				req := csrfRequest(tt.method, tt.path, tt.token, tt.access, "")
 				if requestID != "" {
 					req.Header.Set("X-Request-ID", requestID)
@@ -43,7 +55,7 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 				if tt.method == http.MethodOptions {
 					req.Header.Set("Access-Control-Request-Method", "POST")
 				}
-				rec := serveCSRF(handler, req)
+				rec := serveCSRF(f.handler, req)
 				if rec.Code != tt.status {
 					t.Fatalf("status = %d, want %d: %s", rec.Code, tt.status, rec.Body)
 				}
@@ -64,7 +76,8 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 }
 
 func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
-	handler, _, _, access, _ := csrfRouter(t)
+	base := newRouterFixture(t)
+	access := base.access
 	var out bytes.Buffer
 	old := slog.Default()
 	slog.SetDefault(slog.New(observability.NewHandler(slog.NewJSONHandler(&out, nil))))
@@ -84,12 +97,19 @@ func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out.Reset()
+			f := newRouterFixture(t)
+			if tc.name == "success" {
+				f.users.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil)
+			}
+			if tc.name == "panic" {
+				f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(_ context.Context, _ int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
+			}
 			req := csrfRequest(tc.method, tc.path, "", tc.access, "")
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
 				req.Header.Set("Access-Control-Request-Method", http.MethodPost)
 			}
-			rec := serveCSRF(handler, req)
+			rec := serveCSRF(f.handler, req)
 			if rec.Code != tc.status {
 				t.Fatalf("status=%d, want %d", rec.Code, tc.status)
 			}

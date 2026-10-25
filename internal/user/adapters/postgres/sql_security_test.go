@@ -2,67 +2,88 @@ package postgres
 
 import (
 	"context"
-	"strconv"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
-// Проверяем границу с драйвером: интерполяция ввода в SQL должна сломать тест.
-type queryCapture struct {
-	Querier
-	sql  string
-	args []any
-}
-
-func (db *queryCapture) QueryRow(_ context.Context, sql string, args ...any) pgx.Row { //nolint:ireturn // required by Querier
-	db.sql, db.args = sql, args
-	return failureRow{err: pgx.ErrNoRows}
-}
-
-func (db *queryCapture) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	db.sql, db.args = sql, args
-	return pgconn.NewCommandTag("INSERT 0 1"), nil
-}
-
+// Literal SQL and exact arguments protect the driver boundary against interpolation.
 func TestUserRepositoryParameterizedQueries(t *testing.T) {
-	ctx := context.Background()
-	expires := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
 	for _, payload := range []string{"x' OR '1'='1' --", "x'); DROP TABLE users; --"} {
-		for _, tc := range []struct {
-			name string
-			args []any
-			call func(*UserRepository)
-		}{
-			{"create", []any{payload, "hash"}, func(r *UserRepository) { _, _ = r.CreateUser(ctx, payload, "hash") }},
-			{"by_login", []any{payload}, func(r *UserRepository) { _, _, _ = r.UserByLogin(ctx, payload) }},
-			{"by_id", []any{int64(17)}, func(r *UserRepository) { _, _ = r.UserByID(ctx, 17) }},
-			{"create_session", []any{int64(17), payload, expires}, func(r *UserRepository) { _ = r.CreateSession(ctx, 17, payload, expires) }},
-			{"delete_session", []any{payload}, func(r *UserRepository) { _, _, _ = r.DeleteSession(ctx, payload) }},
-			{"session_by_hash", []any{payload}, func(r *UserRepository) { _, _, _ = r.SessionByTokenHash(ctx, payload) }},
-		} {
-			t.Run(tc.name+"/"+payload, func(t *testing.T) {
-				db := &queryCapture{}
-				tc.call(NewUserRepository(db))
-				if diff := cmp.Diff(tc.args, db.args); diff != "" {
-					t.Fatalf("SQL arguments (-want +got):\n%s", diff)
+		t.Run(payload, func(t *testing.T) {
+			db := newPool(t)
+			r := NewUserRepository(db)
+			ctx := context.Background()
+			expires := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+			db.ExpectQuery(createUserSQL).WithArgs(payload, "hash").WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int64(17)))
+			u, err := r.CreateUser(ctx, payload, "hash")
+			if err != nil || u != (domain.User{ID: 17, Login: payload}) {
+				t.Fatalf("user=%v err=%v", u, err)
+			}
+			db.ExpectQuery(byLoginSQL).WithArgs(payload).WillReturnRows(pgxmock.NewRows([]string{"id", "login", "password_hash"}).AddRow(int64(17), payload, "hash"))
+			u, hash, err := r.UserByLogin(ctx, payload)
+			if err != nil || u.ID != 17 || u.Login != payload || hash != "hash" {
+				t.Fatalf("user=%v hash=%s err=%v", u, hash, err)
+			}
+			db.ExpectQuery(byIDSQL).WithArgs(int64(17)).WillReturnRows(pgxmock.NewRows([]string{"login"}).AddRow(payload))
+			u, err = r.UserByID(ctx, 17)
+			if err != nil || u.Login != payload || u.ID != 17 {
+				t.Fatalf("user=%v err=%v", u, err)
+			}
+			db.ExpectExec(createSessionSQL).WithArgs(int64(17), payload, expires).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			if err = r.CreateSession(ctx, 17, payload, expires); err != nil {
+				t.Fatal(err)
+			}
+			for _, sql := range []string{deleteSessionSQL, sessionByHashSQL} {
+				db.ExpectQuery(sql).WithArgs(payload).WillReturnRows(pgxmock.NewRows([]string{"user_id", "expires_at"}).AddRow(int64(17), expires))
+				var id int64
+				var expiry time.Time
+				if sql == deleteSessionSQL {
+					id, expiry, err = r.DeleteSession(ctx, payload)
+				} else {
+					id, expiry, err = r.SessionByTokenHash(ctx, payload)
 				}
-				if strings.Contains(db.sql, payload) {
-					t.Fatalf("input interpolated into SQL: %s", db.sql)
+				if err != nil || id != 17 || !expiry.Equal(expires) {
+					t.Fatalf("id=%d expires=%v err=%v", id, expiry, err)
 				}
-				for i := range tc.args {
-					if !strings.Contains(db.sql, "$"+strconv.Itoa(i+1)) {
-						t.Fatalf("argument %d has no placeholder: %s", i+1, db.sql)
-					}
-				}
-				if tc.name == "by_login" && !strings.Contains(db.sql, "lower(login) = lower($1)") {
-					t.Fatalf("case-insensitive login lookup lost: %s", db.sql)
-				}
-			})
-		}
+			}
+		})
+	}
+}
+
+func TestUserRepositoryMissingRows(t *testing.T) {
+	for _, name := range []string{"login", "id", "delete", "lookup"} {
+		t.Run(name, func(t *testing.T) {
+			db := newPool(t)
+			r := NewUserRepository(db)
+			ctx := context.Background()
+			var err, want error
+			switch name {
+			case "login":
+				db.ExpectQuery(byLoginSQL).WithArgs("missing").WillReturnError(pgx.ErrNoRows)
+				_, _, err = r.UserByLogin(ctx, "missing")
+				want = usecase.ErrUserNotFound
+			case "id":
+				db.ExpectQuery(byIDSQL).WithArgs(int64(99)).WillReturnError(pgx.ErrNoRows)
+				_, err = r.UserByID(ctx, 99)
+				want = usecase.ErrUserNotFound
+			case "delete":
+				db.ExpectQuery(deleteSessionSQL).WithArgs("missing").WillReturnError(pgx.ErrNoRows)
+				_, _, err = r.DeleteSession(ctx, "missing")
+				want = usecase.ErrSessionNotFound
+			case "lookup":
+				db.ExpectQuery(sessionByHashSQL).WithArgs("missing").WillReturnError(pgx.ErrNoRows)
+				_, _, err = r.SessionByTokenHash(ctx, "missing")
+				want = usecase.ErrSessionNotFound
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("err=%v want=%v", err, want)
+			}
+		})
 	}
 }

@@ -11,7 +11,11 @@ func TestCSRFAppOriginWithoutCORS(t *testing.T) {
 		for _, operation := range []string{"login", "register", "refresh"} {
 			for _, origin := range []string{appOrigin, "https://evil.example", "https://avatars.cellestial.ru", "null"} {
 				t.Run(appOrigin+"/"+operation+"/"+origin, func(t *testing.T) {
-					handler, csrf, _, _, _ := csrfRouterOrigins(t, nil, appOrigin)
+					f := newRouterFixtureOrigins(t, nil, appOrigin)
+					handler, csrf := f.handler, f.csrf
+					if origin == appOrigin {
+						expectSessionRequest(f, operation, true)
+					}
 					token := csrf.Anonymous()
 					if operation == "refresh" {
 						token = csrf.Signed(1)
@@ -61,8 +65,10 @@ func TestCSRFAppOriginBootstrapWithoutCORS(t *testing.T) {
 
 func TestCSRFAdditionalCORSOrigin(t *testing.T) {
 	const frontend = "http://localhost:5173"
-	handler, csrf, _, _, _ := csrfRouterOrigins(t, []string{frontend}, middleware.DefaultAppOrigin)
+	f := newRouterFixtureOrigins(t, []string{frontend}, middleware.DefaultAppOrigin)
+	handler, csrf := f.handler, f.csrf
 	for _, origin := range []string{frontend, middleware.DefaultAppOrigin} {
+		expectSessionRequest(f, "login", false)
 		req := csrfRequest("POST", BaseURL+"/auth/login", csrf.Anonymous(), "", "")
 		req.Header.Set("Origin", origin)
 		rec := serveCSRF(handler, req)

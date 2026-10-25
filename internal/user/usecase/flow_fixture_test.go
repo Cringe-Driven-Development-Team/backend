@@ -2,16 +2,18 @@ package usecase
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
+	"go.uber.org/mock/gomock"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// fakeRepo реализует Repository в памяти вместо базы.
+// fakeRepo stores users and sessions for token rotation/logout and logging flows.
+// This fixture does not verify PostgreSQL behavior.
 type fakeRepo struct {
 	mu       sync.Mutex
 	users    map[int64]fakeUser
@@ -99,11 +101,11 @@ func (r *fakeRepo) DeleteSession(_ context.Context, tokenHash string) (int64, ti
 	return s.userID, s.expiresAt, nil
 }
 
-// fakeTokens выдаёт предсказуемый access-токен.
-type fakeTokens struct{}
-
-func (fakeTokens) Issue(userID int64) (string, error) {
-	return "access-" + strconv.FormatInt(userID, 10), nil
+func flowIssuer(t *testing.T, calls int) *MockTokenIssuer {
+	t.Helper()
+	issuer := NewMockTokenIssuer(gomock.NewController(t))
+	issuer.EXPECT().Issue(int64(1)).Return("access-1", nil).Times(calls)
+	return issuer
 }
 
 func (r *fakeRepo) SessionByTokenHash(_ context.Context, tokenHash string) (int64, time.Time, error) {
