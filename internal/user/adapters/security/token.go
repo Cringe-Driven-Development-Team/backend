@@ -22,15 +22,21 @@ func NewAccessToken(secret []byte, ttl time.Duration) *AccessToken {
 }
 
 func (t *AccessToken) Issue(userID int64) (string, error) {
+	token, _, err := t.IssueAccess(userID)
+	return token, err
+}
+
+// IssueAccess returns the exact expiration recorded in the signed JWT.
+func (t *AccessToken) IssueAccess(userID int64) (string, time.Time, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   strconv.FormatInt(userID, 10),
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.ttl)),
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(t.secret)
 	if err != nil {
-		return "", fmt.Errorf("sign access token: %w", err)
+		return "", time.Time{}, fmt.Errorf("sign access token: %w", err)
 	}
-	return token, nil
+	return token, claims.ExpiresAt.Time, nil
 }
 
 func (t *AccessToken) Parse(token string) (int64, error) {

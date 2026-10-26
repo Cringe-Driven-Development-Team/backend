@@ -30,8 +30,8 @@ func validatedCredentialsRequest(t *testing.T, uc usecase.Usecase, operation, lo
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/"+operation, strings.NewReader(string(body)))
 	req = req.WithContext(context.WithValue(req.Context(), credentialsRequestKey{}, t.Name()))
 	req.Header.Set("Content-Type", "application/json")
-	// Здесь изолирован контракт ввода. Полная CSRF-цепочка проверяется в transport/http.
-	req.Header.Set("X-CSRF-Token", "contract-test")
+	// Здесь изолирован контракт ввода. Полная S2S-цепочка проверяется в transport/http.
+	req.Header.Set("X-BFF-Key", "test-key")
 	rec := httptest.NewRecorder()
 	middleware.Validator(spec, "/api/v1")(newRouter(t, uc)).ServeHTTP(rec, req)
 	return rec

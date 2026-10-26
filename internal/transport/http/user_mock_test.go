@@ -102,21 +102,6 @@ func (mr *MockUserUsecaseMockRecorder) Refresh(ctx, refreshToken any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockUserUsecase)(nil).Refresh), ctx, refreshToken)
 }
 
-// RefreshUserID mocks base method.
-func (m *MockUserUsecase) RefreshUserID(ctx context.Context, refreshToken string) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshUserID", ctx, refreshToken)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RefreshUserID indicates an expected call of RefreshUserID.
-func (mr *MockUserUsecaseMockRecorder) RefreshUserID(ctx, refreshToken any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshUserID", reflect.TypeOf((*MockUserUsecase)(nil).RefreshUserID), ctx, refreshToken)
-}
-
 // Register mocks base method.
 func (m *MockUserUsecase) Register(ctx context.Context, login, password string) (domain.User, usecase.Session, error) {
 	m.ctrl.T.Helper()

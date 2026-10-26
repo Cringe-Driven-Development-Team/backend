@@ -104,16 +104,6 @@ func (r *fakeRepo) DeleteSession(_ context.Context, tokenHash string) (int64, ti
 func flowIssuer(t *testing.T, calls int) *MockTokenIssuer {
 	t.Helper()
 	issuer := NewMockTokenIssuer(gomock.NewController(t))
-	issuer.EXPECT().Issue(int64(1)).Return("access-1", nil).Times(calls)
+	issuer.EXPECT().IssueAccess(int64(1)).Return("access-1", time.Now().Add(time.Minute), nil).Times(calls)
 	return issuer
-}
-
-func (r *fakeRepo) SessionByTokenHash(_ context.Context, tokenHash string) (int64, time.Time, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	s, ok := r.sessions[tokenHash]
-	if !ok {
-		return 0, time.Time{}, ErrSessionNotFound
-	}
-	return s.userID, s.expiresAt, nil
 }

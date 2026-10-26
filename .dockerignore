@@ -14,3 +14,5 @@ coverage-summary.txt
 .claude
 .mcp.json
 runtime-agent/
+
+.apidog/

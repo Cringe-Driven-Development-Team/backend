@@ -109,19 +109,3 @@ func (r *UserRepository) DeleteSession(ctx context.Context, tokenHash string) (u
 	}
 	return userID, expiresAt, nil
 }
-
-// SessionByTokenHash возвращает владельца и срок действия сессии по хешу токена.
-func (r *UserRepository) SessionByTokenHash(ctx context.Context, tokenHash string) (userID int64, expiresAt time.Time, err error) {
-	started := time.Now()
-	err = r.db.QueryRow(ctx,
-		`SELECT user_id, expires_at FROM refresh_sessions WHERE token_hash = $1`, tokenHash,
-	).Scan(&userID, &expiresAt)
-	observability.LogStorage(ctx, "session.by_token", started, err)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, time.Time{}, usecase.ErrSessionNotFound
-	}
-	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("select refresh session: %w", err)
-	}
-	return userID, expiresAt, nil
-}

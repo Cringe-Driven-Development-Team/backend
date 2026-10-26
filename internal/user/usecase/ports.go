@@ -21,7 +21,6 @@ type UserStore interface {
 
 type SessionStore interface {
 	CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
-	SessionByTokenHash(ctx context.Context, tokenHash string) (userID int64, expiresAt time.Time, err error)
 	DeleteSession(ctx context.Context, tokenHash string) (userID int64, expiresAt time.Time, err error)
 }
 

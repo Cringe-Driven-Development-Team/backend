@@ -86,18 +86,17 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 
 Карта кода: `cmd/main` → `internal/app` (сборка и запуск), `internal/config` — окружение.
 `internal/transport/http` — роутер, `/health`, API-генерация, middleware,
-security, cookies, principal и httperr; `internal/{user,notebook}/delivery/http`
+security, principal и httperr; `internal/{user,notebook}/delivery/http`
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
 `internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
-Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика используй `r.Context()`. Порядок: request ID → logging → recover → CORS → CSRF/Authenticate → Validator. Общие middleware оборачивают весь роутер, чтобы request ID был на всех ответах, включая CSRF-отказы, preflight, 404 и 405.
+Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика используй `r.Context()`. Порядок: request ID → logging → recover → S2S → Bearer → Validator. Общие middleware оборачивают весь роутер, чтобы request ID был на всех ответах, включая S2S-отказы, 404 и 405. API обслуживает только BFF; `BFF_API_KEY` обязателен, `GET /health` исключён.
 
 ## Границы backend и эксплуатация
 
-Общепроектный контекст, действующая архитектура и планы развития проекта — в
-[Контекст проекта](https://docs.cellestial.ru/project-context).
+Общепроектный контекст, действующая архитектура и планы развития проекта — в [Контекст проекта](https://docs.cellestial.ru/project-context).
 Спеки и планы реализации конкретной задачи размещай в репозитории, где выполняется
 работа; общие для нескольких компонентов решения отражай в `docs`.
 Факты о реализации проверяй по актуальному коду и конфигурации.

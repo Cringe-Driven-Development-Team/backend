@@ -33,13 +33,14 @@ func Validator(spec *openapi3.T, prefix string) func(http.Handler) http.Handler 
 }
 
 // requireUser вызывается для ручек, у которых в контракте есть security.
-// Пользователя в контекст к этому моменту уже положил Authenticate.
+// Пользователя в контекст к этому моменту уже положил AuthenticateBearer.
 func requireUser(_ context.Context, input *openapi3filter.AuthenticationInput) error {
 	scheme := input.SecurityScheme
 	if scheme == nil {
 		return errUnsupportedSecurity
 	}
-	if input.SecuritySchemeName != "cookieAuth" || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "access_token" {
+	bearer := input.SecuritySchemeName == "bearerAuth" && scheme.Type == "http" && scheme.Scheme == "bearer"
+	if !bearer {
 		return errUnsupportedSecurity
 	}
 

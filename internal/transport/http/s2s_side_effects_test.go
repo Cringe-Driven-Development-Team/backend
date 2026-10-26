@@ -2,6 +2,7 @@ package httptransport
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,15 +12,12 @@ import (
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	notebookusecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/cookies"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/security"
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 	userdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/http"
 	"go.uber.org/mock/gomock"
 )
 
-func TestCSRFRejectionDoesNotTouchNotebookStorage(t *testing.T) {
+func TestS2SRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 	for _, op := range []struct {
 		method, path string
 		status       int
@@ -28,10 +26,10 @@ func TestCSRFRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 		{http.MethodPost, BaseURL + "/notebooks/1/cells", http.StatusCreated},
 		{http.MethodDelete, BaseURL + "/notebooks/1/cells/0", http.StatusNoContent},
 	} {
-		for _, invalid := range []string{"missing", "mismatch", "other user", "bad signature", "duplicate header", "duplicate cookie"} {
+		for _, invalid := range []string{"missing", "wrong", "previous", "duplicate header"} {
 			t.Run(op.method+op.path+"/"+invalid, func(t *testing.T) {
 				f := newRouterFixture(t)
-				signer, users, access := f.csrf, f.users, f.access
+				users, access := f.users, f.access
 				ctrl := gomock.NewController(t)
 				meta := NewMockMetadata(ctrl)
 				data, err := ipynb.Build([]domain.Cell{{ID: "cell", Kind: domain.CellKindCode}})
@@ -41,31 +39,25 @@ func TestCSRFRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 				files := NewMockFiles(ctrl)
 				uc := notebookusecase.NewNotebookUsecase(meta, files, ipynb.Codec{})
 				handler, err := NewRouter(Server{
-					UserHandler:     userdelivery.NewHandler(users, cookies.Config{CSRFTTL: time.Hour}, signer),
+					UserHandler:     userdelivery.NewHandler(users),
 					NotebookHandler: notebookdelivery.NewHandler(uc),
-				}, usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour), nil, signer, time.Hour, userdelivery.NewRefreshResolver(users), middleware.DefaultAppOrigin)
+				}, usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour), "test-key")
 				if err != nil {
 					t.Fatal(err)
 				}
-				token := signer.Signed(1)
-				switch invalid {
-				case "other user":
-					token = signer.Signed(2)
-				case "bad signature":
-					token = "broken.signature"
-				}
-				req := csrfRequest(op.method, op.path, token, access, "")
+				req := routerRequest(op.method, op.path, "test-key", access)
 				switch invalid {
 				case "missing":
-					req.Header.Del(security.CSRFHeaderName)
-				case "mismatch":
-					req.Header.Set(security.CSRFHeaderName, signer.Signed(1))
+					req.Header.Del("X-BFF-Key")
+				case "wrong", "previous":
+					req.Header.Set("X-BFF-Key", invalid)
 				case "duplicate header":
-					req.Header.Add(security.CSRFHeaderName, token)
-				case "duplicate cookie":
-					req.AddCookie(&http.Cookie{Name: security.CSRFCookieName, Value: token})
+					req.Header.Add("X-BFF-Key", "test-key")
 				}
-				assertCSRFError(t, serveCSRF(handler, req))
+				rec := serveRouter(handler, req)
+				if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"s2s_forbidden"`) {
+					t.Fatalf("rejection: %d %s", rec.Code, rec.Body)
+				}
 				// No expectations existed during rejection: any storage/session call fails.
 				// Positive control grants exact calls only after the rejected request.
 				if op.path == BaseURL+"/notebooks" {
@@ -100,11 +92,22 @@ func TestCSRFRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 						return true
 					})).Return(nil))
 				}
-				rec := serveCSRF(handler, csrfRequest(op.method, op.path, signer.Signed(1), access, ""))
+				rec = serveRouter(handler, notebookMutationRequest(op.method, op.path, access))
 				if rec.Code != op.status {
 					t.Fatalf("valid request failed: status=%d body=%s", rec.Code, rec.Body)
 				}
 			})
 		}
 	}
+}
+
+func notebookMutationRequest(method, path, access string) *http.Request {
+	req := routerRequest(method, path, "test-key", access)
+	body := `{"name":"Notebook"}`
+	if strings.HasSuffix(path, "/cells") {
+		body = `{"kind":"code"}`
+	}
+	req.Body = io.NopCloser(strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+	return req
 }

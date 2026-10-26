@@ -12,7 +12,6 @@ const (
 	byIDSQL          = `SELECT login FROM users WHERE id = $1`
 	createSessionSQL = `INSERT INTO refresh_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`
 	deleteSessionSQL = `DELETE FROM refresh_sessions WHERE token_hash = $1 RETURNING user_id, expires_at`
-	sessionByHashSQL = `SELECT user_id, expires_at FROM refresh_sessions WHERE token_hash = $1`
 )
 
 func newPool(t *testing.T) pgxmock.PgxPoolIface { //nolint:ireturn // pgxmock exposes an interface

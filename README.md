@@ -8,7 +8,7 @@ Go API учебного проекта «Colab». Общепроектный к�
 
 ```bash
 cp -n .env.example .env
-# Задайте в .env разные JWT_SECRET и CSRF_SECRET.
+# Задайте в .env разные JWT_SECRET и BFF_API_KEY.
 make doctor
 make up
 make health  # ожидается {"status": "alive"}
@@ -37,7 +37,7 @@ Production-установка, firewall и пул VPS принадлежат `in
 - `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
 - `internal/transport/http` — маршруты, авторизация и HTTP-политики; `internal/{user,notebook}` — domain, usecase, HTTP-обработчики и адаптеры хранения.
 - `migrations/` — SQL-миграции goose; `internal/transport/http/api/api.gen.go` — код, сгенерированный из Apidog, вручную не редактируйте.
-- [Авторизация, CSRF и CORS](docs/authentication.md) — cookie, заголовки и примеры запросов.
+- [Авторизация через BFF](docs/authentication.md) — JSON-токены, Bearer и обязательный S2S-ключ.
 - [Контракт API в Apidog](docs/apidog.md) — ветки, Merge Request и `make generate`.
 - [CI, образ и деплой](docs/release.md) — проверки и выпуск. Production-конфигурация принадлежит [infra](https://github.com/Cringe-Driven-Development-Team/infra).
 - [AGENTS.md](AGENTS.md) — локальные правила для агента; Claude Code подключает их через [CLAUDE.md](CLAUDE.md).
