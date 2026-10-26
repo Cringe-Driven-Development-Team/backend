@@ -41,7 +41,7 @@ func TestContractOperationSecurityPolicy(t *testing.T) {
 	}
 	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true, "LogoutUser": true}
 	// Logout uses refresh/CSRF and does not require a live access token.
-	protected := map[string]bool{"GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
+	protected := map[string]bool{"GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true, "GetNotebookContent": true, "AddNotebookCell": true, "EditNotebookCell": true, "MoveNotebookCell": true, "RemoveNotebookCell": true}
 	seen := 0
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {

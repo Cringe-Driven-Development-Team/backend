@@ -21,6 +21,24 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for AddNotebookCellRequestKind.
+const (
+	AddNotebookCellRequestKindCode     AddNotebookCellRequestKind = "code"
+	AddNotebookCellRequestKindMarkdown AddNotebookCellRequestKind = "markdown"
+)
+
+// Valid indicates whether the value is a known member of the AddNotebookCellRequestKind enum.
+func (e AddNotebookCellRequestKind) Valid() bool {
+	switch e {
+	case AddNotebookCellRequestKindCode:
+		return true
+	case AddNotebookCellRequestKindMarkdown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CellKind.
 const (
 	CellKindCode     CellKind = "code"
@@ -59,39 +77,83 @@ func (e CreateCellRequestKind) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
-	CsrfInvalid        ErrorCode = "csrf_invalid"
-	Internal           ErrorCode = "internal"
-	InvalidCredentials ErrorCode = "invalid_credentials"
-	LoginTaken         ErrorCode = "login_taken"
-	NotFound           ErrorCode = "not_found"
-	NotImplemented     ErrorCode = "not_implemented"
-	Unauthorized       ErrorCode = "unauthorized"
-	ValidationError    ErrorCode = "validation_error"
+	ErrorCodeCsrfInvalid        ErrorCode = "csrf_invalid"
+	ErrorCodeInternal           ErrorCode = "internal"
+	ErrorCodeInvalidCredentials ErrorCode = "invalid_credentials"
+	ErrorCodeLoginTaken         ErrorCode = "login_taken"
+	ErrorCodeNotFound           ErrorCode = "not_found"
+	ErrorCodeNotImplemented     ErrorCode = "not_implemented"
+	ErrorCodeUnauthorized       ErrorCode = "unauthorized"
+	ErrorCodeValidationError    ErrorCode = "validation_error"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
 func (e ErrorCode) Valid() bool {
 	switch e {
-	case CsrfInvalid:
+	case ErrorCodeCsrfInvalid:
 		return true
-	case Internal:
+	case ErrorCodeInternal:
 		return true
-	case InvalidCredentials:
+	case ErrorCodeInvalidCredentials:
 		return true
-	case LoginTaken:
+	case ErrorCodeLoginTaken:
 		return true
-	case NotFound:
+	case ErrorCodeNotFound:
 		return true
-	case NotImplemented:
+	case ErrorCodeNotImplemented:
 		return true
-	case Unauthorized:
+	case ErrorCodeUnauthorized:
 		return true
-	case ValidationError:
+	case ErrorCodeValidationError:
 		return true
 	default:
 		return false
 	}
 }
+
+// Defines values for NotebookEditingErrorCode.
+const (
+	NotebookEditingErrorCodeCsrfInvalid      NotebookEditingErrorCode = "csrf_invalid"
+	NotebookEditingErrorCodeInternal         NotebookEditingErrorCode = "internal"
+	NotebookEditingErrorCodeNotFound         NotebookEditingErrorCode = "not_found"
+	NotebookEditingErrorCodeNotebookConflict NotebookEditingErrorCode = "notebook_conflict"
+	NotebookEditingErrorCodeTooManyCells     NotebookEditingErrorCode = "too_many_cells"
+	NotebookEditingErrorCodeUnauthorized     NotebookEditingErrorCode = "unauthorized"
+	NotebookEditingErrorCodeValidationError  NotebookEditingErrorCode = "validation_error"
+)
+
+// Valid indicates whether the value is a known member of the NotebookEditingErrorCode enum.
+func (e NotebookEditingErrorCode) Valid() bool {
+	switch e {
+	case NotebookEditingErrorCodeCsrfInvalid:
+		return true
+	case NotebookEditingErrorCodeInternal:
+		return true
+	case NotebookEditingErrorCodeNotFound:
+		return true
+	case NotebookEditingErrorCodeNotebookConflict:
+		return true
+	case NotebookEditingErrorCodeTooManyCells:
+		return true
+	case NotebookEditingErrorCodeUnauthorized:
+		return true
+	case NotebookEditingErrorCodeValidationError:
+		return true
+	default:
+		return false
+	}
+}
+
+// AddNotebookCellRequest defines model for AddNotebookCellRequest.
+type AddNotebookCellRequest struct {
+	// Index Индекс вставки от 0 до текущего числа блоков включительно. Без поля — в конец.
+	Index  *int                       `json:"index,omitempty"`
+	Kind   AddNotebookCellRequestKind `json:"kind"`
+	Source string                     `json:"source"`
+}
+
+// AddNotebookCellRequestKind defines model for AddNotebookCellRequest.Kind.
+type AddNotebookCellRequestKind string
 
 // Cell Блок блокнота
 type Cell struct {
@@ -131,6 +193,12 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+// EditNotebookCellRequest defines model for EditNotebookCellRequest.
+type EditNotebookCellRequest struct {
+	// Source Новое полное содержимое блока; пустая строка допустима. Тип и ID блока сохраняются.
+	Source string `json:"source"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Code    ErrorCode `json:"code"`
@@ -139,6 +207,12 @@ type Error struct {
 
 // ErrorCode defines model for Error.Code.
 type ErrorCode string
+
+// MoveNotebookCellRequest defines model for MoveNotebookCellRequest.
+type MoveNotebookCellRequest struct {
+	// Index Итоговая позиция блока, от 0 до числа блоков минус один. Остальные блоки сохраняют относительный порядок.
+	Index int `json:"index"`
+}
 
 // Notebook Блокнот (.ipynb)
 type Notebook struct {
@@ -153,6 +227,49 @@ type Notebook struct {
 	Name      string    `json:"name"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// NotebookCellChange defines model for NotebookCellChange.
+type NotebookCellChange struct {
+	// Cell Блок блокнота
+	Cell Cell `json:"cell"`
+
+	// Hash Непрозрачный хеш текущего содержимого блокнота, без HTTP-кавычек. Не вычислять на клиенте. В If-Match передавать в двойных кавычках, например "h123".
+	//
+	// Examples: h123
+	Hash NotebookHash `json:"hash"`
+}
+
+// NotebookContent defines model for NotebookContent.
+type NotebookContent struct {
+	Cells []Cell `json:"cells"`
+
+	// Hash Непрозрачный хеш текущего содержимого блокнота, без HTTP-кавычек. Не вычислять на клиенте. В If-Match передавать в двойных кавычках, например "h123".
+	//
+	// Examples: h123
+	Hash NotebookHash `json:"hash"`
+}
+
+// NotebookContentChange defines model for NotebookContentChange.
+type NotebookContentChange struct {
+	// Hash Непрозрачный хеш текущего содержимого блокнота, без HTTP-кавычек. Не вычислять на клиенте. В If-Match передавать в двойных кавычках, например "h123".
+	//
+	// Examples: h123
+	Hash NotebookHash `json:"hash"`
+}
+
+// NotebookEditingError defines model for NotebookEditingError.
+type NotebookEditingError struct {
+	Code    NotebookEditingErrorCode `json:"code"`
+	Message string                   `json:"message"`
+}
+
+// NotebookEditingErrorCode defines model for NotebookEditingError.Code.
+type NotebookEditingErrorCode string
+
+// NotebookHash Непрозрачный хеш текущего содержимого блокнота, без HTTP-кавычек. Не вычислять на клиенте. В If-Match передавать в двойных кавычках, например "h123".
+//
+// Examples: h123
+type NotebookHash = string
 
 // NotebookSummary defines model for NotebookSummary.
 type NotebookSummary struct {
@@ -221,6 +338,42 @@ type DeleteCellParams struct {
 	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
 }
 
+// AddNotebookCellParams defines parameters for AddNotebookCell.
+type AddNotebookCellParams struct {
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
+
+	// XCSRFToken Значение cookie __Host-csrf
+	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+}
+
+// RemoveNotebookCellParams defines parameters for RemoveNotebookCell.
+type RemoveNotebookCellParams struct {
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
+
+	// XCSRFToken Значение cookie __Host-csrf
+	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+}
+
+// EditNotebookCellParams defines parameters for EditNotebookCell.
+type EditNotebookCellParams struct {
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
+
+	// XCSRFToken Значение cookie __Host-csrf
+	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+}
+
+// MoveNotebookCellParams defines parameters for MoveNotebookCell.
+type MoveNotebookCellParams struct {
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
+
+	// XCSRFToken Значение cookie __Host-csrf
+	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+}
+
 // LoginUserJSONRequestBody defines body for LoginUser for application/json ContentType.
 type LoginUserJSONRequestBody = Credentials
 
@@ -232,6 +385,15 @@ type CreateNotebookJSONRequestBody = CreateNotebookRequest
 
 // CreateCellJSONRequestBody defines body for CreateCell for application/json ContentType.
 type CreateCellJSONRequestBody = CreateCellRequest
+
+// AddNotebookCellJSONRequestBody defines body for AddNotebookCell for application/json ContentType.
+type AddNotebookCellJSONRequestBody = AddNotebookCellRequest
+
+// EditNotebookCellJSONRequestBody defines body for EditNotebookCell for application/json ContentType.
+type EditNotebookCellJSONRequestBody = EditNotebookCellRequest
+
+// MoveNotebookCellJSONRequestBody defines body for MoveNotebookCell for application/json ContentType.
+type MoveNotebookCellJSONRequestBody = MoveNotebookCellRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -262,6 +424,21 @@ type ServerInterface interface {
 	// DeleteCell Удаление блока
 	// (DELETE /notebooks/{id}/cells/{index})
 	DeleteCell(w http.ResponseWriter, r *http.Request, id int64, index int, params DeleteCellParams)
+	// GetNotebookContent Содержимое блокнота с хешем
+	// (GET /notebooks/{id}/content)
+	GetNotebookContent(w http.ResponseWriter, r *http.Request, id int64)
+	// AddNotebookCell Добавление блока с проверкой хеша
+	// (POST /notebooks/{id}/content/cells)
+	AddNotebookCell(w http.ResponseWriter, r *http.Request, id int64, params AddNotebookCellParams)
+	// RemoveNotebookCell Удаление блока с проверкой хеша
+	// (DELETE /notebooks/{id}/content/cells/{cell_id})
+	RemoveNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params RemoveNotebookCellParams)
+	// EditNotebookCell Редактирование блока с проверкой хеша
+	// (PATCH /notebooks/{id}/content/cells/{cell_id})
+	EditNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params EditNotebookCellParams)
+	// MoveNotebookCell Перемещение блока с проверкой хеша
+	// (POST /notebooks/{id}/content/cells/{cell_id}/move)
+	MoveNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params MoveNotebookCellParams)
 	// GetCurrentUser Текущий пользователь
 	// (GET /users/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
@@ -666,6 +843,351 @@ func (siw *ServerInterfaceWrapper) DeleteCell(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// GetNotebookContent operation middleware
+func (siw *ServerInterfaceWrapper) GetNotebookContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotebookContent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddNotebookCell operation middleware
+func (siw *ServerInterfaceWrapper) AddNotebookCell(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddNotebookCellParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddNotebookCell(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveNotebookCell operation middleware
+func (siw *ServerInterfaceWrapper) RemoveNotebookCell(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "cell_id" -------------
+	var cellId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cell_id", mux.Vars(r)["cell_id"], &cellId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cell_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveNotebookCellParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveNotebookCell(w, r, id, cellId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EditNotebookCell operation middleware
+func (siw *ServerInterfaceWrapper) EditNotebookCell(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "cell_id" -------------
+	var cellId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cell_id", mux.Vars(r)["cell_id"], &cellId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cell_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EditNotebookCellParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditNotebookCell(w, r, id, cellId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MoveNotebookCell operation middleware
+func (siw *ServerInterfaceWrapper) MoveNotebookCell(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "cell_id" -------------
+	var cellId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "cell_id", mux.Vars(r)["cell_id"], &cellId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cell_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params MoveNotebookCellParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = &XCSRFToken
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MoveNotebookCell(w, r, id, cellId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetCurrentUser operation middleware
 func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
@@ -793,25 +1315,35 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	r.HandleFunc(options.BaseURL+"/auth/register", wrapper.RegisterUser).Methods(http.MethodPost)
-
 	r.HandleFunc(options.BaseURL+"/auth/login", wrapper.LoginUser).Methods(http.MethodPost)
+
+	r.HandleFunc(options.BaseURL+"/auth/logout", wrapper.LogoutUser).Methods(http.MethodPost)
 
 	r.HandleFunc(options.BaseURL+"/auth/refresh", wrapper.RefreshToken).Methods(http.MethodPost)
 
-	r.HandleFunc(options.BaseURL+"/auth/logout", wrapper.LogoutUser).Methods(http.MethodPost)
+	r.HandleFunc(options.BaseURL+"/auth/register", wrapper.RegisterUser).Methods(http.MethodPost)
 
 	r.HandleFunc(options.BaseURL+"/users/me", wrapper.GetCurrentUser).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells", wrapper.CreateCell).Methods(http.MethodPost)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/content", wrapper.GetNotebookContent).Methods(http.MethodGet)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/content/cells", wrapper.AddNotebookCell).Methods(http.MethodPost)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/content/cells/{cell_id}", wrapper.RemoveNotebookCell).Methods(http.MethodDelete)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/content/cells/{cell_id}", wrapper.EditNotebookCell).Methods(http.MethodPatch)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/content/cells/{cell_id}/move", wrapper.MoveNotebookCell).Methods(http.MethodPost)
+
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells/{index}", wrapper.DeleteCell).Methods(http.MethodDelete)
 
 	r.HandleFunc(options.BaseURL+"/notebooks/{id}", wrapper.GetNotebook).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/notebooks", wrapper.ListNotebooks).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/notebooks", wrapper.CreateNotebook).Methods(http.MethodPost)
-
-	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells/{index}", wrapper.DeleteCell).Methods(http.MethodDelete)
 
 	return r
 }
@@ -1228,7 +1760,7 @@ func (response CreateNotebook401JSONResponse) VisitCreateNotebookResponse(w http
 	return err
 }
 
-type CreateNotebook403JSONResponse struct{ ForbiddenJSONResponse }
+type CreateNotebook403JSONResponse Error
 
 func (response CreateNotebook403JSONResponse) VisitCreateNotebookResponse(w http.ResponseWriter) error {
 
@@ -1488,7 +2020,7 @@ func (response DeleteCell401JSONResponse) VisitDeleteCellResponse(w http.Respons
 	return err
 }
 
-type DeleteCell403JSONResponse struct{ ForbiddenJSONResponse }
+type DeleteCell403JSONResponse Error
 
 func (response DeleteCell403JSONResponse) VisitDeleteCellResponse(w http.ResponseWriter) error {
 
@@ -1519,6 +2051,582 @@ func (response DeleteCell404JSONResponse) VisitDeleteCellResponse(w http.Respons
 type DeleteCell500JSONResponse Error
 
 func (response DeleteCell500JSONResponse) VisitDeleteCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContentRequestObject struct {
+	Id int64 `json:"id"`
+}
+
+type GetNotebookContentResponseObject interface {
+	VisitGetNotebookContentResponse(w http.ResponseWriter) error
+}
+
+type GetNotebookContent200ResponseHeaders struct {
+	ETag *string
+}
+
+type GetNotebookContent200JSONResponse struct {
+	Body    NotebookContent
+	Headers GetNotebookContent200ResponseHeaders
+}
+
+func (response GetNotebookContent200JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent400JSONResponse NotebookEditingError
+
+func (response GetNotebookContent400JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent401JSONResponse NotebookEditingError
+
+func (response GetNotebookContent401JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent403JSONResponse NotebookEditingError
+
+func (response GetNotebookContent403JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent404JSONResponse NotebookEditingError
+
+func (response GetNotebookContent404JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent500JSONResponse NotebookEditingError
+
+func (response GetNotebookContent500JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCellRequestObject struct {
+	Id     int64 `json:"id"`
+	Params AddNotebookCellParams
+	Body   *AddNotebookCellJSONRequestBody
+}
+
+type AddNotebookCellResponseObject interface {
+	VisitAddNotebookCellResponse(w http.ResponseWriter) error
+}
+
+type AddNotebookCell201ResponseHeaders struct {
+	ETag *string
+}
+
+type AddNotebookCell201JSONResponse struct {
+	Body    NotebookCellChange
+	Headers AddNotebookCell201ResponseHeaders
+}
+
+func (response AddNotebookCell201JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell400JSONResponse NotebookEditingError
+
+func (response AddNotebookCell400JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell401JSONResponse NotebookEditingError
+
+func (response AddNotebookCell401JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell403JSONResponse NotebookEditingError
+
+func (response AddNotebookCell403JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell404JSONResponse NotebookEditingError
+
+func (response AddNotebookCell404JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell409JSONResponse NotebookEditingError
+
+func (response AddNotebookCell409JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddNotebookCell500JSONResponse NotebookEditingError
+
+func (response AddNotebookCell500JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCellRequestObject struct {
+	Id     int64  `json:"id"`
+	CellId string `json:"cell_id"`
+	Params RemoveNotebookCellParams
+}
+
+type RemoveNotebookCellResponseObject interface {
+	VisitRemoveNotebookCellResponse(w http.ResponseWriter) error
+}
+
+type RemoveNotebookCell200ResponseHeaders struct {
+	ETag *string
+}
+
+type RemoveNotebookCell200JSONResponse struct {
+	Body    NotebookContentChange
+	Headers RemoveNotebookCell200ResponseHeaders
+}
+
+func (response RemoveNotebookCell200JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell400JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell400JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell401JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell401JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell403JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell403JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell404JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell404JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell409JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell409JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell500JSONResponse NotebookEditingError
+
+func (response RemoveNotebookCell500JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCellRequestObject struct {
+	Id     int64  `json:"id"`
+	CellId string `json:"cell_id"`
+	Params EditNotebookCellParams
+	Body   *EditNotebookCellJSONRequestBody
+}
+
+type EditNotebookCellResponseObject interface {
+	VisitEditNotebookCellResponse(w http.ResponseWriter) error
+}
+
+type EditNotebookCell200ResponseHeaders struct {
+	ETag *string
+}
+
+type EditNotebookCell200JSONResponse struct {
+	Body    NotebookCellChange
+	Headers EditNotebookCell200ResponseHeaders
+}
+
+func (response EditNotebookCell200JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell400JSONResponse NotebookEditingError
+
+func (response EditNotebookCell400JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell401JSONResponse NotebookEditingError
+
+func (response EditNotebookCell401JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell403JSONResponse NotebookEditingError
+
+func (response EditNotebookCell403JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell404JSONResponse NotebookEditingError
+
+func (response EditNotebookCell404JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell409JSONResponse NotebookEditingError
+
+func (response EditNotebookCell409JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditNotebookCell500JSONResponse NotebookEditingError
+
+func (response EditNotebookCell500JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCellRequestObject struct {
+	Id     int64  `json:"id"`
+	CellId string `json:"cell_id"`
+	Params MoveNotebookCellParams
+	Body   *MoveNotebookCellJSONRequestBody
+}
+
+type MoveNotebookCellResponseObject interface {
+	VisitMoveNotebookCellResponse(w http.ResponseWriter) error
+}
+
+type MoveNotebookCell200ResponseHeaders struct {
+	ETag *string
+}
+
+type MoveNotebookCell200JSONResponse struct {
+	Body    NotebookContentChange
+	Headers MoveNotebookCell200ResponseHeaders
+}
+
+func (response MoveNotebookCell200JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell400JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell400JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell401JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell401JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell403JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell403JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell404JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell404JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell409JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell409JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MoveNotebookCell500JSONResponse NotebookEditingError
+
+func (response MoveNotebookCell500JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1608,6 +2716,21 @@ type StrictServerInterface interface {
 	// DeleteCell Удаление блока
 	// (DELETE /notebooks/{id}/cells/{index})
 	DeleteCell(ctx context.Context, request DeleteCellRequestObject) (DeleteCellResponseObject, error)
+	// GetNotebookContent Содержимое блокнота с хешем
+	// (GET /notebooks/{id}/content)
+	GetNotebookContent(ctx context.Context, request GetNotebookContentRequestObject) (GetNotebookContentResponseObject, error)
+	// AddNotebookCell Добавление блока с проверкой хеша
+	// (POST /notebooks/{id}/content/cells)
+	AddNotebookCell(ctx context.Context, request AddNotebookCellRequestObject) (AddNotebookCellResponseObject, error)
+	// RemoveNotebookCell Удаление блока с проверкой хеша
+	// (DELETE /notebooks/{id}/content/cells/{cell_id})
+	RemoveNotebookCell(ctx context.Context, request RemoveNotebookCellRequestObject) (RemoveNotebookCellResponseObject, error)
+	// EditNotebookCell Редактирование блока с проверкой хеша
+	// (PATCH /notebooks/{id}/content/cells/{cell_id})
+	EditNotebookCell(ctx context.Context, request EditNotebookCellRequestObject) (EditNotebookCellResponseObject, error)
+	// MoveNotebookCell Перемещение блока с проверкой хеша
+	// (POST /notebooks/{id}/content/cells/{cell_id}/move)
+	MoveNotebookCell(ctx context.Context, request MoveNotebookCellRequestObject) (MoveNotebookCellResponseObject, error)
 	// GetCurrentUser Текущий пользователь
 	// (GET /users/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
@@ -1915,6 +3038,164 @@ func (sh *strictHandler) DeleteCell(w http.ResponseWriter, r *http.Request, id i
 	}
 }
 
+// GetNotebookContent operation middleware
+func (sh *strictHandler) GetNotebookContent(w http.ResponseWriter, r *http.Request, id int64) {
+	var request GetNotebookContentRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotebookContent(ctx, request.(GetNotebookContentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotebookContent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotebookContentResponseObject); ok {
+		if err := validResponse.VisitGetNotebookContentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddNotebookCell operation middleware
+func (sh *strictHandler) AddNotebookCell(w http.ResponseWriter, r *http.Request, id int64, params AddNotebookCellParams) {
+	var request AddNotebookCellRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body AddNotebookCellJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddNotebookCell(ctx, request.(AddNotebookCellRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddNotebookCell")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddNotebookCellResponseObject); ok {
+		if err := validResponse.VisitAddNotebookCellResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveNotebookCell operation middleware
+func (sh *strictHandler) RemoveNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params RemoveNotebookCellParams) {
+	var request RemoveNotebookCellRequestObject
+
+	request.Id = id
+	request.CellId = cellId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveNotebookCell(ctx, request.(RemoveNotebookCellRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveNotebookCell")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveNotebookCellResponseObject); ok {
+		if err := validResponse.VisitRemoveNotebookCellResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EditNotebookCell operation middleware
+func (sh *strictHandler) EditNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params EditNotebookCellParams) {
+	var request EditNotebookCellRequestObject
+
+	request.Id = id
+	request.CellId = cellId
+	request.Params = params
+
+	var body EditNotebookCellJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EditNotebookCell(ctx, request.(EditNotebookCellRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EditNotebookCell")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EditNotebookCellResponseObject); ok {
+		if err := validResponse.VisitEditNotebookCellResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MoveNotebookCell operation middleware
+func (sh *strictHandler) MoveNotebookCell(w http.ResponseWriter, r *http.Request, id int64, cellId string, params MoveNotebookCellParams) {
+	var request MoveNotebookCellRequestObject
+
+	request.Id = id
+	request.CellId = cellId
+	request.Params = params
+
+	var body MoveNotebookCellJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MoveNotebookCell(ctx, request.(MoveNotebookCellRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MoveNotebookCell")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MoveNotebookCellResponseObject); ok {
+		if err := validResponse.VisitMoveNotebookCellResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetCurrentUser operation middleware
 func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	var request GetCurrentUserRequestObject
@@ -1944,41 +3225,72 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"6EWN5F49OTGIczTM5Fq/m7oxdMPGeuO/AwA=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -10,8 +10,9 @@ import (
 
 type failedCodec struct{ err error }
 
-func (c failedCodec) Parse([]byte) ([]domain.Cell, error) { return nil, c.err }
-func (c failedCodec) Build([]domain.Cell) ([]byte, error) { return nil, c.err }
+func (c failedCodec) Parse([]byte) ([]domain.Cell, error)           { return nil, c.err }
+func (c failedCodec) Build([]domain.Cell) ([]byte, error)           { return nil, c.err }
+func (c failedCodec) Rewrite([]byte, []domain.Cell) ([]byte, error) { return nil, c.err }
 func TestCodecFailureDoesNotCreateNotebook(t *testing.T) {
 	_, meta, files := newTestUsecase()
 	failure := errors.New("encode failed")

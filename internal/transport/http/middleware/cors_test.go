@@ -85,7 +85,7 @@ func TestCORS(t *testing.T) {
 			}
 			for header, want := range map[string]string{
 				"Access-Control-Allow-Credentials": "true",
-				"Access-Control-Expose-Headers":    "X-Request-Id",
+				"Access-Control-Expose-Headers":    "X-Request-Id, ETag",
 			} {
 				if got := rec.Header().Get(header); got != want {
 					t.Errorf("%s = %q, want %q", header, got, want)
@@ -98,7 +98,7 @@ func TestCORS(t *testing.T) {
 func TestCORSPreflight(t *testing.T) {
 	const origin = "http://localhost:5173"
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-		for _, header := range []string{"Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token"} {
+		for _, header := range []string{"Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token", "If-Match"} {
 			t.Run(method+"/"+header, func(t *testing.T) {
 				req := httptest.NewRequest(http.MethodOptions, "/api/v1/notebooks", nil)
 				req.Header.Set("Origin", origin)
@@ -113,7 +113,7 @@ func TestCORSPreflight(t *testing.T) {
 				}
 				for name, want := range map[string]string{
 					"Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE",
-					"Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-ID, X-CSRF-Token",
+					"Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-ID, X-CSRF-Token, If-Match",
 					"Access-Control-Max-Age":       "600",
 				} {
 					if got := rec.Header().Get(name); got != want {

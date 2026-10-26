@@ -25,6 +25,7 @@ import (
 
 // fakeUsecase отдаёт заранее заданный результат.
 type fakeUsecase struct {
+	usecase.Editing
 	list     []domain.NotebookSummary
 	notebook domain.Notebook
 	cell     domain.Cell

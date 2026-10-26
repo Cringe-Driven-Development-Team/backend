@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -114,7 +115,11 @@ func TestNotebookRepositoryLogsFailedOperationsOnce(t *testing.T) {
 		{"notebook.create", func() error { _, err := repo.Create(ctx, domain.Notebook{Name: "SECRET-name"}); return err }},
 		{"notebook.list", func() error { _, err := repo.List(ctx, 2); return err }},
 		{"notebook.get", func() error { _, err := repo.Get(ctx, 1, 2); return err }},
-		{"notebook.modify", func() error { return repo.Modify(ctx, 1, 2, func(domain.Notebook) (int, error) { return 2, nil }) }},
+		{"notebook.modify", func() error {
+			return repo.Modify(ctx, 1, 2, func(domain.Notebook) (usecase.MetadataUpdate, error) {
+				return usecase.MetadataUpdate{FileKey: "next", CellsCount: 2, Changed: true}, nil
+			})
+		}},
 	} {
 		out.Reset()
 		if err := tc.call(); err == nil {
@@ -151,8 +156,61 @@ func TestNotebookModifyLogsCommitError(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(old) })
 	source := errors.New("SECRET-commit")
 	repo := NewNotebookRepository(failureDB{tx: failedCommitTx{err: source}})
-	err := repo.Modify(context.Background(), 1, 2, func(domain.Notebook) (int, error) { return 2, nil })
+	err := repo.Modify(context.Background(), 1, 2, func(domain.Notebook) (usecase.MetadataUpdate, error) {
+		return usecase.MetadataUpdate{FileKey: "next", CellsCount: 2, Changed: true}, nil
+	})
 	if !errors.Is(err, source) || strings.Count(out.String(), `"operation":"notebook.modify"`) != 1 || !strings.Contains(out.String(), `"outcome":"error"`) || strings.Contains(out.String(), "SECRET") {
 		t.Fatalf("err=%v log=%s", err, out.String())
+	}
+}
+
+type revisionTx struct {
+	pgx.Tx
+	query     string
+	update    string
+	args      []any
+	commitErr error
+}
+
+func (tx *revisionTx) QueryRow(_ context.Context, query string, _ ...any) pgx.Row { //nolint:ireturn // required by pgx.Tx
+	tx.query = query
+	return successRow{}
+}
+func (tx *revisionTx) Exec(_ context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	tx.update = query
+	tx.args = args
+	return pgconn.CommandTag{}, nil
+}
+func (tx *revisionTx) Commit(context.Context) error   { return tx.commitErr }
+func (tx *revisionTx) Rollback(context.Context) error { return nil }
+
+func TestModifyAtomicallyPublishesFileAndCount(t *testing.T) {
+	tx := &revisionTx{}
+	repo := NewNotebookRepository(failureDB{tx: tx})
+	err := repo.Modify(context.Background(), 1, 2, func(n domain.Notebook) (usecase.MetadataUpdate, error) {
+		if !strings.Contains(tx.query, "FOR UPDATE") || n.FileKey != "SECRET-key" {
+			t.Fatal("callback must see locked current revision")
+		}
+		return usecase.MetadataUpdate{FileKey: "new-object", CellsCount: 3, Changed: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(tx.update, "file_key") || !strings.Contains(tx.update, "cells_count") || !strings.Contains(tx.update, "updated_at") {
+		t.Fatalf("incomplete revision update: %s", tx.update)
+	}
+	if len(tx.args) != 3 || tx.args[0] != int64(1) || tx.args[1] != "new-object" || tx.args[2] != 3 {
+		t.Fatalf("invalid revision arguments: %v", tx.args)
+	}
+}
+
+func TestModifyNoOpDoesNotUpdateTimestamp(t *testing.T) {
+	tx := &revisionTx{}
+	err := NewNotebookRepository(failureDB{tx: tx}).Modify(context.Background(), 1, 2, func(domain.Notebook) (usecase.MetadataUpdate, error) { return usecase.MetadataUpdate{}, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx.update != "" {
+		t.Fatal("no-op must not update metadata")
 	}
 }
