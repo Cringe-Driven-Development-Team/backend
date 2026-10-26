@@ -142,22 +142,6 @@ func (mr *MockSessionStoreMockRecorder) DeleteSession(ctx, tokenHash any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSession", reflect.TypeOf((*MockSessionStore)(nil).DeleteSession), ctx, tokenHash)
 }
 
-// SessionByTokenHash mocks base method.
-func (m *MockSessionStore) SessionByTokenHash(ctx context.Context, tokenHash string) (int64, time.Time, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SessionByTokenHash", ctx, tokenHash)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(time.Time)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// SessionByTokenHash indicates an expected call of SessionByTokenHash.
-func (mr *MockSessionStoreMockRecorder) SessionByTokenHash(ctx, tokenHash any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SessionByTokenHash", reflect.TypeOf((*MockSessionStore)(nil).SessionByTokenHash), ctx, tokenHash)
-}
-
 // MockPasswordHasher is a mock of PasswordHasher interface.
 type MockPasswordHasher struct {
 	ctrl     *gomock.Controller
@@ -289,17 +273,18 @@ func (m *MockTokenIssuer) EXPECT() *MockTokenIssuerMockRecorder {
 	return m.recorder
 }
 
-// Issue mocks base method.
-func (m *MockTokenIssuer) Issue(userID int64) (string, error) {
+// IssueAccess mocks base method.
+func (m *MockTokenIssuer) IssueAccess(userID int64) (string, time.Time, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Issue", userID)
+	ret := m.ctrl.Call(m, "IssueAccess", userID)
 	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(time.Time)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// Issue indicates an expected call of Issue.
-func (mr *MockTokenIssuerMockRecorder) Issue(userID any) *gomock.Call {
+// IssueAccess indicates an expected call of IssueAccess.
+func (mr *MockTokenIssuerMockRecorder) IssueAccess(userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Issue", reflect.TypeOf((*MockTokenIssuer)(nil).Issue), userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IssueAccess", reflect.TypeOf((*MockTokenIssuer)(nil).IssueAccess), userID)
 }

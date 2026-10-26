@@ -39,15 +39,11 @@ func TestUserRepositoryParameterizedQueries(t *testing.T) {
 			if err = r.CreateSession(ctx, 17, payload, expires); err != nil {
 				t.Fatal(err)
 			}
-			for _, sql := range []string{deleteSessionSQL, sessionByHashSQL} {
+			for _, sql := range []string{deleteSessionSQL} {
 				db.ExpectQuery(sql).WithArgs(payload).WillReturnRows(pgxmock.NewRows([]string{"user_id", "expires_at"}).AddRow(int64(17), expires))
 				var id int64
 				var expiry time.Time
-				if sql == deleteSessionSQL {
-					id, expiry, err = r.DeleteSession(ctx, payload)
-				} else {
-					id, expiry, err = r.SessionByTokenHash(ctx, payload)
-				}
+				id, expiry, err = r.DeleteSession(ctx, payload)
 				if err != nil || id != 17 || !expiry.Equal(expires) {
 					t.Fatalf("id=%d expires=%v err=%v", id, expiry, err)
 				}
@@ -57,7 +53,7 @@ func TestUserRepositoryParameterizedQueries(t *testing.T) {
 }
 
 func TestUserRepositoryMissingRows(t *testing.T) {
-	for _, name := range []string{"login", "id", "delete", "lookup"} {
+	for _, name := range []string{"login", "id", "delete"} {
 		t.Run(name, func(t *testing.T) {
 			db := newPool(t)
 			r := NewUserRepository(db)
@@ -75,10 +71,6 @@ func TestUserRepositoryMissingRows(t *testing.T) {
 			case "delete":
 				db.ExpectQuery(deleteSessionSQL).WithArgs("missing").WillReturnError(pgx.ErrNoRows)
 				_, _, err = r.DeleteSession(ctx, "missing")
-				want = usecase.ErrSessionNotFound
-			case "lookup":
-				db.ExpectQuery(sessionByHashSQL).WithArgs("missing").WillReturnError(pgx.ErrNoRows)
-				_, _, err = r.SessionByTokenHash(ctx, "missing")
 				want = usecase.ErrSessionNotFound
 			}
 			if !errors.Is(err, want) {

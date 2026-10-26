@@ -13,7 +13,7 @@ import (
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 )
 
-func TestAuthenticateCookies(t *testing.T) {
+func TestAuthenticateBearer(t *testing.T) {
 	tokens := usersecurity.NewAccessToken([]byte("test-secret"), time.Minute)
 	valid, err := tokens.Issue(42)
 	if err != nil {
@@ -35,11 +35,11 @@ func TestAuthenticateCookies(t *testing.T) {
 		{name: "missing"},
 		{name: "empty", present: true},
 		{name: "invalid", present: true, cookie: "invalid"},
-		{name: "expired", present: true, cookie: expired},
-		{name: "bearer only", header: "Bearer " + valid},
-		{name: "valid", present: true, cookie: valid, authenticated: true},
-		{name: "cookie wins", present: true, cookie: valid, header: "Bearer invalid", authenticated: true},
-		{name: "no bearer fallback", present: true, cookie: "invalid", header: "Bearer " + valid},
+		{name: "expired", header: "Bearer " + expired},
+		{name: "bearer only", header: "Bearer " + valid, authenticated: true},
+		{name: "cookie ignored", present: true, cookie: valid},
+		{name: "valid cookie cannot replace invalid bearer", present: true, cookie: valid, header: "Bearer invalid"},
+		{name: "valid bearer ignores invalid cookie", present: true, cookie: "invalid", header: "Bearer " + valid, authenticated: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			specHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +59,9 @@ func TestAuthenticateCookies(t *testing.T) {
 				req.AddCookie(&http.Cookie{Name: "access_token", Value: tt.cookie})
 			}
 			req.Header.Set("Authorization", tt.header)
+			req.Header.Set("X-BFF-Key", "test-key")
 			rec := httptest.NewRecorder()
-			security.Authenticate(tokens)(Validator(spec, "/api/v1")(specHandler)).ServeHTTP(rec, req)
+			security.AuthenticateBearer(tokens)(Validator(spec, "/api/v1")(specHandler)).ServeHTTP(rec, req)
 			wantStatus := http.StatusUnauthorized
 			if tt.authenticated {
 				wantStatus = http.StatusOK

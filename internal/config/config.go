@@ -6,17 +6,17 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 type Config struct {
+	BFFAPIKey                          string
 	LogLevel                           slog.Level
 	Host, Port                         string
 	WriteTimeout, ReadTimeout          time.Duration
-	JWTSecret, CSRFSecret              string
+	JWTSecret                          string
 	AccessTTL, RefreshTTL              time.Duration
-	CookieSecure                       bool
-	CORSOrigins, AppOrigin             string
 	NotebooksBucket                    string
 	DBUser, DBPassword, DBHost, DBName string
 }
@@ -42,13 +42,12 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		LogLevel: slog.LevelInfo,
-		Host:     get("HOST", "0.0.0.0"), Port: get("PORT", "8080"),
+		BFFAPIKey: get("BFF_API_KEY", ""),
+		LogLevel:  slog.LevelInfo,
+		Host:      get("HOST", "0.0.0.0"), Port: get("PORT", "8080"),
 		WriteTimeout: duration("WRITE_TIMEOUT", 15*time.Second), ReadTimeout: duration("READ_TIMEOUT", 15*time.Second),
-		JWTSecret: get("JWT_SECRET", ""), CSRFSecret: get("CSRF_SECRET", ""),
+		JWTSecret: get("JWT_SECRET", ""),
 		AccessTTL: duration("ACCESS_TOKEN_TTL", 15*time.Minute), RefreshTTL: duration("REFRESH_TOKEN_TTL", 720*time.Hour),
-		CookieSecure: get("COOKIE_SECURE", "false") == "true",
-		CORSOrigins:  get("CORS_ALLOWED_ORIGINS", "https://cellestial.ru,http://localhost:5173"), AppOrigin: get("APP_ORIGIN", "https://cellestial.ru"),
 		NotebooksBucket: get("S3_NOTEBOOKS_BUCKET", ""),
 		DBUser:          get("POSTGRES_USER", "postgres"), DBPassword: get("POSTGRES_PASSWORD", "postgres"), DBHost: get("POSTGRES_HOST", "db"), DBName: get("POSTGRES_DB", "app_db"),
 	}
@@ -66,11 +65,14 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 			return Config{}, errors.New("invalid LOG_LEVEL: expected debug, info, warn or error")
 		}
 	}
+	if strings.TrimSpace(c.BFFAPIKey) == "" {
+		return Config{}, errors.New("BFF_API_KEY is not set")
+	}
+	if c.AccessTTL < time.Second || c.RefreshTTL < time.Second {
+		return Config{}, errors.New("token TTL must be at least one second")
+	}
 	if c.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is not set")
-	}
-	if c.CSRFSecret == "" {
-		return Config{}, errors.New("CSRF_SECRET is not set")
 	}
 	if c.NotebooksBucket == "" {
 		return Config{}, errors.New("S3_NOTEBOOKS_BUCKET is not set")

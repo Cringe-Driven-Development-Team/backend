@@ -50,7 +50,6 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 	db.ExpectQuery(byIDSQL).WithArgs(int64(1)).WillReturnError(failure)
 	db.ExpectExec(createSessionSQL).WithArgs(int64(1), "SECRET-hash", expires).WillReturnError(failure)
 	db.ExpectQuery(deleteSessionSQL).WithArgs("SECRET-hash").WillReturnError(failure)
-	db.ExpectQuery(sessionByHashSQL).WithArgs("SECRET-hash").WillReturnError(failure)
 	repo := NewUserRepository(db)
 	for _, tc := range []struct {
 		operation string
@@ -61,7 +60,6 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 		{"user.by_id", func() error { _, err := repo.UserByID(ctx, 1); return err }},
 		{"session.create", func() error { return repo.CreateSession(ctx, 1, "SECRET-hash", expires) }},
 		{"session.delete", func() error { _, _, err := repo.DeleteSession(ctx, "SECRET-hash"); return err }},
-		{"session.by_token", func() error { _, _, err := repo.SessionByTokenHash(ctx, "SECRET-hash"); return err }},
 	} {
 		out.Reset()
 		if err := tc.call(); !errors.Is(err, failure) {

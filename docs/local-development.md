@@ -19,7 +19,7 @@ make run           # API, PostgreSQL и SeaweedFS через Docker Compose
 
 ```bash
 cp -n .env.example .env
-# В .env задайте JWT_SECRET и CSRF_SECRET: два разных случайных значения.
+# Задайте JWT_SECRET и BFF_API_KEY: два разных случайных значения.
 # Например, каждое получите командой: openssl rand -hex 32
 make doctor
 make up           # PostgreSQL + SeaweedFS + API, ожидание health до 120 секунд
@@ -111,6 +111,9 @@ Apidog-токен нужен только для изменения контра
    Недоступный клиент отмечайте как непроверенный; запуск MCP сам по себе
    не подтверждает интеграцию с обоими клиентами. Правила ревью и исключение YarikMix — в [README](../README.md#как-работать-с-задачами).
 
+Go API требует `JWT_SECRET` и `BFF_API_KEY`. Запросы к `/api/v1` передают
+`X-BFF-Key`, защищённые ручки — также Bearer. Контракт: [авторизация](authentication.md).
+
 ## Генерация тестовых моков
 
 Прикладные порты в unit-тестах подменяются `go.uber.org/mock/gomock`, запросы
@@ -131,6 +134,6 @@ make generate-mocks
 Ожидания SQL используют `QueryMatcherEqual` и точные аргументы, включая владельца.
 После теста проверяется `ExpectationsWereMet`. Gomock-контроллер создаётся для
 каждого теста/subtest; отсутствие ожиданий запрещает побочные вызовы при отказах.
-Stateful fixtures в `flow_fixture_test.go` и `csrf_flow_fixture_test.go` сохраняют
+Stateful fixtures в `flow_fixture_test.go` и `bff_helpers_test.go` сохраняют
 последовательные сценарии ротации сессий, создания/изменения/чтения блокнотов
 и корреляции логов. Они не заменяют SQL-тесты и не доказывают атомарность PostgreSQL.

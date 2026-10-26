@@ -2,9 +2,10 @@
 package httptransport
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
@@ -15,7 +16,10 @@ import (
 
 const BaseURL = "/api/v1"
 
-func NewRouter(srv Server, tokens security.TokenParser, corsOrigins []string, csrf *security.CSRFSigner, csrfTTL time.Duration, refreshUsers security.RefreshUserResolver, appOrigin string) (http.Handler, error) {
+func NewRouter(srv Server, tokens security.TokenParser, bffKey string) (http.Handler, error) {
+	if strings.TrimSpace(bffKey) == "" {
+		return nil, errors.New("BFF_API_KEY is not set")
+	}
 	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load embedded spec: %w", err)
@@ -40,15 +44,13 @@ func NewRouter(srv Server, tokens security.TokenParser, corsOrigins []string, cs
 	api.HandlerWithOptions(strict, api.GorillaServerOptions{
 		BaseURL:    BaseURL,
 		BaseRouter: r,
-		// Проверки CSRF и Authenticate выполняются внешней обёрткой до разбора параметров.
+		// S2S и Bearer проверяются до разбора параметров.
 		Middlewares: []api.MiddlewareFunc{
 			middleware.Validator(spec, BaseURL),
 		},
 		ErrorHandlerFunc: httperr.RequestError,
 	})
 
-	// Общие middleware оборачивают и ранние ответы CORS/CSRF, и ошибки маршрутизации.
-	// Порядок запроса: RequestID → Logging → Recover → CORS → CSRF/Authenticate → Validator.
-	handler := middleware.CORS(corsOrigins)(security.Protect(tokens, csrf, csrfTTL, BaseURL, corsOrigins, refreshUsers, appOrigin)(r))
+	handler := security.S2S(bffKey, BaseURL)(security.AuthenticateBearer(tokens)(r))
 	return middleware.RequestID(middleware.Logging(middleware.Recover(handler))), nil
 }

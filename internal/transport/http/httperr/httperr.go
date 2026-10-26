@@ -30,12 +30,6 @@ func Internal(w http.ResponseWriter, r *http.Request, err error) {
 
 // RequestError отвечает, когда сгенерированный код не смог разобрать запрос.
 func RequestError(w http.ResponseWriter, _ *http.Request, err error) {
-	var required *api.RequiredParamError
-	if errors.As(err, &required) && required.ParamName == "refresh_token" {
-		// Нет cookie refresh_token — значит, пользователь не вошёл.
-		Write(w, http.StatusUnauthorized, api.Unauthorized, "refresh token is missing")
-		return
-	}
 	Write(w, http.StatusBadRequest, api.ValidationError, err.Error())
 }
 

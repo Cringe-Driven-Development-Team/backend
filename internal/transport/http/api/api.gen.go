@@ -65,6 +65,7 @@ const (
 	LoginTaken         ErrorCode = "login_taken"
 	NotFound           ErrorCode = "not_found"
 	NotImplemented     ErrorCode = "not_implemented"
+	S2sForbidden       ErrorCode = "s2s_forbidden"
 	Unauthorized       ErrorCode = "unauthorized"
 	ValidationError    ErrorCode = "validation_error"
 )
@@ -84,6 +85,8 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case NotImplemented:
 		return true
+	case S2sForbidden:
+		return true
 	case Unauthorized:
 		return true
 	case ValidationError:
@@ -91,6 +94,12 @@ func (e ErrorCode) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AuthResponse defines model for AuthResponse.
+type AuthResponse struct {
+	Tokens TokenPair `json:"tokens"`
+	User   User      `json:"user"`
 }
 
 // Cell Блок блокнота
@@ -163,6 +172,31 @@ type NotebookSummary struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// RefreshTokenRequest defines model for RefreshTokenRequest.
+type RefreshTokenRequest struct {
+	// RefreshToken Refresh-токен текущей сессии.
+	RefreshToken string `json:"refresh_token"`
+}
+
+// TokenPair defines model for TokenPair.
+type TokenPair struct {
+	// AccessExpiresIn Срок действия выданного access-токена в секундах
+	//
+	// Examples: 900
+	AccessExpiresIn int64 `json:"access_expires_in"`
+
+	// AccessToken Access-токен для Authorization Bearer
+	AccessToken string `json:"access_token"`
+
+	// RefreshExpiresIn Срок действия выданного refresh-токена в секундах
+	//
+	// Examples: 2592000
+	RefreshExpiresIn int64 `json:"refresh_expires_in"`
+
+	// RefreshToken Refresh-токен; при обновлении заменяется новым
+	RefreshToken string `json:"refresh_token"`
+}
+
 // User defines model for User.
 type User struct {
 	// Id ID
@@ -170,59 +204,74 @@ type User struct {
 	Login string `json:"login"`
 }
 
-// Forbidden defines model for Forbidden.
-type Forbidden = Error
-
 // LoginUserParams defines parameters for LoginUser.
 type LoginUserParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // LogoutUserParams defines parameters for LogoutUser.
 type LogoutUserParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
-
-	// RefreshToken Refresh-токен (HttpOnly-cookie, Path=/api/v1/auth)
-	RefreshToken string `form:"refresh_token" json:"refresh_token"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // RefreshTokenParams defines parameters for RefreshToken.
 type RefreshTokenParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
-
-	// RefreshToken Refresh-токен (HttpOnly-cookie, Path=/api/v1/auth)
-	RefreshToken string `form:"refresh_token" json:"refresh_token"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // RegisterUserParams defines parameters for RegisterUser.
 type RegisterUserParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
+}
+
+// ListNotebooksParams defines parameters for ListNotebooks.
+type ListNotebooksParams struct {
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // CreateNotebookParams defines parameters for CreateNotebook.
 type CreateNotebookParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
+}
+
+// GetNotebookParams defines parameters for GetNotebook.
+type GetNotebookParams struct {
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // CreateCellParams defines parameters for CreateCell.
 type CreateCellParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // DeleteCellParams defines parameters for DeleteCell.
 type DeleteCellParams struct {
-	// XCSRFToken Значение cookie __Host-csrf
-	XCSRFToken *string `json:"X-CSRF-Token,omitempty"`
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
+}
+
+// GetCurrentUserParams defines parameters for GetCurrentUser.
+type GetCurrentUserParams struct {
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
 }
 
 // LoginUserJSONRequestBody defines body for LoginUser for application/json ContentType.
 type LoginUserJSONRequestBody = Credentials
+
+// LogoutUserJSONRequestBody defines body for LogoutUser for application/json ContentType.
+type LogoutUserJSONRequestBody = RefreshTokenRequest
+
+// RefreshTokenJSONRequestBody defines body for RefreshToken for application/json ContentType.
+type RefreshTokenJSONRequestBody = RefreshTokenRequest
 
 // RegisterUserJSONRequestBody defines body for RegisterUser for application/json ContentType.
 type RegisterUserJSONRequestBody = Credentials
@@ -249,13 +298,13 @@ type ServerInterface interface {
 	RegisterUser(w http.ResponseWriter, r *http.Request, params RegisterUserParams)
 	// ListNotebooks Список блокнотов
 	// (GET /notebooks)
-	ListNotebooks(w http.ResponseWriter, r *http.Request)
+	ListNotebooks(w http.ResponseWriter, r *http.Request, params ListNotebooksParams)
 	// CreateNotebook Создание блокнота
 	// (POST /notebooks)
 	CreateNotebook(w http.ResponseWriter, r *http.Request, params CreateNotebookParams)
 	// GetNotebook Блокнот
 	// (GET /notebooks/{id})
-	GetNotebook(w http.ResponseWriter, r *http.Request, id int64)
+	GetNotebook(w http.ResponseWriter, r *http.Request, id int64, params GetNotebookParams)
 	// CreateCell Добавление блока
 	// (POST /notebooks/{id}/cells)
 	CreateCell(w http.ResponseWriter, r *http.Request, id int64, params CreateCellParams)
@@ -264,7 +313,7 @@ type ServerInterface interface {
 	DeleteCell(w http.ResponseWriter, r *http.Request, id int64, index int, params DeleteCellParams)
 	// GetCurrentUser Текущий пользователь
 	// (GET /users/me)
-	GetCurrentUser(w http.ResponseWriter, r *http.Request)
+	GetCurrentUser(w http.ResponseWriter, r *http.Request, params GetCurrentUserParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -287,23 +336,27 @@ func (siw *ServerInterfaceWrapper) LoginUser(w http.ResponseWriter, r *http.Requ
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -328,41 +381,27 @@ func (siw *ServerInterfaceWrapper) LogoutUser(w http.ResponseWriter, r *http.Req
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
-	}
-
-	{
-		var cookie *http.Cookie
-
-		if cookie, err = r.Cookie("refresh_token"); err == nil {
-			var value string
-			err = runtime.BindStyledParameterWithOptions("simple", "refresh_token", cookie.Value, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: true, Type: "string", Format: ""})
-			if err != nil {
-				siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "refresh_token", Err: err})
-				return
-			}
-			params.RefreshToken = value
-
-		} else {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "refresh_token"})
-			return
-		}
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -387,41 +426,27 @@ func (siw *ServerInterfaceWrapper) RefreshToken(w http.ResponseWriter, r *http.R
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
-	}
-
-	{
-		var cookie *http.Cookie
-
-		if cookie, err = r.Cookie("refresh_token"); err == nil {
-			var value string
-			err = runtime.BindStyledParameterWithOptions("simple", "refresh_token", cookie.Value, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: true, Type: "string", Format: ""})
-			if err != nil {
-				siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "refresh_token", Err: err})
-				return
-			}
-			params.RefreshToken = value
-
-		} else {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "refresh_token"})
-			return
-		}
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -446,23 +471,27 @@ func (siw *ServerInterfaceWrapper) RegisterUser(w http.ResponseWriter, r *http.R
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -479,8 +508,39 @@ func (siw *ServerInterfaceWrapper) RegisterUser(w http.ResponseWriter, r *http.R
 // ListNotebooks operation middleware
 func (siw *ServerInterfaceWrapper) ListNotebooks(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNotebooksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
+			return
+		}
+
+		params.XBFFKey = XBFFKey
+
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListNotebooks(w, r)
+		siw.Handler.ListNotebooks(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -501,23 +561,27 @@ func (siw *ServerInterfaceWrapper) CreateNotebook(w http.ResponseWriter, r *http
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -546,8 +610,36 @@ func (siw *ServerInterfaceWrapper) GetNotebook(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNotebookParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
+			return
+		}
+
+		params.XBFFKey = XBFFKey
+
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetNotebook(w, r, id)
+		siw.Handler.GetNotebook(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -577,23 +669,27 @@ func (siw *ServerInterfaceWrapper) CreateCell(w http.ResponseWriter, r *http.Req
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -636,23 +732,27 @@ func (siw *ServerInterfaceWrapper) DeleteCell(w http.ResponseWriter, r *http.Req
 
 	headers := r.Header
 
-	// ------------- Optional header parameter "X-CSRF-Token" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
-		var XCSRFToken string
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
 		n := len(valueList)
 		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
 		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
 			return
 		}
 
-		params.XCSRFToken = &XCSRFToken
+		params.XBFFKey = XBFFKey
 
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -669,8 +769,39 @@ func (siw *ServerInterfaceWrapper) DeleteCell(w http.ResponseWriter, r *http.Req
 // GetCurrentUser operation middleware
 func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCurrentUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
+			return
+		}
+
+		params.XBFFKey = XBFFKey
+
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetCurrentUser(w, r)
+		siw.Handler.GetCurrentUser(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -805,18 +936,16 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells", wrapper.CreateCell).Methods(http.MethodPost)
 
+	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells/{index}", wrapper.DeleteCell).Methods(http.MethodDelete)
+
 	r.HandleFunc(options.BaseURL+"/notebooks/{id}", wrapper.GetNotebook).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/notebooks", wrapper.ListNotebooks).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/notebooks", wrapper.CreateNotebook).Methods(http.MethodPost)
 
-	r.HandleFunc(options.BaseURL+"/notebooks/{id}/cells/{index}", wrapper.DeleteCell).Methods(http.MethodDelete)
-
 	return r
 }
-
-type ForbiddenJSONResponse Error
 
 type LoginUserRequestObject struct {
 	Params LoginUserParams
@@ -827,25 +956,15 @@ type LoginUserResponseObject interface {
 	VisitLoginUserResponse(w http.ResponseWriter) error
 }
 
-type LoginUser200ResponseHeaders struct {
-	SetCookie *string
-}
-
-type LoginUser200JSONResponse struct {
-	Body    User
-	Headers LoginUser200ResponseHeaders
-}
+type LoginUser200JSONResponse AuthResponse
 
 func (response LoginUser200JSONResponse) VisitLoginUserResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if response.Headers.SetCookie != nil {
-		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
-	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
@@ -879,7 +998,7 @@ func (response LoginUser401JSONResponse) VisitLoginUserResponse(w http.ResponseW
 	return err
 }
 
-type LoginUser403JSONResponse struct{ ForbiddenJSONResponse }
+type LoginUser403JSONResponse Error
 
 func (response LoginUser403JSONResponse) VisitLoginUserResponse(w http.ResponseWriter) error {
 
@@ -909,26 +1028,33 @@ func (response LoginUser500JSONResponse) VisitLoginUserResponse(w http.ResponseW
 
 type LogoutUserRequestObject struct {
 	Params LogoutUserParams
+	Body   *LogoutUserJSONRequestBody
 }
 
 type LogoutUserResponseObject interface {
 	VisitLogoutUserResponse(w http.ResponseWriter) error
 }
 
-type LogoutUser204ResponseHeaders struct {
-	SetCookie *string
-}
-
 type LogoutUser204Response struct {
-	Headers LogoutUser204ResponseHeaders
 }
 
 func (response LogoutUser204Response) VisitLogoutUserResponse(w http.ResponseWriter) error {
-	if response.Headers.SetCookie != nil {
-		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
-	}
 	w.WriteHeader(204)
 	return nil
+}
+
+type LogoutUser400JSONResponse Error
+
+func (response LogoutUser400JSONResponse) VisitLogoutUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type LogoutUser401JSONResponse Error
@@ -945,7 +1071,7 @@ func (response LogoutUser401JSONResponse) VisitLogoutUserResponse(w http.Respons
 	return err
 }
 
-type LogoutUser403JSONResponse struct{ ForbiddenJSONResponse }
+type LogoutUser403JSONResponse Error
 
 func (response LogoutUser403JSONResponse) VisitLogoutUserResponse(w http.ResponseWriter) error {
 
@@ -975,26 +1101,39 @@ func (response LogoutUser500JSONResponse) VisitLogoutUserResponse(w http.Respons
 
 type RefreshTokenRequestObject struct {
 	Params RefreshTokenParams
+	Body   *RefreshTokenJSONRequestBody
 }
 
 type RefreshTokenResponseObject interface {
 	VisitRefreshTokenResponse(w http.ResponseWriter) error
 }
 
-type RefreshToken204ResponseHeaders struct {
-	SetCookie *string
-}
+type RefreshToken200JSONResponse TokenPair
 
-type RefreshToken204Response struct {
-	Headers RefreshToken204ResponseHeaders
-}
+func (response RefreshToken200JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
 
-func (response RefreshToken204Response) VisitRefreshTokenResponse(w http.ResponseWriter) error {
-	if response.Headers.SetCookie != nil {
-		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
 	}
-	w.WriteHeader(204)
-	return nil
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RefreshToken400JSONResponse Error
+
+func (response RefreshToken400JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type RefreshToken401JSONResponse Error
@@ -1011,7 +1150,7 @@ func (response RefreshToken401JSONResponse) VisitRefreshTokenResponse(w http.Res
 	return err
 }
 
-type RefreshToken403JSONResponse struct{ ForbiddenJSONResponse }
+type RefreshToken403JSONResponse Error
 
 func (response RefreshToken403JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
 
@@ -1048,25 +1187,15 @@ type RegisterUserResponseObject interface {
 	VisitRegisterUserResponse(w http.ResponseWriter) error
 }
 
-type RegisterUser201ResponseHeaders struct {
-	SetCookie *string
-}
-
-type RegisterUser201JSONResponse struct {
-	Body    User
-	Headers RegisterUser201ResponseHeaders
-}
+type RegisterUser201JSONResponse AuthResponse
 
 func (response RegisterUser201JSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if response.Headers.SetCookie != nil {
-		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
-	}
 	w.WriteHeader(201)
 	_, err := buf.WriteTo(w)
 	return err
@@ -1086,7 +1215,7 @@ func (response RegisterUser400JSONResponse) VisitRegisterUserResponse(w http.Res
 	return err
 }
 
-type RegisterUser403JSONResponse struct{ ForbiddenJSONResponse }
+type RegisterUser403JSONResponse Error
 
 func (response RegisterUser403JSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
 
@@ -1129,6 +1258,7 @@ func (response RegisterUser500JSONResponse) VisitRegisterUserResponse(w http.Res
 }
 
 type ListNotebooksRequestObject struct {
+	Params ListNotebooksParams
 }
 
 type ListNotebooksResponseObject interface {
@@ -1159,6 +1289,20 @@ func (response ListNotebooks401JSONResponse) VisitListNotebooksResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListNotebooks403JSONResponse Error
+
+func (response ListNotebooks403JSONResponse) VisitListNotebooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1228,7 +1372,7 @@ func (response CreateNotebook401JSONResponse) VisitCreateNotebookResponse(w http
 	return err
 }
 
-type CreateNotebook403JSONResponse struct{ ForbiddenJSONResponse }
+type CreateNotebook403JSONResponse Error
 
 func (response CreateNotebook403JSONResponse) VisitCreateNotebookResponse(w http.ResponseWriter) error {
 
@@ -1257,7 +1401,8 @@ func (response CreateNotebook500JSONResponse) VisitCreateNotebookResponse(w http
 }
 
 type GetNotebookRequestObject struct {
-	Id int64 `json:"id"`
+	Id     int64 `json:"id"`
+	Params GetNotebookParams
 }
 
 type GetNotebookResponseObject interface {
@@ -1302,6 +1447,20 @@ func (response GetNotebook401JSONResponse) VisitGetNotebookResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebook403JSONResponse Error
+
+func (response GetNotebook403JSONResponse) VisitGetNotebookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1386,7 +1545,7 @@ func (response CreateCell401JSONResponse) VisitCreateCellResponse(w http.Respons
 	return err
 }
 
-type CreateCell403JSONResponse struct{ ForbiddenJSONResponse }
+type CreateCell403JSONResponse Error
 
 func (response CreateCell403JSONResponse) VisitCreateCellResponse(w http.ResponseWriter) error {
 
@@ -1488,7 +1647,7 @@ func (response DeleteCell401JSONResponse) VisitDeleteCellResponse(w http.Respons
 	return err
 }
 
-type DeleteCell403JSONResponse struct{ ForbiddenJSONResponse }
+type DeleteCell403JSONResponse Error
 
 func (response DeleteCell403JSONResponse) VisitDeleteCellResponse(w http.ResponseWriter) error {
 
@@ -1531,6 +1690,7 @@ func (response DeleteCell500JSONResponse) VisitDeleteCellResponse(w http.Respons
 }
 
 type GetCurrentUserRequestObject struct {
+	Params GetCurrentUserParams
 }
 
 type GetCurrentUserResponseObject interface {
@@ -1561,6 +1721,20 @@ func (response GetCurrentUser401JSONResponse) VisitGetCurrentUserResponse(w http
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentUser403JSONResponse Error
+
+func (response GetCurrentUser403JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1691,6 +1865,13 @@ func (sh *strictHandler) LogoutUser(w http.ResponseWriter, r *http.Request, para
 
 	request.Params = params
 
+	var body LogoutUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.LogoutUser(ctx, request.(LogoutUserRequestObject))
 	}
@@ -1716,6 +1897,13 @@ func (sh *strictHandler) RefreshToken(w http.ResponseWriter, r *http.Request, pa
 	var request RefreshTokenRequestObject
 
 	request.Params = params
+
+	var body RefreshTokenJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.RefreshToken(ctx, request.(RefreshTokenRequestObject))
@@ -1771,8 +1959,10 @@ func (sh *strictHandler) RegisterUser(w http.ResponseWriter, r *http.Request, pa
 }
 
 // ListNotebooks operation middleware
-func (sh *strictHandler) ListNotebooks(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListNotebooks(w http.ResponseWriter, r *http.Request, params ListNotebooksParams) {
 	var request ListNotebooksRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListNotebooks(ctx, request.(ListNotebooksRequestObject))
@@ -1828,10 +2018,11 @@ func (sh *strictHandler) CreateNotebook(w http.ResponseWriter, r *http.Request, 
 }
 
 // GetNotebook operation middleware
-func (sh *strictHandler) GetNotebook(w http.ResponseWriter, r *http.Request, id int64) {
+func (sh *strictHandler) GetNotebook(w http.ResponseWriter, r *http.Request, id int64, params GetNotebookParams) {
 	var request GetNotebookRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetNotebook(ctx, request.(GetNotebookRequestObject))
@@ -1916,8 +2107,10 @@ func (sh *strictHandler) DeleteCell(w http.ResponseWriter, r *http.Request, id i
 }
 
 // GetCurrentUser operation middleware
-func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request, params GetCurrentUserParams) {
 	var request GetCurrentUserRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetCurrentUser(ctx, request.(GetCurrentUserRequestObject))
@@ -1944,41 +2137,56 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"6EWN5F49OTGIczTM5Fq/m7oxdMPGeuO/AwA=",
+	"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",
+	"/wA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

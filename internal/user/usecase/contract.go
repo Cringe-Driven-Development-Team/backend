@@ -5,6 +5,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
@@ -24,12 +25,10 @@ type Usecase interface {
 	Login(ctx context.Context, login, password string) (domain.User, Session, error)
 	// Refresh делает ротацию: старая сессия удаляется, вместо неё создаётся новая.
 	Refresh(ctx context.Context, refreshToken string) (Session, error)
-	// RefreshUserID читает владельца действующей refresh-сессии без её ротации.
-	RefreshUserID(ctx context.Context, refreshToken string) (int64, error)
 	Logout(ctx context.Context, refreshToken string) error
 	CurrentUser(ctx context.Context, id int64) (domain.User, error)
 }
 
 type TokenIssuer interface {
-	Issue(userID int64) (string, error)
+	IssueAccess(userID int64) (token string, expiresAt time.Time, err error)
 }

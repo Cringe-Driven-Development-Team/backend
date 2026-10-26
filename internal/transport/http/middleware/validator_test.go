@@ -17,8 +17,8 @@ func TestRequireUserRejectsUnsupportedSecurityScheme(t *testing.T) {
 		scheme           *openapi3.SecurityScheme
 		allowed          bool
 	}{
-		{"legacy bearer", "bearerAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, false},
-		{"cookie contract", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "cookie", Name: "access_token"}, true},
+		{"bearer contract", "bearerAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, true},
+		{"cookie contract", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "cookie", Name: "access_token"}, false},
 		{"unknown scheme", "unreviewedAuth", &openapi3.SecurityScheme{Type: "http", Scheme: "bearer"}, false},
 		{"wrong cookie", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "cookie", Name: "refresh_token"}, false},
 		{"wrong transport", "cookieAuth", &openapi3.SecurityScheme{Type: "apiKey", In: "header", Name: "access_token"}, false},
@@ -39,9 +39,9 @@ func TestContractOperationSecurityPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true, "LogoutUser": true}
-	// Logout uses refresh/CSRF and does not require a live access token.
-	protected := map[string]bool{"GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
+	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true}
+	// BFF logout requires Bearer in addition to the refresh body.
+	protected := map[string]bool{"LogoutUser": true, "GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
 	seen := 0
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {
@@ -67,5 +67,42 @@ func TestContractOperationSecurityPolicy(t *testing.T) {
 	}
 	if seen != len(public)+len(protected) {
 		t.Fatalf("classified %d operations", seen)
+	}
+}
+
+func TestContractRequiresBFFKeyAndHasNoBrowserAuth(t *testing.T) {
+	spec, err := api.GetSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Components.SecuritySchemes) != 1 || spec.Components.SecuritySchemes["bearerAuth"] == nil {
+		t.Fatal("expected only bearerAuth")
+	}
+	for path, item := range spec.Paths.Map() {
+		for method, op := range item.Operations() {
+			requiredKey := false
+			params := append(append(openapi3.Parameters{}, item.Parameters...), op.Parameters...)
+			for _, ref := range params {
+				p := ref.Value
+				if p.In == "cookie" || p.Name == "X-CSRF-Token" {
+					t.Errorf("browser parameter on %s %s", method, path)
+				}
+				if p.In == "header" && p.Name == "X-BFF-Key" && p.Required {
+					requiredKey = true
+				}
+			}
+			if !requiredKey {
+				t.Errorf("%s %s: X-BFF-Key must be required", method, path)
+			}
+			if op.Security != nil {
+				for _, req := range *op.Security {
+					for name := range req {
+						if name != "bearerAuth" {
+							t.Errorf("unexpected security %s", name)
+						}
+					}
+				}
+			}
+		}
 	}
 }

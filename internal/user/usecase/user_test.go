@@ -15,7 +15,7 @@ const refreshTTL = time.Hour
 
 func expectSession(ctx context.Context, f userFixture, authorized *gomock.Call) {
 	gomock.InOrder(
-		f.tokens.EXPECT().Issue(int64(7)).Return("access-SECRET", nil).After(authorized),
+		f.tokens.EXPECT().IssueAccess(int64(7)).Return("access-SECRET", f.now.Add(time.Minute), nil).After(authorized),
 		f.refresh.EXPECT().New().Return("refresh-SECRET", "hash-SECRET"),
 		f.sessions.EXPECT().CreateSession(ctx, int64(7), "hash-SECRET", f.now.Add(refreshTTL)).Return(nil),
 	)
@@ -48,7 +48,7 @@ func TestUserUsecaseRegister(t *testing.T) {
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
-			if tc.want == nil && (u != want || sess != (Session{UserID: 7, AccessToken: "access-SECRET", RefreshToken: "refresh-SECRET", ExpiresAt: f.now.Add(refreshTTL)})) {
+			if tc.want == nil && (u != want || sess != (Session{UserID: 7, AccessExpiresAt: f.now.Add(time.Minute), AccessToken: "access-SECRET", RefreshToken: "refresh-SECRET", ExpiresAt: f.now.Add(refreshTTL)})) {
 				t.Fatalf("user=%+v session=%+v", u, sess)
 			}
 		})
@@ -107,41 +107,6 @@ func errorName(err error) string {
 		return "success"
 	}
 	return err.Error()
-}
-
-func TestRefreshUserIDDoesNotConsumeSession(t *testing.T) {
-	f := newUserFixture(t)
-	ctx := context.Background()
-	f.refresh.EXPECT().Hash("token").Return("hash").Times(2)
-	f.sessions.EXPECT().SessionByTokenHash(ctx, "hash").Return(int64(7), f.now.Add(refreshTTL), nil).Times(2)
-	for range 2 {
-		id, err := f.uc.RefreshUserID(ctx, "token")
-		if id != 7 || err != nil {
-			t.Fatalf("id=%d err=%v", id, err)
-		}
-	}
-}
-
-func TestRefreshUserIDInvalidSessions(t *testing.T) {
-	failure := errors.New("db failed")
-	for _, tc := range []struct {
-		name           string
-		expiry         time.Duration
-		storeErr, want error
-	}{
-		{"missing", refreshTTL, ErrSessionNotFound, ErrInvalidRefresh}, {"expired", 0, nil, ErrInvalidRefresh}, {"db failure", refreshTTL, failure, failure},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newUserFixture(t)
-			ctx := context.Background()
-			f.refresh.EXPECT().Hash("token").Return("hash")
-			f.sessions.EXPECT().SessionByTokenHash(ctx, "hash").Return(int64(7), f.now.Add(tc.expiry), tc.storeErr)
-			_, err := f.uc.RefreshUserID(ctx, "token")
-			if !errors.Is(err, tc.want) {
-				t.Fatal(err)
-			}
-		})
-	}
 }
 
 func TestRefreshAndLogoutPorts(t *testing.T) {

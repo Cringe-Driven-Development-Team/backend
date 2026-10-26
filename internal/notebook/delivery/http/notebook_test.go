@@ -13,7 +13,6 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/cookies"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/security"
@@ -37,7 +36,7 @@ func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := testServer{userdelivery.NewHandler(nil, cookies.Config{}, nil), NewHandler(uc)}
+	srv := testServer{userdelivery.NewHandler(nil), NewHandler(uc)}
 	strict := api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  httperr.RequestError,
 		ResponseErrorHandlerFunc: httperr.ResponseError,
@@ -47,7 +46,7 @@ func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 		BaseRouter: mux.NewRouter(),
 		Middlewares: []api.MiddlewareFunc{
 			middleware.Validator(spec, "/api/v1"),
-			security.Authenticate(testTokens(t)),
+			security.AuthenticateBearer(testTokens(t)),
 		},
 		ErrorHandlerFunc: httperr.RequestError,
 	})
@@ -58,12 +57,13 @@ type notebookRequestKey struct{}
 func do(t *testing.T, uc usecase.Usecase, method, path, body string, withToken bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, "/api/v1"+path, strings.NewReader(body))
+	req.Header.Set("X-BFF-Key", "test-key")
 	req = req.WithContext(context.WithValue(req.Context(), notebookRequestKey{}, t.Name()))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if withToken {
-		req.AddCookie(&http.Cookie{Name: "access_token", Value: "access-1"})
+		req.Header.Set("Authorization", "Bearer access-1")
 	}
 	rec := httptest.NewRecorder()
 	newRouter(t, uc).ServeHTTP(rec, req)

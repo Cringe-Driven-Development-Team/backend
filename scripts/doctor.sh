@@ -48,13 +48,12 @@ if command -v docker >/dev/null 2>&1; then
             ok 'Compose configuration'
             config_env=$(docker compose config --environment 2>/dev/null) || config_env=''
             jwt=$(printf '%s\n' "$config_env" | awk '/^JWT_SECRET=/{sub(/^[^=]*=/,""); print}')
-            csrf=$(printf '%s\n' "$config_env" | awk '/^CSRF_SECRET=/{sub(/^[^=]*=/,""); print}')
-            for secret in JWT_SECRET CSRF_SECRET; do
-                if [ "$secret" = JWT_SECRET ]; then value=$jwt; else value=$csrf; fi
-                if [ -n "$value" ]; then ok "$secret задан"; else fail "$secret пуст — скопируйте .env.example в .env и задайте отдельный случайный секрет (docs/local-development.md)"; fi
+            bff_key=$(printf '%s\n' "$config_env" | awk '/^BFF_API_KEY=/{sub(/^[^=]*=/,""); print}')
+            for secret in JWT_SECRET BFF_API_KEY; do
+                if [ "$secret" = JWT_SECRET ]; then value=$jwt; else value=$bff_key; fi
+                if [[ "$value" =~ [^[:space:]] ]]; then ok "$secret задан"; else fail "$secret пуст — скопируйте .env.example в .env и задайте отдельный случайный секрет (docs/local-development.md)"; fi
             done
-            if [ -n "$jwt" ] && [ "$jwt" = "$csrf" ]; then fail 'JWT_SECRET и CSRF_SECRET должны отличаться'; fi
-            unset config_env jwt csrf value
+            unset config_env jwt bff_key value
         else fail 'Compose configuration — проверьте .env и выполните docker compose config --quiet'; fi
     else fail 'установите Docker Compose v2 с поддержкой up --wait'; fi
 fi

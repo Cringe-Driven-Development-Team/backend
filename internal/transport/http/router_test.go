@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -18,21 +19,19 @@ import (
 
 func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 	base := newRouterFixture(t)
-	csrf, access := base.csrf, base.access
+	access := base.access
 	for _, tt := range []struct {
-		name, method, path, token, access, origin string
-		status                                    int
+		name, method, path, key, access, origin string
+		status                                  int
 	}{
 		{name: "health", method: "GET", path: "/health", status: 200},
 		{name: "success", method: "GET", path: BaseURL + "/users/me", access: access, status: 200},
 		{name: "unauthorized", method: "GET", path: BaseURL + "/users/me", status: 401},
-		{name: "csrf copies", method: "POST", path: BaseURL + "/auth/login", status: 403},
-		{name: "csrf signature", method: "POST", path: BaseURL + "/notebooks", token: csrf.Signed(2), access: access, status: 403},
-		{name: "csrf origin", method: "POST", path: BaseURL + "/auth/login", token: csrf.Anonymous(), origin: "https://evil.example", status: 403},
-		{name: "preflight", method: "OPTIONS", path: BaseURL + "/users/me", origin: "https://cellestial.ru", status: 204},
+		{name: "s2s", method: "POST", path: BaseURL + "/auth/login", key: "wrong", status: 403},
+		{name: "preflight", method: "OPTIONS", path: BaseURL + "/users/me", origin: "https://cellestial.ru", status: 405},
 		{name: "not found", method: "GET", path: "/missing", status: 404},
 		{name: "method not allowed", method: "POST", path: "/health", status: 405},
-		{name: "invalid parameter", method: "GET", path: BaseURL + "/notebooks/invalid", status: 400},
+		{name: "invalid parameter", method: "GET", path: BaseURL + "/notebooks/invalid", access: access, status: 400},
 		// Явная паника зависимости должна превратиться в 500 с request ID.
 		{name: "recovered panic", method: "GET", path: BaseURL + "/notebooks", access: access, status: 500},
 	} {
@@ -43,9 +42,9 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 					f.users.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil)
 				}
 				if tt.name == "recovered panic" {
-					f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(_ context.Context, _ int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
+					f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(context.Context, int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
 				}
-				req := csrfRequest(tt.method, tt.path, tt.token, tt.access, "")
+				req := routerRequest(tt.method, tt.path, tt.key, tt.access)
 				if requestID != "" {
 					req.Header.Set("X-Request-ID", requestID)
 				}
@@ -55,7 +54,7 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 				if tt.method == http.MethodOptions {
 					req.Header.Set("Access-Control-Request-Method", "POST")
 				}
-				rec := serveCSRF(f.handler, req)
+				rec := serveRouter(f.handler, req)
 				if rec.Code != tt.status {
 					t.Fatalf("status = %d, want %d: %s", rec.Code, tt.status, rec.Body)
 				}
@@ -67,9 +66,7 @@ func TestRouterRequestIDOnEveryResponse(t *testing.T) {
 				} else if _, err := uuid.Parse(got); err != nil {
 					t.Fatalf("missing or invalid generated request ID: %q", got)
 				}
-				if tt.name == "preflight" && rec.Body.Len() != 0 {
-					t.Fatal("preflight must have no body")
-				}
+
 			})
 		}
 	}
@@ -88,8 +85,8 @@ func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
 	}{
 		{"success", http.MethodGet, BaseURL + "/users/me", access, "", BaseURL + "/users/me", 200},
 		{"unauthorized", http.MethodGet, BaseURL + "/users/me", "", "", BaseURL + "/users/me", 401},
-		{"csrf", http.MethodPost, BaseURL + "/auth/login", "", "", "unmatched", 403},
-		{"preflight", http.MethodOptions, BaseURL + "/users/me", "", "https://cellestial.ru", "unmatched", 204},
+		{"s2s", http.MethodPost, BaseURL + "/auth/login", "", "", "unmatched", 403},
+		{"preflight", http.MethodOptions, BaseURL + "/users/me", "", "https://cellestial.ru", "unmatched", 405},
 		{"not_found", http.MethodGet, "/missing/SECRET?token=SECRET", "", "", "unmatched", 404},
 		{"method_not_allowed", http.MethodPost, "/health", "", "", "unmatched", 405},
 		{"parameterized", http.MethodGet, BaseURL + "/notebooks/invalid", access, "", BaseURL + "/notebooks/{id}", 400},
@@ -102,14 +99,18 @@ func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
 				f.users.EXPECT().CurrentUser(gomock.Any(), int64(1)).Return(domain.User{ID: 1, Login: "bob"}, nil)
 			}
 			if tc.name == "panic" {
-				f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(_ context.Context, _ int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
+				f.notebooks.EXPECT().List(gomock.Any(), int64(1)).DoAndReturn(func(context.Context, int64) ([]notebookdomain.NotebookSummary, error) { panic("SECRET-panic") })
 			}
-			req := csrfRequest(tc.method, tc.path, "", tc.access, "")
+			key := ""
+			if tc.name == "s2s" {
+				key = "wrong"
+			}
+			req := routerRequest(tc.method, tc.path, key, tc.access)
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
 				req.Header.Set("Access-Control-Request-Method", http.MethodPost)
 			}
-			rec := serveCSRF(f.handler, req)
+			rec := serveRouter(f.handler, req)
 			if rec.Code != tc.status {
 				t.Fatalf("status=%d, want %d", rec.Code, tc.status)
 			}
@@ -131,4 +132,22 @@ func TestRouterLogsTemplateAndEarlyFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func routerRequest(method, path, key, access string) *http.Request {
+	req := httptest.NewRequest(method, path, strings.NewReader(`{"login":"bob","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	if key == "" {
+		key = "test-key"
+	}
+	req.Header.Set("X-BFF-Key", key)
+	if access != "" {
+		req.Header.Set("Authorization", "Bearer "+access)
+	}
+	return req
+}
+func serveRouter(handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
 }

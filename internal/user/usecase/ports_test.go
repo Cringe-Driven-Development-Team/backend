@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
@@ -23,7 +24,7 @@ func TestTokenIssueFailureDoesNotCreateSession(t *testing.T) {
 	failure := errors.New("sign failed")
 	f.users.EXPECT().UserByLogin(ctx, "alice").Return(domain.User{ID: 7}, "hash", nil)
 	f.passwords.EXPECT().Compare("hash", "password123").Return(true, nil)
-	f.tokens.EXPECT().Issue(int64(7)).Return("", failure)
+	f.tokens.EXPECT().IssueAccess(int64(7)).Return("", time.Time{}, failure)
 	_, _, err := f.uc.Login(ctx, "alice", "password123")
 	if !errors.Is(err, failure) {
 		t.Fatal(err)
@@ -54,7 +55,7 @@ func TestSessionCreateFailure(t *testing.T) {
 	f := newUserFixture(t)
 	ctx := context.Background()
 	failure := errors.New("insert failed")
-	f.tokens.EXPECT().Issue(int64(7)).Return("access", nil)
+	f.tokens.EXPECT().IssueAccess(int64(7)).Return("access", f.now.Add(time.Minute), nil)
 	f.refresh.EXPECT().New().Return("refresh", "hash")
 	f.sessions.EXPECT().CreateSession(ctx, int64(7), "hash", f.now.Add(refreshTTL)).Return(failure)
 	sess, err := f.uc.startSession(ctx, 7)
