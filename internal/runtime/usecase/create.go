@@ -1,0 +1,264 @@
+package usecase
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
+)
+
+// createStep выполняет один шаг создания по env.State и сохраняет результат.
+func (r *jobRun) createStep(env domain.Environment) (bool, error) {
+	if env.State != domain.StateQueued && r.startupExpired(env) {
+		return false, errStartupTimeout
+	}
+	switch env.State {
+	case domain.StateQueued:
+		_, err := r.save(env, domain.StateCreating)
+		return false, err
+	case domain.StateCreating:
+		return false, r.provision(env)
+	case domain.StateConfiguring:
+		if err := r.configure(env); err != nil {
+			return false, err
+		}
+		_, err := r.save(env, domain.StateVerifying)
+		return false, err
+	case domain.StateVerifying:
+		if err := r.verify(env); err != nil {
+			return false, err
+		}
+		env.Endpoint = agentURL(env.Resources.PrivateIP)
+		env.LastError = ""
+		if _, err := r.save(env, domain.StateReady); err != nil {
+			return false, err
+		}
+		return r.finish()
+	case domain.StateReady:
+		return r.finish()
+	default:
+		return false, fmt.Errorf("unexpected state %s for create", env.State)
+	}
+}
+
+func (r *jobRun) startupExpired(env domain.Environment) bool {
+	return !r.w.clock.Now().Before(env.CreatedAt.Add(r.w.s.StartupTimeout))
+}
+
+// provision создаёт порт, том и сервер; каждый полученный ID сохраняется сразу, даже вместе
+// с ошибкой облака, чтобы повтор и удаление нашли ресурс.
+func (r *jobRun) provision(env domain.Environment) error {
+	ctx := r.createCtx
+	var err error
+	if env.Resources.PortID == "" || env.Resources.PrivateIP == "" {
+		id, ip, cerr := r.w.cloud.EnsurePort(ctx, env)
+		if id != "" {
+			env.Resources.PortID, env.Resources.PrivateIP = id, ip
+			if env, err = r.save(env, env.State); err != nil {
+				return err
+			}
+		}
+		if cerr != nil {
+			return fmt.Errorf("ensure port: %w", cerr)
+		}
+	}
+	if env.Resources.VolumeID == "" {
+		id, cerr := r.w.cloud.EnsureVolume(ctx, env)
+		if id != "" {
+			env.Resources.VolumeID = id
+			if env, err = r.save(env, env.State); err != nil {
+				return err
+			}
+		}
+		if cerr != nil {
+			return fmt.Errorf("ensure volume: %w", cerr)
+		}
+	}
+	if env.Resources.ServerID == "" {
+		// Host key генерируется и сохраняется до создания сервера: повтор берёт тот же ключ.
+		s, serr := r.ensureSecrets()
+		if serr != nil {
+			return serr
+		}
+		priv, oerr := r.w.sec.Open(s.HostPrivateKey)
+		if oerr != nil {
+			return fmt.Errorf("open host key: %w", oerr)
+		}
+		id, cerr := r.w.cloud.EnsureServer(ctx, env, cloudInit(priv, s.HostPublicKey))
+		if id != "" {
+			env.Resources.ServerID = id
+			if env, err = r.save(env, env.State); err != nil {
+				return err
+			}
+		}
+		if cerr != nil {
+			return fmt.Errorf("ensure server: %w", cerr)
+		}
+	}
+	_, err = r.save(env, domain.StateConfiguring)
+	return err
+}
+
+// ensureSecrets загружает секреты окружения, создавая недостающие host key и токен.
+func (r *jobRun) ensureSecrets() (SealedSecrets, error) {
+	s, err := r.w.repo.LoadSecrets(r.leaseCtx, r.job.SessionID)
+	if err != nil {
+		return SealedSecrets{}, fmt.Errorf("load secrets: %w", err)
+	}
+	changed := false
+	if len(s.HostPrivateKey) == 0 || s.HostPublicKey == "" {
+		priv, pub, err := r.w.sec.NewHostKey()
+		if err != nil {
+			return SealedSecrets{}, fmt.Errorf("new host key: %w", err)
+		}
+		if s.HostPrivateKey, err = r.w.sec.Seal(priv); err != nil {
+			return SealedSecrets{}, fmt.Errorf("seal host key: %w", err)
+		}
+		s.HostPublicKey, changed = pub, true
+	}
+	if len(s.Token) == 0 {
+		tok, err := r.w.sec.NewToken()
+		if err != nil {
+			return SealedSecrets{}, fmt.Errorf("new token: %w", err)
+		}
+		if s.Token, err = r.w.sec.Seal([]byte(tok)); err != nil {
+			return SealedSecrets{}, fmt.Errorf("seal token: %w", err)
+		}
+		changed = true
+	}
+	if changed {
+		if err := r.w.repo.SaveSecrets(r.leaseCtx, r.job.SessionID, s, r.w.s.Owner); err != nil {
+			return SealedSecrets{}, fmt.Errorf("save secrets: %w", err)
+		}
+	}
+	return s, nil
+}
+
+// cloudInit — user_data с заранее сгенерированным host key ed25519.
+func cloudInit(privatePEM []byte, publicKey string) string {
+	var b strings.Builder
+	b.WriteString("#cloud-config\nssh_deletekeys: true\nssh_keys:\n  ed25519_private: |\n")
+	for _, line := range strings.Split(strings.TrimRight(string(privatePEM), "\n"), "\n") {
+		b.WriteString("    " + line + "\n")
+	}
+	b.WriteString("  ed25519_public: " + strconv.Quote(publicKey) + "\n")
+	return b.String()
+}
+
+func agentURL(ip string) string { return "https://" + ip + ":" + agentPort }
+
+func (r *jobRun) agentEndpoint(env domain.Environment, s SealedSecrets) (AgentEndpoint, error) {
+	tok, err := r.w.sec.Open(s.Token)
+	if err != nil {
+		return AgentEndpoint{}, fmt.Errorf("open token: %w", err)
+	}
+	return AgentEndpoint{BaseURL: agentURL(env.Resources.PrivateIP), Token: string(tok)}, nil
+}
+
+// configure запускает настройку VPS с лимитом AnsibleTimeout.
+func (r *jobRun) configure(env domain.Environment) error {
+	s, err := r.ensureSecrets()
+	if err != nil {
+		return err
+	}
+	ep, err := r.agentEndpoint(env, s)
+	if err != nil {
+		return err
+	}
+	certPEM, keyPEM, err := r.w.sec.IssueServerCert(env.Resources.PrivateIP)
+	if err != nil {
+		return fmt.Errorf("issue server cert: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(r.createCtx, r.w.s.AnsibleTimeout)
+	defer cancel()
+	err = r.w.host.Configure(ctx, HostConfig{
+		SessionID: env.SessionID, Language: env.Language, PrivateIP: env.Resources.PrivateIP,
+		HostPublicKey: s.HostPublicKey, Token: ep.Token, ServerCertPEM: certPEM, ServerKeyPEM: keyPEM,
+		PythonImage: r.w.s.PythonImage, RImage: r.w.s.RImage, KernelDNS: r.w.s.KernelDNS,
+		BlockedPublicIPs: r.w.s.BlockedPublicIPs,
+	})
+	if err != nil {
+		return fmt.Errorf("configure host: %w", err)
+	}
+	return nil
+}
+
+// verify опрашивает /health, пока агент не ответит готовностью своей сессии и языка
+// или не истечёт StartupTimeout.
+func (r *jobRun) verify(env domain.Environment) error {
+	s, err := r.w.repo.LoadSecrets(r.leaseCtx, r.job.SessionID)
+	if err != nil {
+		return fmt.Errorf("load secrets: %w", err)
+	}
+	ep, err := r.agentEndpoint(env, s)
+	if err != nil {
+		return err
+	}
+	for {
+		h, status, herr := r.w.agent.Health(r.createCtx, ep)
+		reason := healthProblem(env, h, status, herr)
+		if reason == "" {
+			return nil
+		}
+		if r.createCtx.Err() != nil {
+			return context.Cause(r.createCtx)
+		}
+		if r.startupExpired(env) {
+			return fmt.Errorf("%w: agent is not ready: %s", errStartupTimeout, reason)
+		}
+		if err := sleepCtx(r.createCtx, r.w.verifyInterval); err != nil {
+			return err
+		}
+	}
+}
+
+func healthProblem(env domain.Environment, h AgentHealth, status int, err error) string {
+	switch {
+	case err != nil:
+		return "health: " + err.Error()
+	case status != httpStatusOK:
+		return "health: HTTP " + strconv.Itoa(status)
+	case h.SessionID != env.SessionID.String():
+		return "health: foreign session " + h.SessionID
+	case h.Language != env.Language:
+		return "health: language " + h.Language + ", want " + env.Language
+	case !h.Ready:
+		return "health: agent state " + h.State
+	}
+	return ""
+}
+
+// createFailed обрабатывает ошибку шага создания: постоянная ошибка или истёкший StartupTimeout →
+// last_error и CLEANUP_PENDING (цикл продолжает удалением), иначе — повтор задания с backoff.
+func (r *jobRun) createFailed(cause error) (bool, error) {
+	env, err := r.w.repo.Get(r.leaseCtx, r.job.SessionID)
+	if err != nil {
+		return true, fmt.Errorf("get environment: %w", err)
+	}
+	if errors.Is(cause, ErrCloudPermanent) || errors.Is(cause, errStartupTimeout) ||
+		(env.State != domain.StateQueued && r.startupExpired(env)) {
+		env.LastError = cause.Error()
+		r.w.log.Warn("provisioning failed", "session_id", env.SessionID, "state", env.State, "error", cause)
+		_, err := r.save(env, domain.StateCleanupPending)
+		if err != nil && !errors.Is(err, ErrStale) {
+			return true, err
+		}
+		return false, nil
+	}
+	return true, r.retry(cause)
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-t.C:
+		return nil
+	}
+}
