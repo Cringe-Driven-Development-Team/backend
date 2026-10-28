@@ -9,6 +9,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
+	"io"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -75,7 +78,7 @@ type seen struct {
 	body   string
 }
 
-func startServer(t *testing.T, ca pki, h http.HandlerFunc) (*httptest.Server, *seen) {
+func startServer(t *testing.T, ca, clientCA pki, withIP bool, h http.HandlerFunc) (*httptest.Server, *seen) {
 	t.Helper()
 	s := &seen{}
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,23 +96,27 @@ func startServer(t *testing.T, ca pki, h http.HandlerFunc) (*httptest.Server, *s
 		s.mu.Unlock()
 		h(w, r)
 	}))
-	cert, key := ca.issue(t, x509.ExtKeyUsageServerAuth, true)
+	cert, key := ca.issue(t, x509.ExtKeyUsageServerAuth, withIP)
 	kp, err := tls.X509KeyPair(cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(ca.caPEM)
+	pool.AppendCertsFromPEM(clientCA.caPEM)
+	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
 	srv.TLS = &tls.Config{Certificates: []tls.Certificate{kp}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: pool}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return srv, s
 }
 
-func newClient(t *testing.T, ca pki) *Client {
+func newClient(t *testing.T, ca pki) *Client { return newClientTrusting(t, ca, ca) }
+
+// newClientTrusting: клиентский сертификат выдан certCA, корнем для проверки сервера служит trustCA.
+func newClientTrusting(t *testing.T, trustCA, certCA pki) *Client {
 	t.Helper()
-	cc, ck := ca.issue(t, x509.ExtKeyUsageClientAuth, false)
-	c, err := New(ca.caPEM, cc, ck)
+	cc, ck := certCA.issue(t, x509.ExtKeyUsageClientAuth, false)
+	c, err := New(trustCA.caPEM, cc, ck)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +127,7 @@ const tok = "secret-token-xyz"
 
 func TestHealthSendsBearerAndClientCert(t *testing.T) {
 	ca := newCA(t, "ca")
-	srv, s := startServer(t, ca, func(w http.ResponseWriter, r *http.Request) {
+	srv, s := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"session_id":"s1","language":"python","state":"READY","ready":true}`))
 	})
 	h, status, err := newClient(t, ca).Health(context.Background(), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok})
@@ -137,7 +144,7 @@ func TestHealthSendsBearerAndClientCert(t *testing.T) {
 
 func TestHealthRejectsForeignSession(t *testing.T) {
 	ca := newCA(t, "ca")
-	srv, _ := startServer(t, ca, func(w http.ResponseWriter, r *http.Request) {
+	srv, _ := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"session_id":"other","language":"r","state":"DRAINING","ready":false}`))
 	})
@@ -151,21 +158,33 @@ func TestHealthRejectsForeignSession(t *testing.T) {
 }
 
 func TestServerCertMustMatchCA(t *testing.T) {
-	serverCA, clientCA := newCA(t, "server-ca"), newCA(t, "client-ca")
-	srv, _ := startServer(t, serverCA, func(w http.ResponseWriter, r *http.Request) {})
-	c := newClient(t, clientCA)
+	serverCA, otherCA := newCA(t, "server-ca"), newCA(t, "other-ca")
+	// сервер принимает клиентский сертификат serverCA, но клиент доверяет только otherCA
+	srv, _ := startServer(t, serverCA, serverCA, true, func(w http.ResponseWriter, r *http.Request) {})
+	c := newClientTrusting(t, otherCA, serverCA)
 	_, _, err := c.Health(context.Background(), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok})
-	if err == nil {
-		t.Fatal("expected TLS error")
+	var ua x509.UnknownAuthorityError
+	if !errors.As(err, &ua) {
+		t.Fatalf("want UnknownAuthorityError, got %v", err)
 	}
 	if strings.Contains(err.Error(), tok) {
 		t.Fatal("error leaks token")
 	}
 }
 
+func TestServerCertWrongIPRejected(t *testing.T) {
+	ca := newCA(t, "ca")
+	srv, _ := startServer(t, ca, ca, false, func(w http.ResponseWriter, r *http.Request) {})
+	_, _, err := newClient(t, ca).Health(context.Background(), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok})
+	var he x509.HostnameError
+	if !errors.As(err, &he) {
+		t.Fatalf("want HostnameError, got %v", err)
+	}
+}
+
 func TestDrainStopPost(t *testing.T) {
 	ca := newCA(t, "ca")
-	srv, s := startServer(t, ca, func(w http.ResponseWriter, r *http.Request) {
+	srv, s := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{}`))
 	})
 	c, ep := newClient(t, ca), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok}
@@ -179,7 +198,7 @@ func TestDrainStopPost(t *testing.T) {
 
 func TestStopPendingIsError(t *testing.T) {
 	ca := newCA(t, "ca")
-	srv, _ := startServer(t, ca, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
+	srv, _ := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
 	err := newClient(t, ca).Stop(context.Background(), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok})
 	if err == nil || strings.Contains(err.Error(), tok) {
 		t.Fatalf("err=%v", err)
@@ -188,7 +207,7 @@ func TestStopPendingIsError(t *testing.T) {
 
 func TestExecuteExecutionEvents(t *testing.T) {
 	ca := newCA(t, "ca")
-	srv, s := startServer(t, ca, func(w http.ResponseWriter, r *http.Request) {
+	srv, s := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "POST":
 			w.WriteHeader(http.StatusAccepted)

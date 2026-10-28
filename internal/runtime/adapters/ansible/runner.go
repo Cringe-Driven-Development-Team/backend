@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -32,9 +33,37 @@ type Runner struct {
 var _ usecase.HostConfigurator = (*Runner)(nil)
 
 // New создаёт Runner.
-func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifacts) *Runner {
-	return &Runner{workDir: workDir, playbook: playbook, sshKeyFile: sshKeyFile, sshUser: sshUser, binary: binary, art: artifacts}
+//
+// Создаёт workDir (0700) и удаляет в нём оставшиеся от убитого воркера каталоги операций
+// (только вида "<uuid>-<цифры>"; сам workDir и посторонние файлы не трогаются).
+func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifacts) (*Runner, error) {
+	absWork, err := filepath.Abs(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("ansible work dir: %w", err)
+	}
+	absPlaybook, err := filepath.Abs(playbook)
+	if err != nil {
+		return nil, fmt.Errorf("ansible playbook path: %w", err)
+	}
+	if err := os.MkdirAll(absWork, 0o700); err != nil {
+		return nil, fmt.Errorf("create work dir: %w", err)
+	}
+	entries, err := os.ReadDir(absWork)
+	if err != nil {
+		return nil, fmt.Errorf("read work dir: %w", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !opDirName.MatchString(e.Name()) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(absWork, e.Name())); err != nil {
+			return nil, fmt.Errorf("remove stale operation dir: %w", err)
+		}
+	}
+	return &Runner{workDir: absWork, playbook: absPlaybook, sshKeyFile: sshKeyFile, sshUser: sshUser, binary: binary, art: artifacts}, nil
 }
+
+var opDirName = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9]+$`)
 
 func (r *Runner) vars(c usecase.HostConfig) (map[string]any, error) {
 	sha, err := os.ReadFile(r.art.AgentWheelSHA256File)
@@ -122,6 +151,7 @@ func (r *Runner) Configure(ctx context.Context, c usecase.HostConfig) error {
 		"ANSIBLE_SSH_ARGS=-o UserKnownHostsFile=" + knownHosts + " -o StrictHostKeyChecking=yes",
 		"ANSIBLE_HOST_KEY_CHECKING=True",
 	}
+	cmd.Dir = filepath.Dir(r.playbook) // ansible.cfg читается из cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 5 * time.Second

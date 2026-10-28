@@ -1,6 +1,7 @@
 #!/bin/sh
 # Fake ansible-playbook for tests. Records facts into $HOME.
 echo "$@" > "$HOME/args.txt"
+pwd -P > "$HOME/cwd.txt"
 while [ $# -gt 0 ]; do
   if [ "$1" = "-i" ]; then inv="$2"; fi
   shift

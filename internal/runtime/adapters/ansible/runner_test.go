@@ -38,8 +38,8 @@ func (l *lockedBuf) String() string {
 }
 
 type env struct {
-	home, work string
-	runner     *Runner
+	home, work, pbDir string
+	runner            *Runner
 }
 
 func setup(t *testing.T) env {
@@ -55,14 +55,16 @@ func setup(t *testing.T) env {
 	}
 	bin, err := filepath.Abs("testdata/fake-ansible-playbook")
 	noErr(t, err)
-	r := New(work, "playbook.yml", "/keys/id", "ubuntu", bin, Artifacts{
+	pbDir := t.TempDir()
+	r, err := New(work, filepath.Join(pbDir, "playbook.yml"), "/keys/id", "ubuntu", bin, Artifacts{
 		AgentWheel:           "/a/agent.whl",
 		AgentWheelSHA256File: write("sha", "abc123\n"),
 		AgentRequirements:    "/a/req.txt",
 		AgentService:         "/a/agent.service",
 		CACertFile:           write("ca.pem", "CA-PEM"),
 	})
-	return env{home: home, work: work, runner: r}
+	noErr(t, err)
+	return env{home: home, work: work, pbDir: pbDir, runner: r}
 }
 
 func cfg() usecase.HostConfig {
@@ -154,4 +156,41 @@ func TestRunnerVarsContent(t *testing.T) {
 	if _, ok := vars["host_public_key"]; ok {
 		t.Fatal("host key in vars")
 	}
+}
+
+func TestRunnerRunsInPlaybookDir(t *testing.T) {
+	e := setup(t)
+	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	want, err := filepath.EvalSymlinks(e.pbDir)
+	noErr(t, err)
+	eq(t, want, readHome(t, e, "cwd.txt"))
+}
+
+func TestNewRemovesStaleOperationDirs(t *testing.T) {
+	work := filepath.Join(t.TempDir(), "work")
+	noErr(t, os.MkdirAll(work, 0o700))
+	stale := filepath.Join(work, uuid.NewString()+"-123456")
+	foreignDir := filepath.Join(work, "keep-me")
+	foreignFile := filepath.Join(work, uuid.NewString()+"-999.txt")
+	noErr(t, os.MkdirAll(stale, 0o700))
+	noErr(t, os.WriteFile(filepath.Join(stale, "vars.json"), []byte("{}"), 0o600))
+	noErr(t, os.MkdirAll(foreignDir, 0o700))
+	noErr(t, os.WriteFile(foreignFile, nil, 0o600))
+	_, err := New(work, "pb.yml", "k", "u", "bin", Artifacts{})
+	noErr(t, err)
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale dir still exists: %v", err)
+	}
+	for _, p := range []string{work, foreignDir, foreignFile} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("%s removed: %v", p, err)
+		}
+	}
+}
+
+func TestNewFailsWhenWorkDirUncreatable(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "f")
+	noErr(t, os.WriteFile(file, nil, 0o600))
+	_, err := New(filepath.Join(file, "sub"), "pb.yml", "k", "u", "bin", Artifacts{})
+	isErr(t, err)
 }
