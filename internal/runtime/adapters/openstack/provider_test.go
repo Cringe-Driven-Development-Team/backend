@@ -394,8 +394,11 @@ func TestListOwnedFiltersEnv(t *testing.T) {
 		}})
 	})
 	srv.Mux.HandleFunc("GET /ports", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("tags"); got != "cellestial_runtime=1,cellestial_env=production" {
-			t.Errorf("port tags filter = %q", got)
+		// Второй запрос — все порты сети рантайма: те же порты должны схлопнуться без дублей.
+		if r.URL.Query().Get("network_id") == "" {
+			if got := r.URL.Query().Get("tags"); got != "cellestial_runtime=1,cellestial_env=production" {
+				t.Errorf("port tags filter = %q", got)
+			}
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{
 			map[string]any{"id": "port-prod", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID.String()}},
@@ -437,5 +440,79 @@ func TestNewDoesNotLeakPassword(t *testing.T) {
 	}
 	if !errors.Is(err, usecase.ErrCloudPermanent) {
 		t.Fatalf("err = %v, want ErrCloudPermanent", err)
+	}
+}
+
+func TestListOwnedFindsUntaggedPortByDescription(t *testing.T) {
+	srv, p := setup(t)
+	other := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	srv.Mux.HandleFunc("GET /servers/detail", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{"servers": []any{}})
+	})
+	srv.Mux.HandleFunc("GET /volumes/detail", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{"volumes": []any{}})
+	})
+	srv.Mux.HandleFunc("GET /ports", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("network_id") != "net-1" {
+			writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{}})
+			return
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{
+			map[string]any{"id": "port-untagged", "description": fmt.Sprintf(
+				"cellestial_runtime=1 cellestial_env=production session_id=%s operation_id=%s", sessionID, operationID)},
+			map[string]any{"id": "port-dev", "description": fmt.Sprintf(
+				"cellestial_runtime=1 cellestial_env=dev session_id=%s operation_id=%s", other, operationID)},
+			map[string]any{"id": "port-foreign", "description": "router interface"},
+		}})
+	})
+
+	got, err := p.ListOwned(context.Background())
+	if err != nil {
+		t.Fatalf("ListOwned: %v", err)
+	}
+	if len(got) != 1 || got[0].Kind != "port" || got[0].ID != "port-untagged" || got[0].SessionID != sessionID {
+		t.Fatalf("ListOwned = %+v", got)
+	}
+}
+
+func TestEnsurePortByIDRetagsUntagged(t *testing.T) {
+	srv, p := setup(t)
+	srv.Mux.HandleFunc("GET /ports/port-1", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{"port": map[string]any{
+			"id": "port-1", "tags": []string{"keep-me"},
+			"fixed_ips": []any{map[string]any{"subnet_id": "subnet-1", "ip_address": "10.0.0.5"}},
+		}})
+	})
+	var tagged atomic.Bool
+	srv.Mux.HandleFunc("PUT /ports/port-1/tags", func(w http.ResponseWriter, r *http.Request) {
+		th.TestJSONRequest(t, r, fmt.Sprintf(
+			`{"tags":["keep-me","cellestial_runtime=1","cellestial_env=production","session_id=%s"]}`, sessionID))
+		tagged.Store(true)
+		writeJSON(t, w, http.StatusOK, map[string]any{"tags": []string{}})
+	})
+	env := testEnv()
+	env.Resources.PortID = "port-1"
+	id, ip, err := p.EnsurePort(context.Background(), env)
+	if err != nil || id != "port-1" || ip != "10.0.0.5" {
+		t.Fatalf("EnsurePort = %q, %q, %v", id, ip, err)
+	}
+	if !tagged.Load() {
+		t.Fatal("port found by ID must be retagged")
+	}
+
+	// Порт со всеми тегами повторно не помечается.
+	tagged.Store(false)
+	srv.Mux.HandleFunc("GET /ports/port-2", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{"port": map[string]any{
+			"id": "port-2", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID.String()},
+		}})
+	})
+	srv.Mux.HandleFunc("PUT /ports/port-2/tags", func(w http.ResponseWriter, r *http.Request) {
+		t.Error("fully tagged port must not be retagged")
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	env.Resources.PortID = "port-2"
+	if _, _, err := p.EnsurePort(context.Background(), env); err != nil {
+		t.Fatalf("EnsurePort tagged = %v", err)
 	}
 }

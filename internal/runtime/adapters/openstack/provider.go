@@ -74,14 +74,11 @@ func (p *Provider) portDescription(env domain.Environment) string {
 		keySession, env.SessionID, keyOperation, env.OperationID)
 }
 
-// ownedPort разбирает теги порта, а без тегов — его description.
+// ownedPort разбирает description порта и его теги (теги имеют приоритет): порт мог остаться
+// без тегов после сбоя между созданием и PUT tags.
 func (p *Provider) ownedPort(port ports.Port) (uuid.UUID, bool) {
 	md := map[string]string{}
-	parts := port.Tags
-	if len(parts) == 0 {
-		parts = strings.Fields(port.Description)
-	}
-	for _, t := range parts {
+	for _, t := range append(strings.Fields(port.Description), port.Tags...) {
 		if k, v, ok := strings.Cut(t, "="); ok {
 			md[k] = v
 		}
@@ -111,7 +108,7 @@ func (p *Provider) EnsurePort(ctx context.Context, env domain.Environment) (stri
 		port, err := ports.Get(ctx, p.network, id).Extract()
 		switch {
 		case err == nil:
-			return port.ID, p.portIP(*port), nil
+			return p.tagPort(ctx, *port, env.SessionID)
 		case !isNotFound(err):
 			return "", "", classify("get port", err)
 		}
@@ -149,9 +146,25 @@ func (p *Provider) EnsurePort(ctx context.Context, env domain.Environment) (stri
 		}
 		port = *created
 	}
-	if len(port.Tags) == 0 {
+	return p.tagPort(ctx, port, env.SessionID)
+}
+
+// tagPort дописывает порту недостающие теги рантайма (например, после сбоя между POST и PUT tags),
+// сохраняя прочие теги.
+func (p *Provider) tagPort(ctx context.Context, port ports.Port, session uuid.UUID) (string, string, error) {
+	have := map[string]bool{}
+	for _, t := range port.Tags {
+		have[t] = true
+	}
+	tags := append([]string(nil), port.Tags...)
+	for _, t := range p.portTags(session) {
+		if !have[t] {
+			tags = append(tags, t)
+		}
+	}
+	if len(tags) != len(port.Tags) {
 		_, err := attributestags.ReplaceAll(ctx, p.network, "ports", port.ID,
-			attributestags.ReplaceAllOpts{Tags: p.portTags(env.SessionID)}).Extract()
+			attributestags.ReplaceAllOpts{Tags: tags}).Extract()
 		if err != nil {
 			return port.ID, p.portIP(port), classify("tag port", err)
 		}
@@ -400,12 +413,22 @@ func (p *Provider) ListOwned(ctx context.Context) ([]usecase.CloudResource, erro
 			out = append(out, usecase.CloudResource{Kind: kindVolume, ID: v.ID, SessionID: sid})
 		}
 	}
-	prts, err := p.listPorts(ctx, ports.ListOpts{Tags: keyRuntime + "=1," + keyEnv + "=" + p.cfg.EnvName})
+	tagged, err := p.listPorts(ctx, ports.ListOpts{Tags: keyRuntime + "=1," + keyEnv + "=" + p.cfg.EnvName})
 	if err != nil {
 		return nil, err
 	}
-	for _, port := range prts {
+	// Порты без тегов (сбой между POST и PUT tags) находятся по description в сети рантайма.
+	inNetwork, err := p.listPorts(ctx, ports.ListOpts{NetworkID: p.cfg.NetworkID})
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, port := range append(tagged, inNetwork...) {
+		if seen[port.ID] {
+			continue
+		}
 		if sid, ok := p.ownedPort(port); ok {
+			seen[port.ID] = true
 			out = append(out, usecase.CloudResource{Kind: kindPort, ID: port.ID, SessionID: sid})
 		}
 	}
