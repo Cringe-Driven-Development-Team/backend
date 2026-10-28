@@ -89,6 +89,21 @@ func (mr *MockEnvironmentRepositoryMockRecorder) KnownSessions(ctx, ids any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KnownSessions", reflect.TypeOf((*MockEnvironmentRepository)(nil).KnownSessions), ctx, ids)
 }
 
+// ListByState mocks base method.
+func (m *MockEnvironmentRepository) ListByState(ctx context.Context, state domain.State) ([]domain.Environment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByState", ctx, state)
+	ret0, _ := ret[0].([]domain.Environment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListByState indicates an expected call of ListByState.
+func (mr *MockEnvironmentRepositoryMockRecorder) ListByState(ctx, state any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByState", reflect.TypeOf((*MockEnvironmentRepository)(nil).ListByState), ctx, state)
+}
+
 // LoadSecrets mocks base method.
 func (m *MockEnvironmentRepository) LoadSecrets(ctx context.Context, id uuid.UUID) (SealedSecrets, error) {
 	m.ctrl.T.Helper()

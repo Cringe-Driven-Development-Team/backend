@@ -20,12 +20,17 @@ const (
 func deleteOrder() [3]string { return [3]string{kindServer, kindVolume, kindPort} }
 
 // deleteStep выполняет удаление: DELETING → drain/stop агента → server, volume, port → DELETED.
-// Очистка после ошибки создания (CLEANUP_PENDING без запроса удаления) завершается FAILED.
+//
+// Правило итога: CLEANUP_PENDING с непустым last_error — очистка после ошибки создания
+// (last_error пишет только createFailed, READY его сбрасывает); она идёт без перехода в DELETING
+// и завершается FAILED. Любое другое удаление (запрос пользователя, повтор после ошибки удаления,
+// у которой причина в cleanup_result) идёт через DELETING и завершается DELETED. desired_state для
+// различения не годится: повтор очистки из reconcile ставит его в DELETED через MarkForDelete.
 func (r *jobRun) deleteStep(env domain.Environment) (bool, error) {
 	if env.State.Finished() {
 		return r.finish()
 	}
-	failedProvisioning := env.State == domain.StateCleanupPending && env.DesiredState != domain.StateDeleted
+	failedProvisioning := env.State == domain.StateCleanupPending && env.LastError != ""
 	if !failedProvisioning && env.State != domain.StateDeleting {
 		env.Endpoint = ""
 		_, err := r.save(env, domain.StateDeleting)

@@ -557,9 +557,10 @@ func TestDeletePermanentErrorStopsRetrying(t *testing.T) {
 	}
 }
 
-func TestCreatePermanentErrorCleansUp(t *testing.T) {
+func TestProvisioningFailureCleansUpToFailed(t *testing.T) {
 	h := newHarness(t)
 	sid := h.request()
+	// Порт и том уже созданы, сервер — постоянная ошибка: очистка в том же задании, без RequestDelete.
 	h.cloud.Fail("EnsureServer", fmt.Errorf("quota exceeded: %w", usecase.ErrCloudPermanent))
 	if ok, err := runOnce(t, h.worker("w1")); !ok || err != nil {
 		t.Fatalf("RunOnce = %v %v", ok, err)
@@ -567,6 +568,112 @@ func TestCreatePermanentErrorCleansUp(t *testing.T) {
 	env := h.env(sid)
 	if env.State != domain.StateFailed || !strings.Contains(env.LastError, "quota") || h.resources() != 0 {
 		t.Fatalf("env = %+v, resources = %d", env, h.resources())
+	}
+	if hist := fmt.Sprint(h.store.history(sid)); !strings.HasSuffix(hist, "CREATING CLEANUP_PENDING FAILED]") {
+		t.Fatalf("history = %s", hist)
+	}
+	if j, _ := h.store.job(sid); j.status != "done" || j.job.Kind != usecase.JobCreate {
+		t.Fatalf("job = %+v", j)
+	}
+}
+
+func TestReadyCreateJobAfterTimeoutCompletes(t *testing.T) {
+	h := newHarness(t)
+	sid := h.request()
+	h.store.failCompleteOnce(errors.New("db is down"))
+	w := h.worker("w1")
+	if ok, err := runOnce(t, w); !ok || err != nil {
+		t.Fatalf("RunOnce = %v %v", ok, err)
+	}
+	if j, _ := h.store.job(sid); j.status != "queued" || h.env(sid).State != domain.StateReady {
+		t.Fatalf("setup: job = %+v, state = %s", j, h.env(sid).State)
+	}
+	// Задание READY-окружения взято снова уже после StartupTimeout: только Complete, без очистки.
+	h.clock.Advance(2 * h.s.StartupTimeout)
+	if ok, err := runOnce(t, w); !ok || err != nil {
+		t.Fatalf("RunOnce = %v %v", ok, err)
+	}
+	if j, _ := h.store.job(sid); j.status != "done" {
+		t.Fatalf("job = %+v", j)
+	}
+	if env := h.env(sid); env.State != domain.StateReady || h.resources() != 3 {
+		t.Fatalf("env = %+v, resources = %d", env, h.resources())
+	}
+}
+
+func TestReconcileRetriesCleanupPending(t *testing.T) {
+	h := newHarness(t)
+	w := h.worker("w1")
+	// Ошибка создания, очистка которой упала постоянной ошибкой.
+	failed := h.request()
+	h.cloud.Fail("EnsureServer", fmt.Errorf("quota exceeded: %w", usecase.ErrCloudPermanent))
+	h.cloud.Fail("DeleteVolume", fmt.Errorf("403: %w", usecase.ErrCloudPermanent))
+	if ok, err := runOnce(t, w); !ok || err != nil {
+		t.Fatalf("RunOnce = %v %v", ok, err)
+	}
+	// Удаление пользователем, тоже упавшее постоянной ошибкой.
+	deleted := h.ready()
+	h.requestDelete(deleted)
+	h.cloud.Fail("DeleteServer", fmt.Errorf("403: %w", usecase.ErrCloudPermanent))
+	if ok, err := runOnce(t, w); !ok || err != nil {
+		t.Fatalf("RunOnce = %v %v", ok, err)
+	}
+	for _, sid := range []uuid.UUID{failed, deleted} {
+		if env := h.env(sid); env.State != domain.StateCleanupPending || env.CleanupResult == "" {
+			t.Fatalf("setup: env = %+v", env)
+		}
+	}
+	if ok, _ := runOnce(t, w); ok {
+		t.Fatal("no job expected before reconcile")
+	}
+
+	if err := usecase.Reconcile(context.Background(), w); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if ok, err := runOnce(t, w); !ok || err != nil {
+			t.Fatalf("RunOnce %d = %v %v", i, ok, err)
+		}
+	}
+	if env := h.env(failed); env.State != domain.StateFailed || env.LastError == "" {
+		t.Fatalf("provisioning failure must end FAILED: %+v", env)
+	}
+	if env := h.env(deleted); env.State != domain.StateDeleted {
+		t.Fatalf("user delete must end DELETED: %+v", env)
+	}
+	if h.resources() != 0 {
+		t.Fatalf("resources left = %d", h.resources())
+	}
+}
+
+func TestRenewFailuresForLeaseStopStep(t *testing.T) {
+	h := newHarness(t)
+	h.host.Block = make(chan struct{})
+	defer close(h.host.Block)
+	sid := h.request()
+	done := make(chan error, 1)
+	go func() { _, err := runOnce(t, h.worker("w1")); done <- err }()
+	waitFor(t, "Configure", func() bool { return h.host.Calls() == 1 })
+
+	h.store.setRenewErr(errors.New("db is down"))
+	start := h.store.renews()
+	waitFor(t, "failed renewals", func() bool { return h.store.renews() >= start+3 })
+	select {
+	case err := <-done:
+		t.Fatalf("step stopped before Lease passed without renewal: %v", err)
+	default:
+	}
+	h.clock.Advance(testLease)
+	select {
+	case err := <-done:
+		if !errors.Is(err, usecase.ErrLeaseLost) {
+			t.Fatalf("err = %v, want ErrLeaseLost", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("step was not cancelled after Lease without successful renewal")
+	}
+	if env := h.env(sid); env.State != domain.StateConfiguring {
+		t.Fatalf("state = %s", env.State)
 	}
 }
 

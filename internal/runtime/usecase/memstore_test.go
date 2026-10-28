@@ -64,6 +64,10 @@ type memStore struct {
 	jobs     []*memJob
 	seq      int64
 	saveHook func(domain.Environment) error
+	// renewErr / completeErr — ошибка БД (не ErrLeaseLost) для Renew / Complete; nil — штатно.
+	renewErr    error
+	completeErr error
+	renewCalls  int
 }
 
 var (
@@ -214,6 +218,18 @@ func (m *memStore) KnownSessions(_ context.Context, ids []uuid.UUID) (map[uuid.U
 	return out, nil
 }
 
+func (m *memStore) ListByState(_ context.Context, state domain.State) ([]domain.Environment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Environment
+	for _, e := range m.envs {
+		if e.env.State == state {
+			out = append(out, e.env)
+		}
+	}
+	return out, nil
+}
+
 func (m *memStore) Claim(_ context.Context, owner string, lease time.Duration) (usecase.Job, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -246,6 +262,10 @@ func (m *memStore) ownedJobLocked(job usecase.Job, owner string) *memJob {
 func (m *memStore) Renew(_ context.Context, job usecase.Job, owner string, lease time.Duration) (usecase.JobKind, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.renewCalls++
+	if m.renewErr != nil {
+		return "", m.renewErr
+	}
 	j := m.ownedJobLocked(job, owner)
 	if j == nil {
 		return "", usecase.ErrLeaseLost
@@ -257,6 +277,10 @@ func (m *memStore) Renew(_ context.Context, job usecase.Job, owner string, lease
 func (m *memStore) Complete(_ context.Context, job usecase.Job, owner string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.completeErr; err != nil {
+		m.completeErr = nil
+		return err
+	}
 	j := m.ownedJobLocked(job, owner)
 	if j == nil || j.job.Kind != job.Kind {
 		return usecase.ErrLeaseLost
@@ -311,4 +335,22 @@ func (m *memStore) setSaveHook(h func(domain.Environment) error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.saveHook = h
+}
+
+func (m *memStore) setRenewErr(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.renewErr = err
+}
+
+func (m *memStore) failCompleteOnce(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.completeErr = err
+}
+
+func (m *memStore) renews() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.renewCalls
 }

@@ -206,6 +206,25 @@ func TestKnownSessions(t *testing.T) {
 	}
 }
 
+func TestListByState(t *testing.T) {
+	env := testEnv()
+	env.State = domain.StateCleanupPending
+	db := newPool(t)
+	db.ExpectQuery(listByStateSQL).WithArgs("CLEANUP_PENDING").WillReturnRows(envRow(env))
+	got, err := NewRepository(db).ListByState(context.Background(), domain.StateCleanupPending)
+	if err != nil || len(got) != 1 || got[0].SessionID != env.SessionID || got[0].State != domain.StateCleanupPending {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+}
+
+func TestListByStateQueryError(t *testing.T) {
+	db := newPool(t)
+	db.ExpectQuery(listByStateSQL).WithArgs("CLEANUP_PENDING").WillReturnError(errors.New("boom"))
+	if _, err := NewRepository(db).ListByState(context.Background(), domain.StateCleanupPending); err == nil {
+		t.Fatal("want error")
+	}
+}
+
 func TestGetNotFound(t *testing.T) {
 	db := newPool(t)
 	db.ExpectQuery(selectEnvSQL).WithArgs(testID).WillReturnError(pgx.ErrNoRows)

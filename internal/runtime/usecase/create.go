@@ -13,7 +13,8 @@ import (
 
 // createStep выполняет один шаг создания по env.State и сохраняет результат.
 func (r *jobRun) createStep(env domain.Environment) (bool, error) {
-	if env.State != domain.StateQueued && r.startupExpired(env) {
+	// READY только завершает задание: таймаут старта к готовому окружению не относится.
+	if provisioning(env.State) && r.startupExpired(env) {
 		return false, errStartupTimeout
 	}
 	switch env.State {
@@ -43,6 +44,12 @@ func (r *jobRun) createStep(env domain.Environment) (bool, error) {
 	default:
 		return false, fmt.Errorf("unexpected state %s for create", env.State)
 	}
+}
+
+// provisioning — состояния, из которых ошибка создания переводит в CLEANUP_PENDING. Из QUEUED
+// такого перехода нет (ресурсов ещё нет), READY уже готово.
+func provisioning(s domain.State) bool {
+	return s == domain.StateCreating || s == domain.StateConfiguring || s == domain.StateVerifying
 }
 
 func (r *jobRun) startupExpired(env domain.Environment) bool {
@@ -232,16 +239,17 @@ func healthProblem(env domain.Environment, h AgentHealth, status int, err error)
 	return ""
 }
 
-// createFailed обрабатывает ошибку шага создания: постоянная ошибка или истёкший StartupTimeout →
-// last_error и CLEANUP_PENDING (цикл продолжает удалением), иначе — повтор задания с backoff.
+// createFailed обрабатывает ошибку шага создания. В CREATING/CONFIGURING/VERIFYING постоянная
+// ошибка или истёкший StartupTimeout → last_error и CLEANUP_PENDING, и цикл того же задания сразу
+// продолжает удалением (итог FAILED). Иначе — повтор задания с backoff.
 func (r *jobRun) createFailed(cause error) (bool, error) {
 	env, err := r.w.repo.Get(r.leaseCtx, r.job.SessionID)
 	if err != nil {
 		return true, fmt.Errorf("get environment: %w", err)
 	}
-	if errors.Is(cause, ErrCloudPermanent) || errors.Is(cause, errStartupTimeout) ||
-		(env.State != domain.StateQueued && r.startupExpired(env)) {
-		env.LastError = cause.Error()
+	if provisioning(env.State) && (errors.Is(cause, ErrCloudPermanent) ||
+		errors.Is(cause, errStartupTimeout) || r.startupExpired(env)) {
+		env.LastError = "provisioning failed: " + cause.Error()
 		r.w.log.Warn("provisioning failed", "session_id", env.SessionID, "state", env.State, "error", cause)
 		_, err := r.save(env, domain.StateCleanupPending)
 		if err != nil && !errors.Is(err, ErrStale) {

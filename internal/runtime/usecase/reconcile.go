@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 )
 
-// reconcileLoop ищет сирот при старте и каждые ReconcileInterval до отмены ctx.
-// Просроченные lease возвращает в работу сам Claim, незавершённые окружения продолжают их задания.
+// reconcileLoop при старте и каждые ReconcileInterval до отмены ctx повторяет очистку CLEANUP_PENDING
+// и ищет сирот. Просроченные lease возвращает в работу сам Claim, незавершённые окружения продолжают
+// их задания.
 func (w *Worker) reconcileLoop(ctx context.Context) {
 	t := time.NewTicker(w.s.ReconcileInterval)
 	defer t.Stop()
@@ -27,10 +30,35 @@ func (w *Worker) reconcileLoop(ctx context.Context) {
 	}
 }
 
-// reconcile удаляет ресурсы рантайма, чья сессия неизвестна БД или уже DELETED/FAILED.
+// reconcile ставит задание удаления каждому окружению в CLEANUP_PENDING (повтор очистки после
+// ошибки удаления — не чаще раза за ReconcileInterval) и удаляет ресурсы рантайма, чья сессия неизвестна БД или уже DELETED/FAILED.
 // ListOwned возвращает только ресурсы этого окружения (cellestial_env); ресурсы без session_id
 // не трогаются.
 func (w *Worker) reconcile(ctx context.Context) error {
+	errs := w.retryCleanups(ctx)
+	if err := w.deleteOrphans(ctx); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func (w *Worker) retryCleanups(ctx context.Context) []error {
+	pending, err := w.repo.ListByState(ctx, domain.StateCleanupPending)
+	if err != nil {
+		return []error{fmt.Errorf("list cleanup pending: %w", err)}
+	}
+	var errs []error
+	for _, env := range pending {
+		if err := w.repo.MarkForDelete(ctx, env.SessionID, "cleanup retry"); err != nil {
+			errs = append(errs, fmt.Errorf("retry cleanup %s: %w", env.SessionID, err))
+			continue
+		}
+		w.log.Info("cleanup retry scheduled", "session_id", env.SessionID)
+	}
+	return errs
+}
+
+func (w *Worker) deleteOrphans(ctx context.Context) error {
 	owned, err := w.cloud.ListOwned(ctx)
 	if err != nil {
 		return fmt.Errorf("list resources: %w", err)

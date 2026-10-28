@@ -164,11 +164,15 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	return r.execute()
 }
 
+// keepLease продлевает lease каждые Lease/3. ErrLeaseLost или отсутствие успешного продления
+// дольше Lease (по Clock: за это время lease мог истечь и задание взяла другая реплика) отменяют
+// leaseCtx; смена вида задания на delete отменяет createCtx.
 func (w *Worker) keepLease(ctx context.Context, stop <-chan struct{}, job Job,
 	cancelLease, cancelCreate context.CancelCauseFunc,
 ) {
 	t := time.NewTicker(max(w.s.Lease/3, time.Millisecond))
 	defer t.Stop()
+	lastOK := w.clock.Now()
 	for {
 		select {
 		case <-stop:
@@ -183,11 +187,20 @@ func (w *Worker) keepLease(ctx context.Context, stop <-chan struct{}, job Job,
 			cancelLease(ErrLeaseLost)
 			return
 		case err != nil:
-			if ctx.Err() == nil {
-				w.log.Warn("renew lease", "job_id", job.ID, "error", err)
+			if ctx.Err() != nil {
+				return
 			}
-		case kind == JobDelete && job.Kind == JobCreate:
-			cancelCreate(errDeleteRequested)
+			if w.clock.Now().Sub(lastOK) >= w.s.Lease {
+				w.log.Error("lease not renewed for a whole lease period", "job_id", job.ID, "error", err)
+				cancelLease(fmt.Errorf("%w: renew failing: %w", ErrLeaseLost, err))
+				return
+			}
+			w.log.Warn("renew lease", "job_id", job.ID, "error", err)
+		default:
+			lastOK = w.clock.Now()
+			if kind == JobDelete && job.Kind == JobCreate {
+				cancelCreate(errDeleteRequested)
+			}
 		}
 	}
 }

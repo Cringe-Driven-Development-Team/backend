@@ -64,7 +64,8 @@ const (
 			SELECT 1 FROM runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $5)`
 	loadSecretsSQL = `SELECT token_sealed, host_private_key_sealed, COALESCE(host_public_key, '')
 		FROM runtime_environments WHERE session_id = $1`
-	knownSQL = `SELECT session_id, state FROM runtime_environments WHERE session_id = ANY($1)`
+	knownSQL       = `SELECT session_id, state FROM runtime_environments WHERE session_id = ANY($1)`
+	listByStateSQL = `SELECT ` + envColumns + ` FROM runtime_environments WHERE state = $1 ORDER BY updated_at`
 )
 
 func scanEnv(row pgx.Row) (domain.Environment, error) {
@@ -226,6 +227,27 @@ func (r *Repository) KnownSessions(ctx context.Context, ids []uuid.UUID) (map[uu
 	}
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate known sessions: %w", err)
+	}
+	return out, nil
+}
+
+// ListByState возвращает окружения в состоянии state, старые изменения первыми.
+func (r *Repository) ListByState(ctx context.Context, state domain.State) ([]domain.Environment, error) {
+	rows, err := r.db.Query(ctx, listByStateSQL, string(state))
+	if err != nil {
+		return nil, fmt.Errorf("select environments by state: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.Environment
+	for rows.Next() {
+		e, serr := scanEnv(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out = append(out, e)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate environments by state: %w", err)
 	}
 	return out, nil
 }

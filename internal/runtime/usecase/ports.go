@@ -57,6 +57,8 @@ type EnvironmentRepository interface {
 	SaveSecrets(ctx context.Context, id uuid.UUID, s SealedSecrets, owner string) error
 	LoadSecrets(ctx context.Context, id uuid.UUID) (SealedSecrets, error)
 	KnownSessions(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]domain.State, error)
+	// ListByState возвращает окружения в состоянии state (для повтора очистки CLEANUP_PENDING).
+	ListByState(ctx context.Context, state domain.State) ([]domain.Environment, error)
 }
 
 // JobQueue — очередь заданий с lease.
