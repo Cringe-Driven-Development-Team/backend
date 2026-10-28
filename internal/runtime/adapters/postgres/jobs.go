@@ -19,7 +19,7 @@ const (
 		lease_until = now() + make_interval(secs => $3), attempt = attempt + 1 WHERE id = $1`
 	renewSQL = `UPDATE runtime_jobs SET lease_until = now() + make_interval(secs => $3)
 		WHERE id = $1 AND lease_owner = $2 AND status = 'running' RETURNING kind`
-	completeSQL = `UPDATE runtime_jobs SET status = 'done' WHERE id = $1 AND lease_owner = $2 AND status = 'running'`
+	completeSQL = `UPDATE runtime_jobs SET status = 'done' WHERE id = $1 AND lease_owner = $2 AND status = 'running' AND kind = $3`
 	retrySQL    = `UPDATE runtime_jobs SET status = 'queued', next_run_at = $3, lease_owner = NULL, lease_until = NULL
 		WHERE id = $1 AND lease_owner = $2 AND status = 'running'`
 )
@@ -66,7 +66,7 @@ func (r *Repository) Renew(ctx context.Context, job usecase.Job, owner string, l
 
 // Complete завершает задание.
 func (r *Repository) Complete(ctx context.Context, job usecase.Job, owner string) error {
-	return r.ownedExec(ctx, "complete job", completeSQL, job.ID, owner)
+	return r.ownedExec(ctx, "complete job", completeSQL, job.ID, owner, string(job.Kind))
 }
 
 // Retry возвращает задание в очередь на момент at.

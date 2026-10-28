@@ -224,3 +224,24 @@ func TestSecretsNeverLoggedInErrors(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestMarkForDeleteBumpsVersion(t *testing.T) {
+	if !strings.Contains(markDeleteSQL, "version = version + 1") {
+		t.Fatal("markDelete must bump version")
+	}
+}
+
+func TestSaveNeverClearsDeleteFlag(t *testing.T) {
+	if !strings.Contains(saveSQL, "CASE WHEN e.desired_state = 'DELETED' THEN 'DELETED' ELSE $4 END") {
+		t.Fatal("save must keep desired_state=DELETED")
+	}
+}
+
+func TestSaveStaleAfterMarkForDelete(t *testing.T) {
+	env := testEnv() // версия до MarkForDelete
+	db := newPool(t)
+	db.ExpectQuery(saveSQL).WithArgs(saveArgs(env, "w1")...).WillReturnError(pgx.ErrNoRows)
+	if _, err := NewRepository(db).Save(context.Background(), env, "w1"); !errors.Is(err, usecase.ErrStale) {
+		t.Fatalf("err=%v", err)
+	}
+}

@@ -46,10 +46,12 @@ const (
 		RETURNING version, created_at, updated_at`
 	insertJobSQL  = `INSERT INTO runtime_jobs (session_id, kind) VALUES ($1, $2)`
 	lockEnvSQL    = `SELECT state FROM runtime_environments WHERE session_id = $1 FOR UPDATE`
-	markDeleteSQL = `UPDATE runtime_environments SET desired_state = 'DELETED', delete_reason = $2, updated_at = now()
+	markDeleteSQL = `UPDATE runtime_environments SET desired_state = 'DELETED', delete_reason = $2,
+		version = version + 1, updated_at = now()
 		WHERE session_id = $1`
 	convertJobSQL = `UPDATE runtime_jobs SET kind = 'delete' WHERE session_id = $1 AND status IN ('queued','running')`
-	saveSQL       = `UPDATE runtime_environments e SET state = $3, desired_state = $4, server_id = NULLIF($5, ''),
+	saveSQL       = `UPDATE runtime_environments e SET state = $3,
+		desired_state = CASE WHEN e.desired_state = 'DELETED' THEN 'DELETED' ELSE $4 END, server_id = NULLIF($5, ''),
 		volume_id = NULLIF($6, ''), port_id = NULLIF($7, ''), private_ip = NULLIF($8, ''), endpoint = NULLIF($9, ''),
 		agent_version = $10, last_error = NULLIF($11, ''), cleanup_result = NULLIF($12, ''),
 		version = e.version + 1, updated_at = now()

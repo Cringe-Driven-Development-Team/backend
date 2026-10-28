@@ -63,16 +63,16 @@ func TestRenewLeaseLost(t *testing.T) {
 func TestCompleteAndRetryLeaseLost(t *testing.T) {
 	at := time.Now()
 	db := newPool(t)
-	db.ExpectExec(completeSQL).WithArgs(int64(5), "w1").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	db.ExpectExec(completeSQL).WithArgs(int64(5), "w1").WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	db.ExpectExec(completeSQL).WithArgs(int64(5), "w1", "create").WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	db.ExpectExec(completeSQL).WithArgs(int64(5), "w1", "create").WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	db.ExpectExec(retrySQL).WithArgs(int64(5), "w1", at).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	db.ExpectExec(retrySQL).WithArgs(int64(5), "w1", at).WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	r := NewRepository(db)
 	ctx := context.Background()
-	if err := r.Complete(ctx, usecase.Job{ID: 5}, "w1"); err != nil {
+	if err := r.Complete(ctx, usecase.Job{ID: 5, Kind: usecase.JobCreate}, "w1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Complete(ctx, usecase.Job{ID: 5}, "w1"); !errors.Is(err, usecase.ErrLeaseLost) {
+	if err := r.Complete(ctx, usecase.Job{ID: 5, Kind: usecase.JobCreate}, "w1"); !errors.Is(err, usecase.ErrLeaseLost) {
 		t.Fatal(err)
 	}
 	if err := r.Retry(ctx, usecase.Job{ID: 5}, "w1", at); err != nil {
@@ -80,5 +80,17 @@ func TestCompleteAndRetryLeaseLost(t *testing.T) {
 	}
 	if err := r.Retry(ctx, usecase.Job{ID: 5}, "w1", at); !errors.Is(err, usecase.ErrLeaseLost) {
 		t.Fatal(err)
+	}
+}
+
+func TestCompleteConvertedJobLeaseLost(t *testing.T) {
+	if !strings.Contains(completeSQL, "kind = $3") {
+		t.Fatal("complete SQL must match job kind")
+	}
+	db := newPool(t)
+	db.ExpectExec(completeSQL).WithArgs(int64(5), "w1", "create").WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	err := NewRepository(db).Complete(context.Background(), usecase.Job{ID: 5, Kind: usecase.JobCreate}, "w1")
+	if !errors.Is(err, usecase.ErrLeaseLost) {
+		t.Fatalf("err=%v", err)
 	}
 }
