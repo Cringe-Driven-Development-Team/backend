@@ -19,6 +19,7 @@ type Config struct {
 	AccessTTL, RefreshTTL              time.Duration
 	NotebooksBucket                    string
 	DBUser, DBPassword, DBHost, DBName string
+	Runtime                            RuntimeConfig
 }
 
 // Load читает окружение процесса.
@@ -77,6 +78,11 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 	if c.NotebooksBucket == "" {
 		return Config{}, errors.New("S3_NOTEBOOKS_BUCKET is not set")
 	}
+	rt, err := loadRuntime(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+	c.Runtime = rt
 	return c, nil
 }
 
