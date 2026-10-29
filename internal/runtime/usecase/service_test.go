@@ -73,6 +73,12 @@ func TestRequestCreateInvalidLanguage(t *testing.T) {
 	mustIs(t, err, ErrInvalidLanguage)
 }
 
+func TestRequestCreateNilSession(t *testing.T) {
+	svc, _ := newSvc(t, true) // repo без ожиданий: вызов CreateWithJob провалит тест
+	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.Nil, Language: "python"})
+	mustIs(t, err, ErrInvalidSession)
+}
+
 func TestRequestCreateUnknownProfile(t *testing.T) {
 	svc, _ := newSvc(t, true)
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.New(), Language: "r", Profile: "big"})

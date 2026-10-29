@@ -42,6 +42,9 @@ func (s *Service) RequestCreate(ctx context.Context, req CreateEnvironment) (dom
 	if !s.s.Enabled {
 		return domain.Environment{}, ErrDisabled
 	}
+	if req.SessionID == uuid.Nil {
+		return domain.Environment{}, ErrInvalidSession
+	}
 	if !domain.ValidLanguage(req.Language) {
 		return domain.Environment{}, ErrInvalidLanguage
 	}
