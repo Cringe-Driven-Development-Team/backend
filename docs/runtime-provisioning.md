@@ -77,7 +77,7 @@ READY → DELETING → DELETED
 | `RUNTIME_ENABLED` | `false` | включает модуль и воркер |
 | `RUNTIME_PROVIDER` | нет | `openstack` или `fake` |
 | `RUNTIME_SECRETS_KEY` | нет | base64 ровно 32 байт, ключ шифрования секретов |
-| `RUNTIME_ENV_NAME` | `production` | значение метки `cellestial_env` |
+| `RUNTIME_ENV_NAME` | для `fake` — `dev-fake`; для `openstack` обязательна | значение метки `cellestial_env` |
 | `RUNTIME_WORK_DIR` | `/var/lib/cellestial/runtime` | рабочий каталог воркера |
 | `RUNTIME_ROOT_DISK_GIB` | `20` | размер загрузочного тома |
 | `RUNTIME_KERNEL_DNS` | `1.1.1.1` | IPv4 DNS для контейнера kernel |
@@ -104,6 +104,7 @@ READY → DELETING → DELETED
 | `RUNTIME_TLS_CA_CERT_FILE`, `RUNTIME_TLS_CA_KEY_FILE` | CA, выпускающий сертификаты агентов |
 | `RUNTIME_TLS_CLIENT_CERT_FILE`, `RUNTIME_TLS_CLIENT_KEY_FILE` | клиентский сертификат backend для mTLS |
 | `RUNTIME_BLOCKED_PUBLIC_IPS` | IP инфраструктуры через запятую, закрываемые для kernel |
+| `RUNTIME_ENV_NAME` | метка `cellestial_env`; умолчания нет, чтобы воркер не задел ресурсы другого окружения (production задаёт infra) |
 
 Образы kernel: `ghcr.io/cringe-driven-development-team/cellestial-kernel-{python,r}`,
 публичные пакеты. CI публикует их и вшивает digest в образ backend как значения

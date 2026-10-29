@@ -24,7 +24,7 @@ func openstackValues() map[string]string {
 		"RUNTIME_SSH_KEY_NAME": "k", "RUNTIME_SSH_PRIVATE_KEY_FILE": "/k",
 		"RUNTIME_TLS_CA_CERT_FILE": "/ca.crt", "RUNTIME_TLS_CA_KEY_FILE": "/ca.key",
 		"RUNTIME_TLS_CLIENT_CERT_FILE": "/c.crt", "RUNTIME_TLS_CLIENT_KEY_FILE": "/c.key",
-		"RUNTIME_BLOCKED_PUBLIC_IPS": "203.0.113.1, 203.0.113.2",
+		"RUNTIME_BLOCKED_PUBLIC_IPS": "203.0.113.1, 203.0.113.2", "RUNTIME_ENV_NAME": "production",
 	} {
 		v[k] = val
 	}
@@ -48,7 +48,7 @@ func TestRuntimeDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := c.Runtime
-	if r.RootDiskGiB != 20 || r.KernelDNS != "1.1.1.1" || r.EnvName != "production" || r.SSHUser != "root" ||
+	if r.RootDiskGiB != 20 || r.KernelDNS != "1.1.1.1" || r.EnvName != "dev-fake" || r.SSHUser != "root" ||
 		r.StartupTimeout != 20*time.Minute || r.AnsibleTimeout != 15*time.Minute || r.DrainTimeout != 30*time.Second ||
 		r.DeleteTimeout != 10*time.Minute || r.ReconcileInterval != 5*time.Minute ||
 		r.MaxConcurrentOps != 2 || r.MaxActive != 3 || r.WorkDir != "/var/lib/cellestial/runtime" ||
@@ -64,7 +64,7 @@ func TestRuntimeOpenStackFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := c.Runtime
-	if r.OSPassword != "pw-VALUE" || r.SubnetID != "s" || r.TLSCAKeyFile != "/ca.key" ||
+	if r.OSPassword != "pw-VALUE" || r.EnvName != "production" || r.SubnetID != "s" || r.TLSCAKeyFile != "/ca.key" ||
 		len(r.BlockedPublicIPs) != 2 || r.BlockedPublicIPs[1] != "203.0.113.2" {
 		t.Fatalf("unexpected: %+v", r)
 	}
@@ -81,6 +81,24 @@ func TestRuntimeOpenStackRequiresCredentials(t *testing.T) {
 	delete(v, "RUNTIME_TLS_CLIENT_KEY_FILE")
 	if _, err = LoadFrom(settings(v)); err == nil || !strings.Contains(err.Error(), "RUNTIME_TLS_CLIENT_KEY_FILE") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRuntimeOpenStackRequiresEnvName(t *testing.T) {
+	v := openstackValues()
+	delete(v, "RUNTIME_ENV_NAME")
+	if _, err := LoadFrom(settings(v)); err == nil || !strings.Contains(err.Error(), "RUNTIME_ENV_NAME") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRuntimeFakeEnvNameOverride(t *testing.T) {
+	v := runtimeBase()
+	v["RUNTIME_ENABLED"], v["RUNTIME_PROVIDER"], v["RUNTIME_SECRETS_KEY"] = "true", "fake", testKey()
+	v["RUNTIME_ENV_NAME"] = "local"
+	c, err := LoadFrom(settings(v))
+	if err != nil || c.Runtime.EnvName != "local" {
+		t.Fatalf("env=%q err=%v", c.Runtime.EnvName, err)
 	}
 }
 

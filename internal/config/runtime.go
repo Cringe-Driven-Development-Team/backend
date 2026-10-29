@@ -98,7 +98,7 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 	r.TLSClientCertFile, r.TLSClientKeyFile = get("RUNTIME_TLS_CLIENT_CERT_FILE", ""), get("RUNTIME_TLS_CLIENT_KEY_FILE", "")
 	r.WorkDir = get("RUNTIME_WORK_DIR", "/var/lib/cellestial/runtime")
 	r.KernelDNS = get("RUNTIME_KERNEL_DNS", "1.1.1.1")
-	r.EnvName = get("RUNTIME_ENV_NAME", "production")
+	r.EnvName = get("RUNTIME_ENV_NAME", "")
 	r.PythonImage = get("RUNTIME_PYTHON_IMAGE", "cellestial-kernel-python:local")
 	r.RImage = get("RUNTIME_R_IMAGE", "cellestial-kernel-r:local")
 	r.AgentVersion = get("RUNTIME_AGENT_VERSION", "dev")
@@ -122,9 +122,15 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 		return RuntimeConfig{}, errors.New("invalid RUNTIME_SECRETS_KEY: expected base64 of exactly 32 bytes")
 	}
 	r.SecretsKey = key
+	// Для openstack имя окружения обязательно: по метке cellestial_env воркер находит и удаляет
+	// свои ресурсы, и ошибочное умолчание задело бы ресурсы другого окружения.
+	if r.Provider == "fake" && r.EnvName == "" {
+		r.EnvName = "dev-fake"
+	}
 
 	if r.Provider == "openstack" {
 		for _, req := range []struct{ name, value string }{
+			{"RUNTIME_ENV_NAME", r.EnvName},
 			{"RUNTIME_OS_AUTH_URL", r.OSAuthURL}, {"RUNTIME_OS_USERNAME", r.OSUsername}, {"RUNTIME_OS_PASSWORD", r.OSPassword},
 			{"RUNTIME_OS_USER_DOMAIN_NAME", r.OSUserDomainName}, {"RUNTIME_OS_PROJECT_ID", r.OSProjectID}, {"RUNTIME_OS_REGION", r.OSRegion},
 			{"RUNTIME_AVAILABILITY_ZONE", r.AvailabilityZone}, {"RUNTIME_NETWORK_ID", r.NetworkID}, {"RUNTIME_SUBNET_ID", r.SubnetID},
