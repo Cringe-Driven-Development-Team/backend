@@ -3,7 +3,7 @@ requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cellestial-runtime-agent"
+name = "cellestial-agent"
 version = "0.1.0"
 description = "Private API for isolated Python and R notebook sessions"
 readme = "README.md"
