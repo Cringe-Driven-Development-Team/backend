@@ -12,6 +12,7 @@ package delivery
 import (
 	reflect "reflect"
 
+	usecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -40,10 +41,10 @@ func (m *MockTokenParser) EXPECT() *MockTokenParserMockRecorder {
 }
 
 // Parse mocks base method.
-func (m *MockTokenParser) Parse(token string) (int64, error) {
+func (m *MockTokenParser) Parse(token string) (usecase.SessionClaims, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Parse", token)
-	ret0, _ := ret[0].(int64)
+	ret0, _ := ret[0].(usecase.SessionClaims)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

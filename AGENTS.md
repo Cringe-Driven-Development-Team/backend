@@ -40,7 +40,7 @@
 
 - Go: версия в [go.mod](go.mod), зависимости через Go Modules (`go.mod`, `go.sum`).
 - HTTP: `net/http`, Gorilla mux; PostgreSQL: `pgx/v5/pgxpool`.
-- Локально: Docker Compose с Go API, PostgreSQL 18 и SeaweedFS (S3).
+- Локально: Docker Compose с Go API, PostgreSQL 18, Redis 8 и SeaweedFS (S3).
 - `runtime-agent/`: Python 3.13 сервис systemd; одна VPS, одна сессия, один контейнер/kernel.
   SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
   Jupyter — закрытый TCP без host mounts; сеть и firewall готовит infra по docs/runtime-agent-network.md.
@@ -89,6 +89,7 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 security, principal и httperr; `internal/{user,notebook}/delivery/http`
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
+Сессии — Redis primary через `usecase.SessionStore`, пользователи — PostgreSQL; [runbook](docs/redis-sessions.md).
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
 `internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
@@ -128,7 +129,6 @@ needs lint/test/docker, независимо от deploy. Повтор sync пр
 Pull старого GHCR path требует old sha-tag и прежний read credential.
 Без registry используй проверенный сохранённый образ и manual override из
 infra/ansible/README.md: pull_policy never, только API, без миграций Down.
-
 ## Коммиты
 
 Формат: `<тип>: <описание>` или `<тип>(<область>): <описание>`.

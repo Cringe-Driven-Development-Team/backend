@@ -112,34 +112,104 @@ func (m *MockSessionStore) EXPECT() *MockSessionStoreMockRecorder {
 	return m.recorder
 }
 
-// CreateSession mocks base method.
-func (m *MockSessionStore) CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+// Create mocks base method.
+func (m *MockSessionStore) Create(arg0 context.Context, arg1 NewSession) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateSession", ctx, userID, tokenHash, expiresAt)
+	ret := m.ctrl.Call(m, "Create", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CreateSession indicates an expected call of CreateSession.
-func (mr *MockSessionStoreMockRecorder) CreateSession(ctx, userID, tokenHash, expiresAt any) *gomock.Call {
+// Create indicates an expected call of Create.
+func (mr *MockSessionStoreMockRecorder) Create(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSession", reflect.TypeOf((*MockSessionStore)(nil).CreateSession), ctx, userID, tokenHash, expiresAt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockSessionStore)(nil).Create), arg0, arg1)
 }
 
-// DeleteSession mocks base method.
-func (m *MockSessionStore) DeleteSession(ctx context.Context, tokenHash string) (int64, time.Time, error) {
+// CurrentVersion mocks base method.
+func (m *MockSessionStore) CurrentVersion(arg0 context.Context, arg1 int64) (SessionVersion, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteSession", ctx, tokenHash)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(time.Time)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret := m.ctrl.Call(m, "CurrentVersion", arg0, arg1)
+	ret0, _ := ret[0].(SessionVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// DeleteSession indicates an expected call of DeleteSession.
-func (mr *MockSessionStoreMockRecorder) DeleteSession(ctx, tokenHash any) *gomock.Call {
+// CurrentVersion indicates an expected call of CurrentVersion.
+func (mr *MockSessionStoreMockRecorder) CurrentVersion(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSession", reflect.TypeOf((*MockSessionStore)(nil).DeleteSession), ctx, tokenHash)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersion", reflect.TypeOf((*MockSessionStore)(nil).CurrentVersion), arg0, arg1)
+}
+
+// Find mocks base method.
+func (m *MockSessionStore) Find(arg0 context.Context, arg1 string) (RefreshSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Find", arg0, arg1)
+	ret0, _ := ret[0].(RefreshSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Find indicates an expected call of Find.
+func (mr *MockSessionStoreMockRecorder) Find(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Find", reflect.TypeOf((*MockSessionStore)(nil).Find), arg0, arg1)
+}
+
+// Revoke mocks base method.
+func (m *MockSessionStore) Revoke(arg0 context.Context, arg1 string, arg2 SessionClaims) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Revoke", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Revoke indicates an expected call of Revoke.
+func (mr *MockSessionStoreMockRecorder) Revoke(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Revoke", reflect.TypeOf((*MockSessionStore)(nil).Revoke), arg0, arg1, arg2)
+}
+
+// RevokeAll mocks base method.
+func (m *MockSessionStore) RevokeAll(arg0 context.Context, arg1 int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokeAll", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevokeAll indicates an expected call of RevokeAll.
+func (mr *MockSessionStoreMockRecorder) RevokeAll(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeAll", reflect.TypeOf((*MockSessionStore)(nil).RevokeAll), arg0, arg1)
+}
+
+// Rotate mocks base method.
+func (m *MockSessionStore) Rotate(arg0 context.Context, arg1 string, arg2 NewSession) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Rotate", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Rotate indicates an expected call of Rotate.
+func (mr *MockSessionStoreMockRecorder) Rotate(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rotate", reflect.TypeOf((*MockSessionStore)(nil).Rotate), arg0, arg1, arg2)
+}
+
+// ValidateAccess mocks base method.
+func (m *MockSessionStore) ValidateAccess(arg0 context.Context, arg1 SessionClaims) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateAccess", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ValidateAccess indicates an expected call of ValidateAccess.
+func (mr *MockSessionStoreMockRecorder) ValidateAccess(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAccess", reflect.TypeOf((*MockSessionStore)(nil).ValidateAccess), arg0, arg1)
 }
 
 // MockPasswordHasher is a mock of PasswordHasher interface.
@@ -274,9 +344,9 @@ func (m *MockTokenIssuer) EXPECT() *MockTokenIssuerMockRecorder {
 }
 
 // IssueAccess mocks base method.
-func (m *MockTokenIssuer) IssueAccess(userID int64) (string, time.Time, error) {
+func (m *MockTokenIssuer) IssueAccess(claims SessionClaims) (string, time.Time, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IssueAccess", userID)
+	ret := m.ctrl.Call(m, "IssueAccess", claims)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(time.Time)
 	ret2, _ := ret[2].(error)
@@ -284,7 +354,7 @@ func (m *MockTokenIssuer) IssueAccess(userID int64) (string, time.Time, error) {
 }
 
 // IssueAccess indicates an expected call of IssueAccess.
-func (mr *MockTokenIssuerMockRecorder) IssueAccess(userID any) *gomock.Call {
+func (mr *MockTokenIssuerMockRecorder) IssueAccess(claims any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IssueAccess", reflect.TypeOf((*MockTokenIssuer)(nil).IssueAccess), userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IssueAccess", reflect.TypeOf((*MockTokenIssuer)(nil).IssueAccess), claims)
 }

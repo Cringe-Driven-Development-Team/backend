@@ -46,7 +46,7 @@ func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 		BaseRouter: mux.NewRouter(),
 		Middlewares: []api.MiddlewareFunc{
 			middleware.Validator(spec, "/api/v1"),
-			security.AuthenticateBearer(testTokens(t)),
+			security.AuthenticateBearer(testTokens(t), allowSessions{}),
 		},
 		ErrorHandlerFunc: httperr.RequestError,
 	})
@@ -248,6 +248,6 @@ func testTokens(t *testing.T) *MockTokenParser {
 	t.Helper()
 	tokens := NewMockTokenParser(gomock.NewController(t))
 	// Routing helpers may receive requests with or without a cookie.
-	tokens.EXPECT().Parse("access-1").Return(int64(1), nil).AnyTimes()
+	tokens.EXPECT().Parse("access-1").Return(testClaims(1), nil).AnyTimes()
 	return tokens
 }

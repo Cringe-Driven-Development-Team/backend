@@ -137,3 +137,13 @@ make generate-mocks
 Stateful fixtures в `flow_fixture_test.go` и `bff_helpers_test.go` сохраняют
 последовательные сценарии ротации сессий, создания/изменения/чтения блокнотов
 и корреляции логов. Они не заменяют SQL-тесты и не доказывают атомарность PostgreSQL.
+
+## Redis для авторизации
+
+Compose запускает Redis с healthcheck, отдельным volume, AOF и локальным паролем
+из `.env.example`. API получает REDIS_*; `/health` проверяет только HTTP.
+На каждый защищённый запрос нужен доступ к primary, при сбое возвращается 500.
+Настройки и команды тестов — в [runbook Redis](redis-sessions.md).
+Для Go API вне Compose нужен Redis, доступный с хоста: задайте REDIS_HOST/PORT
+или явно опубликуйте порт только на loopback в личном Compose override.
+`make logs` теперь включает Redis. `make down` сохраняет его volume.

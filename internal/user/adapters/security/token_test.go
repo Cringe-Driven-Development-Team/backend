@@ -20,15 +20,15 @@ func TestAccessToken(t *testing.T) {
 		}
 		return s
 	}
-	valid, err := tokens.Issue(userID)
+	valid, err := tokens.Issue(testClaims(userID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	expired, err := NewAccessToken([]byte("secret"), -time.Minute).Issue(userID)
+	expired, err := NewAccessToken([]byte("secret"), -time.Minute).Issue(testClaims(userID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := NewAccessToken([]byte("other secret"), time.Minute).Issue(userID)
+	foreign, err := NewAccessToken([]byte("other secret"), time.Minute).Issue(testClaims(userID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestAccessToken(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
-			if got != userID {
+			if got != testClaims(userID) {
 				t.Errorf("Parse() = %v, want %v", got, userID)
 			}
 		})
