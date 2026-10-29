@@ -10,16 +10,30 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 )
 
-const maxBody = 4 << 20
+const (
+	maxBody = 4 << 20
+	// dialTimeout и tlsTimeout ограничивают установку соединения с VPS.
+	dialTimeout = 10 * time.Second
+	tlsTimeout  = 10 * time.Second
+	idleTimeout = 30 * time.Second
+	// defaultHealthTimeout — лимит одного вызова /health: зависший запрос не должен откладывать
+	// проверку StartupTimeout воркером.
+	defaultHealthTimeout = 10 * time.Second
+)
 
 // Client реализует usecase.AgentClient поверх HTTPS с mTLS.
-type Client struct{ http *http.Client }
+type Client struct {
+	http          *http.Client
+	healthTimeout time.Duration
+}
 
 var _ usecase.AgentClient = (*Client)(nil)
 
@@ -33,10 +47,18 @@ func New(caPEM, clientCertPEM, clientKeyPEM []byte) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent client: client certificate: %w", err)
 	}
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool, Certificates: []tls.Certificate{cert}},
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("agent client: unexpected default transport")
 	}
-	return &Client{http: &http.Client{Transport: tr}}, nil
+	// Клон DefaultTransport: агенты в приватной сети, прокси из окружения не используется.
+	tr := base.Clone()
+	tr.Proxy = nil
+	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool, Certificates: []tls.Certificate{cert}}
+	tr.TLSHandshakeTimeout = tlsTimeout
+	tr.DialContext = (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext
+	tr.IdleConnTimeout = idleTimeout
+	return &Client{http: &http.Client{Transport: tr}, healthTimeout: defaultHealthTimeout}, nil
 }
 
 // do выполняет запрос; ошибки не содержат токена.
@@ -78,7 +100,10 @@ func statusErr(method, path string, status int) error {
 }
 
 // Health возвращает /health; 503 — не ошибка (тело разбирается), прочие статусы ≠200 возвращаются без разбора.
+// Вызов ограничен healthTimeout.
 func (c *Client) Health(ctx context.Context, ep usecase.AgentEndpoint) (usecase.AgentHealth, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.healthTimeout)
+	defer cancel()
 	status, data, err := c.do(ctx, ep, http.MethodGet, "/health", nil)
 	if err != nil {
 		return usecase.AgentHealth{}, 0, err

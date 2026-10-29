@@ -17,21 +17,23 @@ func (r *jobRun) createStep(env domain.Environment) (bool, error) {
 	if provisioning(env.State) && r.startupExpired(env) {
 		return false, errStartupTimeout
 	}
+	ctx, cancel := r.startupCtx(env)
+	defer cancel()
 	switch env.State {
 	case domain.StateQueued:
 		_, err := r.save(env, domain.StateCreating)
 		return false, err
 	case domain.StateCreating:
-		return false, r.provision(env)
+		return false, startupErr(ctx, r.provision(ctx, env))
 	case domain.StateConfiguring:
-		if err := r.configure(env); err != nil {
-			return false, err
+		if err := r.configure(ctx, env); err != nil {
+			return false, startupErr(ctx, err)
 		}
 		_, err := r.save(env, domain.StateVerifying)
 		return false, err
 	case domain.StateVerifying:
-		if err := r.verify(env); err != nil {
-			return false, err
+		if err := r.verify(ctx, env); err != nil {
+			return false, startupErr(ctx, err)
 		}
 		env.Endpoint = agentURL(env.Resources.PrivateIP)
 		env.LastError = ""
@@ -56,10 +58,26 @@ func (r *jobRun) startupExpired(env domain.Environment) bool {
 	return !r.w.clock.Now().Before(env.CreatedAt.Add(r.w.s.StartupTimeout))
 }
 
+// startupCtx — createCtx с крайним сроком CreatedAt+StartupTimeout. Остаток считается по Clock
+// воркера; истечение срока отменяет контекст с причиной errStartupTimeout, а потеря lease и запрос
+// удаления по-прежнему видны как причины createCtx.
+func (r *jobRun) startupCtx(env domain.Environment) (context.Context, context.CancelFunc) {
+	left := env.CreatedAt.Add(r.w.s.StartupTimeout).Sub(r.w.clock.Now())
+	return context.WithTimeoutCause(r.createCtx, left, errStartupTimeout)
+}
+
+// startupErr помечает ошибку шага errStartupTimeout, если шаг прервал крайний срок старта
+// (а не потеря lease или запрос удаления): createFailed тогда переводит окружение в очистку.
+func startupErr(ctx context.Context, err error) error {
+	if err == nil || errors.Is(err, errStartupTimeout) || !errors.Is(context.Cause(ctx), errStartupTimeout) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errStartupTimeout, err)
+}
+
 // provision создаёт порт, том и сервер; каждый полученный ID сохраняется сразу, даже вместе
 // с ошибкой облака, чтобы повтор и удаление нашли ресурс.
-func (r *jobRun) provision(env domain.Environment) error {
-	ctx := r.createCtx
+func (r *jobRun) provision(ctx context.Context, env domain.Environment) error {
 	var err error
 	if env.Resources.PortID == "" || env.Resources.PrivateIP == "" {
 		id, ip, cerr := r.w.cloud.EnsurePort(ctx, env)
@@ -167,7 +185,7 @@ func (r *jobRun) agentEndpoint(env domain.Environment, s SealedSecrets) (AgentEn
 }
 
 // configure запускает настройку VPS с лимитом AnsibleTimeout.
-func (r *jobRun) configure(env domain.Environment) error {
+func (r *jobRun) configure(ctx context.Context, env domain.Environment) error {
 	s, err := r.ensureSecrets()
 	if err != nil {
 		return err
@@ -180,7 +198,7 @@ func (r *jobRun) configure(env domain.Environment) error {
 	if err != nil {
 		return fmt.Errorf("issue server cert: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(r.createCtx, r.w.s.AnsibleTimeout)
+	ctx, cancel := context.WithTimeout(ctx, r.w.s.AnsibleTimeout)
 	defer cancel()
 	err = r.w.host.Configure(ctx, HostConfig{
 		SessionID: env.SessionID, Language: env.Language, PrivateIP: env.Resources.PrivateIP,
@@ -195,8 +213,9 @@ func (r *jobRun) configure(env domain.Environment) error {
 }
 
 // verify опрашивает /health, пока агент не ответит готовностью своей сессии и языка
-// или не истечёт StartupTimeout.
-func (r *jobRun) verify(env domain.Environment) error {
+// или не истечёт StartupTimeout. Каждый вызов ограничен healthTimeout, чтобы зависший запрос
+// не откладывал проверку StartupTimeout.
+func (r *jobRun) verify(ctx context.Context, env domain.Environment) error {
 	s, err := r.w.repo.LoadSecrets(r.leaseCtx, r.job.SessionID)
 	if err != nil {
 		return fmt.Errorf("load secrets: %w", err)
@@ -206,18 +225,23 @@ func (r *jobRun) verify(env domain.Environment) error {
 		return err
 	}
 	for {
-		h, status, herr := r.w.agent.Health(r.createCtx, ep)
+		hctx, cancel := context.WithTimeout(ctx, r.w.healthTimeout)
+		h, status, herr := r.w.agent.Health(hctx, ep)
+		cancel()
 		reason := healthProblem(env, h, status, herr)
 		if reason == "" {
 			return nil
 		}
-		if r.createCtx.Err() != nil {
-			return context.Cause(r.createCtx)
+		if ctx.Err() != nil {
+			if errors.Is(context.Cause(ctx), errStartupTimeout) {
+				return fmt.Errorf("%w: agent is not ready: %s", errStartupTimeout, reason)
+			}
+			return context.Cause(ctx)
 		}
 		if r.startupExpired(env) {
 			return fmt.Errorf("%w: agent is not ready: %s", errStartupTimeout, reason)
 		}
-		if err := sleepCtx(r.createCtx, r.w.verifyInterval); err != nil {
+		if err := sleepCtx(ctx, r.w.verifyInterval); err != nil {
 			return err
 		}
 	}

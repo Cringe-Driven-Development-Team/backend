@@ -18,7 +18,7 @@ func (w *Worker) reconcileLoop(ctx context.Context) {
 	t := time.NewTicker(w.s.ReconcileInterval)
 	defer t.Stop()
 	for {
-		if err := w.reconcile(ctx); err != nil && ctx.Err() == nil {
+		if err := w.reconcilePass(ctx); err != nil && ctx.Err() == nil {
 			w.log.Error("reconcile", "error", err)
 		}
 		select {
@@ -27,6 +27,14 @@ func (w *Worker) reconcileLoop(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// reconcilePass выполняет один проход reconcile с лимитом min(ReconcileInterval, 2 мин), чтобы
+// зависший запрос к облаку или БД не остановил последующие проходы.
+func (w *Worker) reconcilePass(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, min(w.s.ReconcileInterval, maxReconcilePass))
+	defer cancel()
+	return w.reconcile(ctx)
 }
 
 // reconcile ставит задание удаления каждому окружению в CLEANUP_PENDING (повтор очистки после

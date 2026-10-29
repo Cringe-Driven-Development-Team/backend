@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,18 +63,44 @@ func (s *stubSecrets) counts() (int, int) {
 	return s.tokens, s.hosts
 }
 
-// recordingCloud запоминает user_data последнего EnsureServer.
+// recordingCloud запоминает user_data последнего EnsureServer. hang (если задан до запуска
+// воркера) — методы, которые блокируются до отмены ctx.
 type recordingCloud struct {
 	*fake.Cloud
 	mu       sync.Mutex
 	userData string
+	hang     map[string]bool
 }
 
 func (c *recordingCloud) EnsureServer(ctx context.Context, env domain.Environment, userData string) (string, error) {
 	c.mu.Lock()
 	c.userData = userData
 	c.mu.Unlock()
+	if c.hang["EnsureServer"] {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
 	return c.Cloud.EnsureServer(ctx, env, userData)
+}
+
+func (c *recordingCloud) ListOwned(ctx context.Context) ([]usecase.CloudResource, error) {
+	if c.hang["ListOwned"] {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return c.Cloud.ListOwned(ctx)
+}
+
+// hangingHealth — агент, чей /health не отвечает до отмены ctx.
+type hangingHealth struct {
+	*fake.Agent
+	calls atomic.Int32
+}
+
+func (a *hangingHealth) Health(ctx context.Context, _ usecase.AgentEndpoint) (usecase.AgentHealth, int, error) {
+	a.calls.Add(1)
+	<-ctx.Done()
+	return usecase.AgentHealth{}, 0, ctx.Err()
 }
 
 // hostFunc — HostConfigurator из функции.
@@ -88,6 +115,7 @@ type harness struct {
 	cloud *recordingCloud
 	host  *fake.Host
 	agent *fake.Agent
+	ac    usecase.AgentClient // по умолчанию agent
 	sec   *stubSecrets
 	svc   *usecase.Service
 	cfg   usecase.HostConfigurator // по умолчанию host
@@ -101,7 +129,7 @@ func newHarness(t *testing.T) *harness {
 	cloud, host, agent := fake.New(0)
 	return &harness{
 		t: t, clock: clock, store: store, cloud: &recordingCloud{Cloud: cloud}, host: host, agent: agent,
-		sec: &stubSecrets{},
+		ac: agent, sec: &stubSecrets{},
 		svc: usecase.NewService(store, usecase.Settings{
 			Enabled: true, MaxActive: 10, AgentVersion: "0.1.0", Profiles: map[string]bool{"default": true},
 		}),
@@ -119,7 +147,7 @@ func newHarness(t *testing.T) *harness {
 func (h *harness) worker(owner string) *usecase.Worker {
 	s := h.s
 	s.Owner = owner
-	w := usecase.NewWorker(h.store, h.store, h.cloud, h.cfg, h.agent, h.sec, h.clock, s)
+	w := usecase.NewWorker(h.store, h.store, h.cloud, h.cfg, h.ac, h.sec, h.clock, s)
 	usecase.SetVerifyInterval(w, 2*time.Millisecond)
 	return w
 }
@@ -817,5 +845,72 @@ func TestCreateSavesIDReturnedWithError(t *testing.T) {
 	}
 	if h.env(sid).State != domain.StateReady || h.cloud.Count("server") != 1 {
 		t.Fatalf("state = %s, servers = %d", h.env(sid).State, h.cloud.Count("server"))
+	}
+}
+
+// assertFailedClean проверяет, что создание закончилось очисткой: FAILED, ресурсов нет, задание done.
+func assertFailedClean(t *testing.T, h *harness, sid uuid.UUID, wantErr string) {
+	t.Helper()
+	env := h.env(sid)
+	if env.State != domain.StateFailed || !strings.Contains(env.LastError, wantErr) || env.Endpoint != "" {
+		t.Fatalf("env = %+v", env)
+	}
+	if hist := fmt.Sprint(h.store.history(sid)); !strings.Contains(hist, "CLEANUP_PENDING FAILED]") {
+		t.Fatalf("history = %s", hist)
+	}
+	if n := h.resources(); n != 0 {
+		t.Fatalf("resources left = %d", n)
+	}
+	if j, _ := h.store.job(sid); j.status != "done" {
+		t.Fatalf("job = %+v", j)
+	}
+}
+
+func TestCreateStuckServerTimesOut(t *testing.T) {
+	h := newHarness(t)
+	h.s.StartupTimeout = 200 * time.Millisecond
+	h.cloud.hang = map[string]bool{"EnsureServer": true}
+	sid := h.request()
+	if ok, err := runOnce(t, h.worker("w1")); !ok || err != nil {
+		t.Fatalf("RunOnce = %v %v", ok, err)
+	}
+	assertFailedClean(t, h, sid, "startup timeout exceeded")
+}
+
+func TestHealthHangDoesNotBlockTimeout(t *testing.T) {
+	h := newHarness(t)
+	ha := &hangingHealth{Agent: h.agent}
+	h.ac = ha
+	sid := h.request()
+	w := h.worker("w1")
+	usecase.SetHealthTimeout(w, 5*time.Millisecond)
+	done := make(chan error, 1)
+	go func() { _, err := runOnce(t, w); done <- err }()
+	waitFor(t, "health calls", func() bool { return ha.calls.Load() >= 2 })
+	h.clock.Advance(h.s.StartupTimeout)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("RunOnce err = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("hung health call blocked the startup timeout")
+	}
+	assertFailedClean(t, h, sid, "startup timeout exceeded")
+}
+
+func TestReconcilePassTimeout(t *testing.T) {
+	h := newHarness(t)
+	h.s.ReconcileInterval = 50 * time.Millisecond
+	h.cloud.hang = map[string]bool{"ListOwned": true}
+	done := make(chan error, 1)
+	go func() { done <- usecase.ReconcilePass(context.Background(), h.worker("w1")) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want deadline exceeded", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconcile pass is not bounded by a timeout")
 	}
 }

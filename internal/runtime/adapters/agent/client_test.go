@@ -234,3 +234,41 @@ func TestExecuteExecutionEvents(t *testing.T) {
 		t.Fatalf("%v %v %s", evs, err, s.path)
 	}
 }
+
+func TestHealthCallTimeout(t *testing.T) {
+	ca := newCA(t, "ca")
+	release := make(chan struct{})
+	srv, _ := startServer(t, ca, ca, true, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	})
+	defer close(release)
+	c := newClient(t, ca)
+	if c.healthTimeout != 10*time.Second {
+		t.Fatalf("default health timeout = %s", c.healthTimeout)
+	}
+	c.healthTimeout = 50 * time.Millisecond
+	start := time.Now()
+	_, _, err := c.Health(context.Background(), usecase.AgentEndpoint{BaseURL: srv.URL, Token: tok})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want deadline exceeded", err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("hung health call took %s", d)
+	}
+}
+
+func TestTransportTimeouts(t *testing.T) {
+	c := newClient(t, newCA(t, "ca"))
+	tr, ok := c.http.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T", c.http.Transport)
+	}
+	if tr.Proxy != nil || tr.TLSHandshakeTimeout != 10*time.Second || tr.IdleConnTimeout != 30*time.Second ||
+		tr.DialContext == nil || tr.TLSClientConfig == nil || tr.TLSClientConfig.RootCAs == nil ||
+		len(tr.TLSClientConfig.Certificates) != 1 {
+		t.Fatalf("transport = %+v", tr)
+	}
+}

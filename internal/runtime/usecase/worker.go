@@ -29,6 +29,8 @@ const (
 	backoffMax            = 10 * time.Minute
 	maxStaleRetries       = 5
 	defaultVerifyInterval = 5 * time.Second
+	defaultHealthTimeout  = 10 * time.Second
+	maxReconcilePass      = 2 * time.Minute
 )
 
 var (
@@ -50,6 +52,7 @@ type Worker struct {
 	s              WorkerSettings
 	log            *slog.Logger
 	verifyInterval time.Duration
+	healthTimeout  time.Duration // лимит одного вызова /health при проверке
 }
 
 // NewWorker создаёт воркер; нулевые настройки заменяются умолчаниями.
@@ -68,6 +71,7 @@ func NewWorker(repo EnvironmentRepository, q JobQueue, cloud CloudProvider, host
 		repo: repo, q: q, cloud: cloud, host: host, agent: agent, sec: sec, clock: clock, s: s,
 		log:            slog.Default().With("component", "runtime-worker", "owner", s.Owner),
 		verifyInterval: defaultVerifyInterval,
+		healthTimeout:  defaultHealthTimeout,
 	}
 }
 
@@ -181,7 +185,7 @@ func (w *Worker) keepLease(ctx context.Context, stop <-chan struct{}, job Job,
 			return
 		case <-t.C:
 		}
-		kind, err := w.q.Renew(ctx, job, w.s.Owner, w.s.Lease)
+		kind, err := w.renew(ctx, job)
 		switch {
 		case errors.Is(err, ErrLeaseLost):
 			cancelLease(ErrLeaseLost)
@@ -203,6 +207,14 @@ func (w *Worker) keepLease(ctx context.Context, stop <-chan struct{}, job Job,
 			}
 		}
 	}
+}
+
+// renew продлевает lease; вызов ограничен Lease/3, чтобы зависший запрос к БД не помешал
+// заметить, что lease не продлевался дольше Lease.
+func (w *Worker) renew(ctx context.Context, job Job) (JobKind, error) {
+	ctx, cancel := context.WithTimeout(ctx, max(w.s.Lease/3, time.Millisecond))
+	defer cancel()
+	return w.q.Renew(ctx, job, w.s.Owner, w.s.Lease)
 }
 
 // jobRun — состояние выполнения одного задания.
@@ -290,7 +302,7 @@ func (r *jobRun) leaseErr() error {
 
 // syncKind продлевает lease и берёт текущий вид задания (MarkForDelete мог сменить его на delete).
 func (r *jobRun) syncKind() error {
-	kind, err := r.w.q.Renew(r.leaseCtx, r.job, r.w.s.Owner, r.w.s.Lease)
+	kind, err := r.w.renew(r.leaseCtx, r.job)
 	if err != nil {
 		return err
 	}
