@@ -2,6 +2,7 @@
 # Fake ansible-playbook for tests. Records facts into $HOME.
 echo "$@" > "$HOME/args.txt"
 pwd -P > "$HOME/cwd.txt"
+echo "LC_ALL=$LC_ALL LANG=$LANG" > "$HOME/locale.txt"
 while [ $# -gt 0 ]; do
   if [ "$1" = "-i" ]; then inv="$2"; fi
   shift

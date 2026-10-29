@@ -150,6 +150,9 @@ func (r *Runner) Configure(ctx context.Context, c usecase.HostConfig) error {
 		"HOME=" + os.Getenv("HOME"),
 		"ANSIBLE_SSH_ARGS=-o UserKnownHostsFile=" + knownHosts + " -o StrictHostKeyChecking=yes",
 		"ANSIBLE_HOST_KEY_CHECKING=True",
+		// ansible-core требует UTF-8 локаль; в контейнере API её может не быть.
+		"LC_ALL=C.UTF-8",
+		"LANG=C.UTF-8",
 	}
 	cmd.Dir = filepath.Dir(r.playbook) // ansible.cfg читается из cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

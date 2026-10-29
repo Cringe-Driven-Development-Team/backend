@@ -144,17 +144,35 @@ func TestRunnerLogsMaskToken(t *testing.T) {
 
 func TestRunnerVarsContent(t *testing.T) {
 	e := setup(t)
-	// script copies nothing else; check via the generated vars before removal using a hook
 	c := cfg()
 	vars, err := e.runner.vars(c)
 	noErr(t, err)
-	eq(t, "abc123", vars["agent_wheel_sha256"])
-	eq(t, "CA-PEM", vars["ca_cert_pem"])
-	eq(t, secretToken, vars["token"])
-	eq(t, []string{"1.2.3.4"}, vars["blocked_public_ips"])
-	if _, ok := vars["host_public_key"]; ok {
-		t.Fatal("host key in vars")
-	}
+	// Полный набор ключей: лишний ключ (например, host key) или пропавший — ошибка.
+	eq(t, map[string]any{
+		"session_id":         c.SessionID.String(),
+		"language":           "python",
+		"private_ip":         "10.0.0.5",
+		"token":              secretToken,
+		"server_cert_pem":    "CERT",
+		"server_key_pem":     "KEY",
+		"python_image":       "py:1",
+		"r_image":            "r:1",
+		"kernel_dns":         "1.1.1.1",
+		"blocked_public_ips": []string{"1.2.3.4"},
+		"agent_wheel":        "/a/agent.whl",
+		"agent_wheel_sha256": "abc123",
+		"agent_requirements": "/a/req.txt",
+		"agent_service":      "/a/agent.service",
+		"ca_cert_pem":        "CA-PEM",
+	}, vars)
+}
+
+func TestRunnerSetsUTF8Locale(t *testing.T) {
+	e := setup(t)
+	t.Setenv("LC_ALL", "POSIX")
+	t.Setenv("LANG", "")
+	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	eq(t, "LC_ALL=C.UTF-8 LANG=C.UTF-8", readHome(t, e, "locale.txt"))
 }
 
 func TestRunnerRunsInPlaybookDir(t *testing.T) {
