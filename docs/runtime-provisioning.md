@@ -127,8 +127,8 @@ READY → DELETING → DELETED
 2. На VPS2 указать в compose образ `pr-<branch>-<sha>` и выполнить:
 
    ```bash
-   docker compose run --rm backend /app/runtime-smoke --language python
-   docker compose run --rm backend /app/runtime-smoke --language r --parallel 3
+   docker compose run --rm --no-deps backend /app/runtime-smoke --language python
+   docker compose run --rm --no-deps backend /app/runtime-smoke --language r --parallel 3
    ```
 
 3. Проверить сбой воркера: `--kill-worker-after volume` и `--kill-worker-after server`

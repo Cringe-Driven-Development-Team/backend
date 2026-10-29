@@ -44,7 +44,7 @@
   SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
   Jupyter — закрытый TCP без host mounts; сеть и firewall реализует infra (роль `runtime_host`) по docs/runtime-agent-network.md.
 
-Нужны Go, C-компилятор для `-race`, Make, curl, Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор (`-race`), Make, curl, Docker с Compose. `.env` — см. [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
@@ -61,7 +61,7 @@ make health           # GET /health; make logs — последние логи; 
 make run              # то же окружение с логами в терминале
 make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
 make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
-make agent-network-check # отдельная VPS с firewall infra; не CI. runtime-smoke — docs/runtime-provisioning.md
+make agent-network-check # отдельная VPS с firewall infra; не обычный CI. smoke: — docs/runtime-provisioning.md
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с `-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов). Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`, `migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается. Последняя строка — итоговое покрытие; CI пишет ту же строку в summary. Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
@@ -101,9 +101,9 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
-- Агент сам VPS не создаёт: создание, настройку (воркер запускает playbook) и удаление runtime-VPS
-  выполняет `internal/runtime` ([docs](docs/runtime-provisioning.md)). Playbook (`runtime_host`,
-  `runtime_agent`, `site.yml`, mount `/app/deploy/runtime`), сеть/firewall и секреты — в `infra`.
+- Агент сам VPS не создаёт: создание, настройку (воркер запускает playbook) и удаление runtime-VPS выполняет
+  `internal/runtime` ([docs](docs/runtime-provisioning.md)). Роли (`runtime_host`, `runtime_agent`, `site.yml`, mount `/app/deploy/runtime`): установка агента/systemd, mTLS-доступ Go API
+  к агенту, сеть/firewall и секреты — в `infra`; запускает их воркер `internal/runtime`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие
