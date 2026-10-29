@@ -30,6 +30,31 @@ func TestRuntimeFakeBuilds(t *testing.T) {
 	}
 }
 
+func TestSmokeDepsUseOwnWorkSubdir(t *testing.T) {
+	work := t.TempDir()
+	// Каталог операции API (формат <session>-<n>) не должен пропасть из-за smoke.
+	apiOp := filepath.Join(work, uuid.NewString()+"-1")
+	if err := os.Mkdir(apiOp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.RuntimeConfig{Enabled: true, Provider: "fake", SecretsKey: make([]byte, 32), MaxActive: 1, MaxConcurrentOps: 1, WorkDir: work}
+	_, cleanup, err := BuildSmokeDeps(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	smokeDirs, _ := filepath.Glob(filepath.Join(work, "smoke-*"))
+	if len(smokeDirs) != 1 {
+		t.Fatalf("smoke dirs = %v", smokeDirs)
+	}
+	cleanup()
+	if _, err := os.Stat(smokeDirs[0]); !os.IsNotExist(err) {
+		t.Fatalf("smoke dir not removed: %v", err)
+	}
+	if _, err := os.Stat(apiOp); err != nil {
+		t.Fatalf("API operation dir touched: %v", err)
+	}
+}
+
 func TestRuntimeInitErrorOnBadCA(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "bad.pem")
 	if err := os.WriteFile(bad, []byte("not pem SECRET"), 0o600); err != nil {

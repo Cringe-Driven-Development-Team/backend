@@ -120,19 +120,32 @@ func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (u
 	return newService(p.repo, cfg), p.worker(ownerName(), workerLease), nil
 }
 
-// BuildSmokeDeps собирает зависимости runtime-smoke (cfg.Enabled должен быть true).
-func BuildSmokeDeps(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (smoke.Deps, error) {
+// BuildSmokeDeps собирает зависимости runtime-smoke (cfg.Enabled должен быть true); cleanup удаляет
+// рабочий подкаталог smoke.
+func BuildSmokeDeps(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (smoke.Deps, func(), error) {
 	if !cfg.Enabled {
-		return smoke.Deps{}, usecase.ErrDisabled
+		return smoke.Deps{}, nil, usecase.ErrDisabled
 	}
+	// Свой подкаталог RUNTIME_WORK_DIR/smoke-<random>: ansible.New чистит устаревшие каталоги
+	// операций в рабочем каталоге и не должен задеть каталоги работающего API.
+	if err := os.MkdirAll(cfg.WorkDir, 0o700); err != nil {
+		return smoke.Deps{}, nil, fmt.Errorf("runtime: create work dir: %w", err)
+	}
+	dir, err := os.MkdirTemp(cfg.WorkDir, "smoke-")
+	if err != nil {
+		return smoke.Deps{}, nil, fmt.Errorf("runtime: create smoke work dir: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	cfg.WorkDir = dir
 	p, err := assemble(ctx, cfg, pool)
 	if err != nil {
-		return smoke.Deps{}, err
+		cleanup()
+		return smoke.Deps{}, nil, err
 	}
 	return smoke.Deps{
 		Service: newService(p.repo, cfg), Repo: p.repo, Secrets: p.sec, Agent: p.exec, Cloud: p.cloud,
 		NewWorker: p.worker,
-	}, nil
+	}, cleanup, nil
 }
 
 // openStackAdapters — конкретные адаптеры боевого режима.

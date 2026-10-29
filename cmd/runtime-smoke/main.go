@@ -47,11 +47,12 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "database ping:", err)
 		return 1
 	}
-	deps, err := runtimemodule.BuildSmokeDeps(ctx, cfg.Runtime, pool)
+	deps, cleanup, err := runtimemodule.BuildSmokeDeps(ctx, cfg.Runtime, pool)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "runtime:", err)
 		return 1
 	}
+	defer cleanup()
 	rep, runErr := smoke.Run(ctx, deps, opts)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")

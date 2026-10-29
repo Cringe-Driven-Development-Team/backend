@@ -121,7 +121,8 @@ READY → DELETING → DELETED
 
 `cmd/runtime-smoke` создаёт сессии в настоящем облаке, выполняет `print(42)` в агенте,
 удаляет их и проверяет, что не осталось ресурсов; печатает JSON-отчёт, код выхода
-не 0 при ошибке. Образ с бинарём `/app/runtime-smoke` для PR собирает `workflow_dispatch`
+не 0 при ошибке. Каталоги Ansible smoke держит в своём `RUNTIME_WORK_DIR/smoke-<random>`
+(удаляется при выходе) и не трогает каталоги работающего API. Образ с бинарём `/app/runtime-smoke` для PR собирает `workflow_dispatch`
 с тегом `pr-<branch>-<sha>`.
 
 1. Запустить `ci.yml` вручную (`workflow_dispatch`) на ветке PR.
