@@ -20,9 +20,8 @@ import (
 	"net"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"golang.org/x/crypto/ssh"
 )
 
 const certTTL = 7 * 24 * time.Hour

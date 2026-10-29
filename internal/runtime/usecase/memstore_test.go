@@ -8,10 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/google/uuid"
 )
 
 // testClock — управляемые часы: Now возвращает t и сдвигает его на step.

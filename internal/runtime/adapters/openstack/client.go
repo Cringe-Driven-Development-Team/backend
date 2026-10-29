@@ -11,11 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud/v2"
-	gopenstack "github.com/gophercloud/gophercloud/v2/openstack"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/gophercloud/gophercloud/v2"
+	gopenstack "github.com/gophercloud/gophercloud/v2/openstack"
 )
 
 const defaultPoll = 5 * time.Second

@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/google/uuid"
 )
 
 var (
@@ -236,7 +235,7 @@ func TestAgentExecutePrint(t *testing.T) {
 	if err != nil || state != "SUCCEEDED" {
 		t.Fatalf("Execution = %q, %v", state, err)
 	}
-	if _, err := agent.Execution(ctx, ep, "missing"); err == nil {
+	if _, err = agent.Execution(ctx, ep, "missing"); err == nil {
 		t.Fatal("unknown execution must fail")
 	}
 	events, err := agent.Events(ctx, ep, 0)

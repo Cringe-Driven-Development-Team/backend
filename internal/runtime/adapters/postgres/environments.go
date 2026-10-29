@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 )
 
 // DB описывает нужное от *pgxpool.Pool: запросы и транзакции.

@@ -13,19 +13,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	th "github.com/gophercloud/gophercloud/v2/testhelper"
-	fakeclient "github.com/gophercloud/gophercloud/v2/testhelper/client"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/google/uuid"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	fakeclient "github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
-var (
-	sessionID   = uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	operationID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
-)
+func sessionID() uuid.UUID   { return uuid.MustParse("11111111-1111-1111-1111-111111111111") }
+func operationID() uuid.UUID { return uuid.MustParse("22222222-2222-2222-2222-222222222222") }
 
 func testConfig() config.RuntimeConfig {
 	return config.RuntimeConfig{
@@ -53,7 +50,7 @@ func setup(t *testing.T) (th.FakeServer, *Provider) {
 }
 
 func testEnv() domain.Environment {
-	return domain.Environment{SessionID: sessionID, OperationID: operationID}
+	return domain.Environment{SessionID: sessionID(), OperationID: operationID()}
 }
 
 func ownedMeta(env string, session uuid.UUID) map[string]string {
@@ -61,7 +58,7 @@ func ownedMeta(env string, session uuid.UUID) map[string]string {
 		"cellestial_runtime": "1",
 		"cellestial_env":     env,
 		"session_id":         session.String(),
-		"operation_id":       operationID.String(),
+		"operation_id":       operationID().String(),
 	}
 }
 
@@ -86,7 +83,7 @@ func decodeBody(t *testing.T, r *http.Request) map[string]any {
 func TestEnsureVolumeCreatesWithMetadata(t *testing.T) {
 	srv, p := setup(t)
 	srv.Mux.HandleFunc("GET /volumes/detail", func(w http.ResponseWriter, r *http.Request) {
-		if q := r.URL.Query().Get("metadata"); !strings.Contains(q, sessionID.String()) || !strings.Contains(q, "production") {
+		if q := r.URL.Query().Get("metadata"); !strings.Contains(q, sessionID().String()) || !strings.Contains(q, "production") {
 			t.Errorf("list metadata filter = %q", q)
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"volumes": []any{}})
@@ -95,7 +92,7 @@ func TestEnsureVolumeCreatesWithMetadata(t *testing.T) {
 		th.TestJSONRequest(t, r, fmt.Sprintf(`{"volume":{
 			"name":"runtime-%s","size":20,"imageRef":"img-1","volume_type":"fast.ru-7a","availability_zone":"ru-7a",
 			"metadata":{"cellestial_runtime":"1","cellestial_env":"production","session_id":"%s","operation_id":"%s"}}}`,
-			sessionID, sessionID, operationID))
+			sessionID(), sessionID(), operationID()))
 		writeJSON(t, w, http.StatusAccepted, map[string]any{"volume": map[string]any{"id": "vol-1", "status": "creating"}})
 	})
 	var gets atomic.Int32
@@ -120,7 +117,7 @@ func TestEnsureVolumeFindsExistingByMetadata(t *testing.T) {
 	srv, p := setup(t)
 	srv.Mux.HandleFunc("GET /volumes/detail", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, http.StatusOK, map[string]any{"volumes": []any{
-			map[string]any{"id": "vol-7", "status": "available", "metadata": ownedMeta("production", sessionID)},
+			map[string]any{"id": "vol-7", "status": "available", "metadata": ownedMeta("production", sessionID())},
 		}})
 	})
 	srv.Mux.HandleFunc("GET /volumes/vol-7", func(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +151,7 @@ func TestEnsureServerBootFromVolume(t *testing.T) {
 	srv, p := setup(t)
 	const userData = "#cloud-config\nssh_deletekeys: true\n"
 	srv.Mux.HandleFunc("GET /servers/detail", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("name"); got != "^runtime-"+sessionID.String()+"$" {
+		if got := r.URL.Query().Get("name"); got != "^runtime-"+sessionID().String()+"$" {
 			t.Errorf("name filter = %q", got)
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"servers": []any{}})
@@ -166,7 +163,7 @@ func TestEnsureServerBootFromVolume(t *testing.T) {
 			name      string
 			got, want any
 		}{
-			{"name", body["name"], "runtime-" + sessionID.String()},
+			{"name", body["name"], "runtime-" + sessionID().String()},
 			{"flavorRef", body["flavorRef"], "flavor-1"},
 			{"availability_zone", body["availability_zone"], "ru-7a"},
 			{"key_name", body["key_name"], "provisioner"},
@@ -177,8 +174,8 @@ func TestEnsureServerBootFromVolume(t *testing.T) {
 			{"bdm.delete_on_termination", bdm["delete_on_termination"], true},
 			{"bdm.source_type", bdm["source_type"], "volume"},
 			{"bdm.destination_type", bdm["destination_type"], "volume"},
-			{"metadata.session_id", body["metadata"].(map[string]any)["session_id"], sessionID.String()},
-			{"metadata.operation_id", body["metadata"].(map[string]any)["operation_id"], operationID.String()},
+			{"metadata.session_id", body["metadata"].(map[string]any)["session_id"], sessionID().String()},
+			{"metadata.operation_id", body["metadata"].(map[string]any)["operation_id"], operationID().String()},
 			{"metadata.cellestial_env", body["metadata"].(map[string]any)["cellestial_env"], "production"},
 			{"metadata.cellestial_runtime", body["metadata"].(map[string]any)["cellestial_runtime"], "1"},
 		}
@@ -231,7 +228,7 @@ func TestEnsurePortTags(t *testing.T) {
 	})
 	srv.Mux.HandleFunc("POST /ports", func(w http.ResponseWriter, r *http.Request) {
 		body := decodeBody(t, r)["port"].(map[string]any)
-		if body["network_id"] != "net-1" || body["name"] != "runtime-"+sessionID.String() {
+		if body["network_id"] != "net-1" || body["name"] != "runtime-"+sessionID().String() {
 			t.Errorf("port body = %v", body)
 		}
 		if sg := body["security_groups"].([]any); len(sg) != 1 || sg[0] != "sg-1" {
@@ -241,7 +238,7 @@ func TestEnsurePortTags(t *testing.T) {
 			t.Errorf("fixed_ips = %v", ip)
 		}
 		desc, _ := body["description"].(string)
-		if !strings.Contains(desc, "operation_id="+operationID.String()) || !strings.Contains(desc, "session_id="+sessionID.String()) {
+		if !strings.Contains(desc, "operation_id="+operationID().String()) || !strings.Contains(desc, "session_id="+sessionID().String()) {
 			t.Errorf("description = %q", desc)
 		}
 		writeJSON(t, w, http.StatusCreated, map[string]any{"port": map[string]any{
@@ -250,7 +247,7 @@ func TestEnsurePortTags(t *testing.T) {
 	})
 	var tagged atomic.Bool
 	srv.Mux.HandleFunc("PUT /ports/port-1/tags", func(w http.ResponseWriter, r *http.Request) {
-		th.TestJSONRequest(t, r, fmt.Sprintf(`{"tags":["cellestial_runtime=1","cellestial_env=production","session_id=%s"]}`, sessionID))
+		th.TestJSONRequest(t, r, fmt.Sprintf(`{"tags":["cellestial_runtime=1","cellestial_env=production","session_id=%s"]}`, sessionID()))
 		tagged.Store(true)
 		writeJSON(t, w, http.StatusOK, map[string]any{"tags": []string{}})
 	})
@@ -267,13 +264,13 @@ func TestEnsurePortTags(t *testing.T) {
 func TestEnsurePortFindsByTags(t *testing.T) {
 	srv, p := setup(t)
 	srv.Mux.HandleFunc("GET /ports", func(w http.ResponseWriter, r *http.Request) {
-		want := fmt.Sprintf("cellestial_runtime=1,cellestial_env=production,session_id=%s", sessionID)
+		want := fmt.Sprintf("cellestial_runtime=1,cellestial_env=production,session_id=%s", sessionID())
 		if got := r.URL.Query().Get("tags"); got != want {
 			t.Errorf("tags filter = %q", got)
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{map[string]any{
 			"id": "port-4", "fixed_ips": []any{map[string]any{"subnet_id": "subnet-1", "ip_address": "10.0.0.9"}},
-			"tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID.String()},
+			"tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID().String()},
 		}}})
 	})
 	srv.Mux.HandleFunc("POST /ports", func(w http.ResponseWriter, r *http.Request) {
@@ -379,7 +376,7 @@ func TestListOwnedFiltersEnv(t *testing.T) {
 	other := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	srv.Mux.HandleFunc("GET /servers/detail", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, http.StatusOK, map[string]any{"servers": []any{
-			map[string]any{"id": "srv-prod", "metadata": ownedMeta("production", sessionID)},
+			map[string]any{"id": "srv-prod", "metadata": ownedMeta("production", sessionID())},
 			map[string]any{"id": "srv-dev", "metadata": ownedMeta("dev", other)},
 			map[string]any{"id": "srv-foreign", "metadata": map[string]string{"session_id": other.String()}},
 		}})
@@ -389,7 +386,7 @@ func TestListOwnedFiltersEnv(t *testing.T) {
 			t.Errorf("volume metadata filter = %q", q)
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"volumes": []any{
-			map[string]any{"id": "vol-prod", "metadata": ownedMeta("production", sessionID)},
+			map[string]any{"id": "vol-prod", "metadata": ownedMeta("production", sessionID())},
 			map[string]any{"id": "vol-dev", "metadata": ownedMeta("dev", other)},
 		}})
 	})
@@ -401,7 +398,7 @@ func TestListOwnedFiltersEnv(t *testing.T) {
 			}
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{
-			map[string]any{"id": "port-prod", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID.String()}},
+			map[string]any{"id": "port-prod", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID().String()}},
 			map[string]any{"id": "port-dev", "tags": []string{"cellestial_runtime=1", "cellestial_env=dev", "session_id=" + other.String()}},
 		}})
 	})
@@ -415,7 +412,7 @@ func TestListOwnedFiltersEnv(t *testing.T) {
 		t.Fatalf("ListOwned = %+v", got)
 	}
 	for _, r := range got {
-		if !want[r.Kind+"/"+r.ID] || r.SessionID != sessionID {
+		if !want[r.Kind+"/"+r.ID] || r.SessionID != sessionID() {
 			t.Fatalf("unexpected resource %+v", r)
 		}
 	}
@@ -459,9 +456,9 @@ func TestListOwnedFindsUntaggedPortByDescription(t *testing.T) {
 		}
 		writeJSON(t, w, http.StatusOK, map[string]any{"ports": []any{
 			map[string]any{"id": "port-untagged", "description": fmt.Sprintf(
-				"cellestial_runtime=1 cellestial_env=production session_id=%s operation_id=%s", sessionID, operationID)},
+				"cellestial_runtime=1 cellestial_env=production session_id=%s operation_id=%s", sessionID(), operationID())},
 			map[string]any{"id": "port-dev", "description": fmt.Sprintf(
-				"cellestial_runtime=1 cellestial_env=dev session_id=%s operation_id=%s", other, operationID)},
+				"cellestial_runtime=1 cellestial_env=dev session_id=%s operation_id=%s", other, operationID())},
 			map[string]any{"id": "port-foreign", "description": "router interface"},
 		}})
 	})
@@ -470,7 +467,7 @@ func TestListOwnedFindsUntaggedPortByDescription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListOwned: %v", err)
 	}
-	if len(got) != 1 || got[0].Kind != "port" || got[0].ID != "port-untagged" || got[0].SessionID != sessionID {
+	if len(got) != 1 || got[0].Kind != "port" || got[0].ID != "port-untagged" || got[0].SessionID != sessionID() {
 		t.Fatalf("ListOwned = %+v", got)
 	}
 }
@@ -486,7 +483,7 @@ func TestEnsurePortByIDRetagsUntagged(t *testing.T) {
 	var tagged atomic.Bool
 	srv.Mux.HandleFunc("PUT /ports/port-1/tags", func(w http.ResponseWriter, r *http.Request) {
 		th.TestJSONRequest(t, r, fmt.Sprintf(
-			`{"tags":["keep-me","cellestial_runtime=1","cellestial_env=production","session_id=%s"]}`, sessionID))
+			`{"tags":["keep-me","cellestial_runtime=1","cellestial_env=production","session_id=%s"]}`, sessionID()))
 		tagged.Store(true)
 		writeJSON(t, w, http.StatusOK, map[string]any{"tags": []string{}})
 	})
@@ -504,7 +501,7 @@ func TestEnsurePortByIDRetagsUntagged(t *testing.T) {
 	tagged.Store(false)
 	srv.Mux.HandleFunc("GET /ports/port-2", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, http.StatusOK, map[string]any{"port": map[string]any{
-			"id": "port-2", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID.String()},
+			"id": "port-2", "tags": []string{"cellestial_runtime=1", "cellestial_env=production", "session_id=" + sessionID().String()},
 		}})
 	})
 	srv.Mux.HandleFunc("PUT /ports/port-2/tags", func(w http.ResponseWriter, r *http.Request) {

@@ -45,7 +45,7 @@ func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifa
 	if err != nil {
 		return nil, fmt.Errorf("ansible playbook path: %w", err)
 	}
-	if err := os.MkdirAll(absWork, 0o700); err != nil {
+	if err = os.MkdirAll(absWork, 0o700); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
 	entries, err := os.ReadDir(absWork)
@@ -56,7 +56,7 @@ func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifa
 		if !e.IsDir() || !opDirName.MatchString(e.Name()) {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(absWork, e.Name())); err != nil {
+		if err = os.RemoveAll(filepath.Join(absWork, e.Name())); err != nil {
 			return nil, fmt.Errorf("remove stale operation dir: %w", err)
 		}
 	}
@@ -115,7 +115,7 @@ func (r *Runner) Configure(ctx context.Context, c usecase.HostConfig) error {
 		return fmt.Errorf("create session dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err = os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
 

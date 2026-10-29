@@ -15,8 +15,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agent"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/ansible"
@@ -25,6 +23,7 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/pki"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/postgres"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -41,7 +40,7 @@ func (systemClock) Now() time.Time { return time.Now() }
 
 // Build собирает сервис и воркер. При cfg.Enabled=false возвращает сервис, отвечающий
 // ErrDisabled, и nil-воркер; адаптеры не создаются. cfg содержит секреты и не логируется.
-func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (usecase.EnvironmentService, *usecase.Worker, error) {
+func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (usecase.EnvironmentService, *usecase.Worker, error) { //nolint:ireturn // contract for #13 consumers
 	profiles := map[string]bool{"default": true}
 	// Репозиторий — тонкая обёртка над пулом (без внешних соединений), нужна и выключенному
 	// сервису: Get/RequestDelete читают только БД.
@@ -72,11 +71,11 @@ func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (u
 		c, h, a := fake.New(fakeCloudDelay)
 		cloud, host, ag = c, h, a
 	case "openstack":
-		var err error
-		cloud, host, ag, sec, err = buildOpenStack(ctx, cfg, clock)
+		osa, err := buildOpenStack(ctx, cfg, clock)
 		if err != nil {
 			return nil, nil, err
 		}
+		cloud, host, ag, sec = osa.cloud, osa.host, osa.agent, osa.secrets
 	default:
 		return nil, nil, fmt.Errorf("runtime: unknown provider %q", cfg.Provider)
 	}
@@ -95,7 +94,15 @@ func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (u
 	return svc, worker, nil
 }
 
-func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock) (usecase.CloudProvider, usecase.HostConfigurator, usecase.AgentClient, usecase.Secrets, error) {
+// openStackAdapters — конкретные адаптеры боевого режима.
+type openStackAdapters struct {
+	cloud   *openstack.Provider
+	host    *ansible.Runner
+	agent   *agent.Client
+	secrets *pki.Secrets
+}
+
+func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock) (openStackAdapters, error) {
 	read := func(path string) ([]byte, error) {
 		b, err := os.ReadFile(path)
 		if err != nil {
@@ -105,41 +112,41 @@ func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase
 	}
 	caCert, err := read(cfg.TLSCACertFile)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return openStackAdapters{}, err
 	}
 	caKey, err := read(cfg.TLSCAKeyFile)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return openStackAdapters{}, err
 	}
 	clientCert, err := read(cfg.TLSClientCertFile)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return openStackAdapters{}, err
 	}
 	clientKey, err := read(cfg.TLSClientKeyFile)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return openStackAdapters{}, err
 	}
 	sec, err := pki.New(cfg.SecretsKey, caCert, caKey, clock)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("runtime: secrets: %w", err)
+		return openStackAdapters{}, fmt.Errorf("runtime: secrets: %w", err)
 	}
 	ag, err := agent.New(caCert, clientCert, clientKey)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("runtime: agent client: %w", err)
+		return openStackAdapters{}, fmt.Errorf("runtime: agent client: %w", err)
 	}
 	art, playbook, err := artifacts(cfg.TLSCACertFile)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return openStackAdapters{}, err
 	}
 	host, err := ansible.New(cfg.WorkDir, playbook, cfg.SSHPrivateKeyFile, cfg.SSHUser, "ansible-playbook", art)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("runtime: ansible: %w", err)
+		return openStackAdapters{}, fmt.Errorf("runtime: ansible: %w", err)
 	}
 	cloud, err := openstack.New(ctx, cfg)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("runtime: openstack: %w", err)
+		return openStackAdapters{}, fmt.Errorf("runtime: openstack: %w", err)
 	}
-	return cloud, host, ag, sec, nil
+	return openStackAdapters{cloud: cloud, host: host, agent: ag, secrets: sec}, nil
 }
 
 // artifacts находит артефакты агента и плейбук (ruling R8).

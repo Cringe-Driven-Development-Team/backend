@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/google/uuid"
 )
 
 func TestRuntimeDisabledDoesNotStartWorker(t *testing.T) {

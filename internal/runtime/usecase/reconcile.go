@@ -7,9 +7,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
+	"github.com/google/uuid"
 )
 
 // reconcileLoop при старте и каждые ReconcileInterval до отмены ctx повторяет очистку CLEANUP_PENDING

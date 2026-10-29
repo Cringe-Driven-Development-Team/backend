@@ -34,7 +34,9 @@ func Run(cfg config.Config) error {
 		slog.Info("runtime worker started", slog.String("provider", app.RuntimeMode))
 		go func() {
 			defer close(workerDone)
-			app.RuntimeWorker.Run(workerCtx)
+			if err := app.RuntimeWorker.Run(workerCtx); err != nil {
+				slog.Error("runtime worker stopped", slog.String("error", err.Error()))
+			}
 		}()
 	} else {
 		close(workerDone)

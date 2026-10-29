@@ -26,12 +26,10 @@ func TestCanTransition(t *testing.T) {
 			t.Errorf("%s -> %s must be allowed", c[0], c[1])
 		}
 	}
-	forbidden := [][2]State{
-		{StateReady, StateCreating},
-		{StateVerifying, StateQueued},
-	}
 	all := []State{StateQueued, StateCreating, StateConfiguring, StateVerifying, StateReady,
 		StateDeleting, StateDeleted, StateCleanupPending, StateFailed}
+	forbidden := make([][2]State, 0, 2+2*len(all))
+	forbidden = append(forbidden, [2]State{StateReady, StateCreating}, [2]State{StateVerifying, StateQueued})
 	for _, to := range all {
 		forbidden = append(forbidden, [2]State{StateDeleted, to}, [2]State{StateFailed, to})
 	}

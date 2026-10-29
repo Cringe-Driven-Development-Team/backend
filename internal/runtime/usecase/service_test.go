@@ -5,10 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
-
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 )
 
 func newSvc(t *testing.T, enabled bool) (*Service, *MockEnvironmentRepository) {

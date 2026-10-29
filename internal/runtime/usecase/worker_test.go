@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/fake"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
+	"github.com/google/uuid"
 )
 
 const testLease = 30 * time.Millisecond
@@ -764,7 +763,7 @@ func TestConcurrencyLimit(t *testing.T) {
 	h.host.Block = block
 	ch := &countingHost{inner: h.host}
 	h.cfg = ch
-	var sids []uuid.UUID
+	sids := make([]uuid.UUID, 0, 4)
 	for range 4 {
 		sids = append(sids, h.request())
 	}

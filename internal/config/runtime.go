@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -49,7 +50,7 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 	if raw := get("RUNTIME_ENABLED", ""); raw != "" {
 		b, err := strconv.ParseBool(raw)
 		if err != nil {
-			return RuntimeConfig{}, fmt.Errorf("invalid RUNTIME_ENABLED: expected true or false")
+			return RuntimeConfig{}, errors.New("invalid RUNTIME_ENABLED: expected true or false")
 		}
 		r.Enabled = b
 	}
@@ -114,11 +115,11 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 	}
 
 	if r.Provider != "openstack" && r.Provider != "fake" {
-		return RuntimeConfig{}, fmt.Errorf("invalid RUNTIME_PROVIDER: expected openstack or fake")
+		return RuntimeConfig{}, errors.New("invalid RUNTIME_PROVIDER: expected openstack or fake")
 	}
 	key, err := base64.StdEncoding.DecodeString(get("RUNTIME_SECRETS_KEY", ""))
 	if err != nil || len(key) != 32 {
-		return RuntimeConfig{}, fmt.Errorf("invalid RUNTIME_SECRETS_KEY: expected base64 of exactly 32 bytes")
+		return RuntimeConfig{}, errors.New("invalid RUNTIME_SECRETS_KEY: expected base64 of exactly 32 bytes")
 	}
 	r.SecretsKey = key
 
@@ -142,12 +143,12 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 				continue
 			}
 			if net.ParseIP(part) == nil {
-				return RuntimeConfig{}, fmt.Errorf("invalid RUNTIME_BLOCKED_PUBLIC_IPS: expected comma-separated IP addresses")
+				return RuntimeConfig{}, errors.New("invalid RUNTIME_BLOCKED_PUBLIC_IPS: expected comma-separated IP addresses")
 			}
 			r.BlockedPublicIPs = append(r.BlockedPublicIPs, part)
 		}
 		if len(r.BlockedPublicIPs) == 0 {
-			return RuntimeConfig{}, fmt.Errorf("RUNTIME_BLOCKED_PUBLIC_IPS is not set")
+			return RuntimeConfig{}, errors.New("RUNTIME_BLOCKED_PUBLIC_IPS is not set")
 		}
 	}
 	return r, nil

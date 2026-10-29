@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/google/uuid"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
@@ -14,10 +17,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/attributestags"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
-
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 )
 
 // Ключи metadata и тегов, которыми помечаются ресурсы рантайма.

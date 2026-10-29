@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v5"
-
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 )
 
 func TestClaimSkipsLeasedJob(t *testing.T) {
@@ -21,12 +20,12 @@ func TestClaimSkipsLeasedJob(t *testing.T) {
 	}
 	db := newPool(t)
 	db.ExpectBegin()
-	db.ExpectQuery(claimSelectSQL).WillReturnRows(pgxmock.NewRows([]string{"id", "session_id", "kind", "attempt"}).AddRow(int64(5), testID, "create", 2))
+	db.ExpectQuery(claimSelectSQL).WillReturnRows(pgxmock.NewRows([]string{"id", "session_id", "kind", "attempt"}).AddRow(int64(5), testID(), "create", 2))
 	db.ExpectExec(claimUpdateSQL).WithArgs(int64(5), "w1", 30.0).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	db.ExpectCommit()
 	db.ExpectRollback()
 	job, ok, err := NewRepository(db).Claim(context.Background(), "w1", 30*time.Second)
-	if err != nil || !ok || job.ID != 5 || job.Kind != usecase.JobCreate || job.Attempt != 3 || job.SessionID != testID {
+	if err != nil || !ok || job.ID != 5 || job.Kind != usecase.JobCreate || job.Attempt != 3 || job.SessionID != testID() {
 		t.Fatalf("job=%+v ok=%v err=%v", job, ok, err)
 	}
 }

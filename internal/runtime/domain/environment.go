@@ -42,19 +42,21 @@ type Environment struct {
 	CreatedAt, UpdatedAt     time.Time
 }
 
-var transitions = map[State]map[State]struct{}{
-	StateQueued:         {StateCreating: {}, StateDeleting: {}},
-	StateCreating:       {StateConfiguring: {}, StateDeleting: {}, StateCleanupPending: {}},
-	StateConfiguring:    {StateVerifying: {}, StateDeleting: {}, StateCleanupPending: {}},
-	StateVerifying:      {StateReady: {}, StateDeleting: {}, StateCleanupPending: {}},
-	StateReady:          {StateDeleting: {}},
-	StateDeleting:       {StateDeleted: {}, StateCleanupPending: {}},
-	StateCleanupPending: {StateDeleting: {}, StateFailed: {}},
+func transitions() map[State]map[State]struct{} {
+	return map[State]map[State]struct{}{
+		StateQueued:         {StateCreating: {}, StateDeleting: {}},
+		StateCreating:       {StateConfiguring: {}, StateDeleting: {}, StateCleanupPending: {}},
+		StateConfiguring:    {StateVerifying: {}, StateDeleting: {}, StateCleanupPending: {}},
+		StateVerifying:      {StateReady: {}, StateDeleting: {}, StateCleanupPending: {}},
+		StateReady:          {StateDeleting: {}},
+		StateDeleting:       {StateDeleted: {}, StateCleanupPending: {}},
+		StateCleanupPending: {StateDeleting: {}, StateFailed: {}},
+	}
 }
 
 // CanTransition сообщает, допустим ли переход from → to.
 func CanTransition(from, to State) bool {
-	_, ok := transitions[from][to]
+	_, ok := transitions()[from][to]
 	return ok
 }
 
