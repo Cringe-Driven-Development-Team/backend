@@ -22,6 +22,7 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/openstack"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/pki"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/postgres"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/smoke"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -38,60 +39,100 @@ type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
 
-// Build собирает сервис и воркер. При cfg.Enabled=false возвращает сервис, отвечающий
-// ErrDisabled, и nil-воркер; адаптеры не создаются. cfg содержит секреты и не логируется.
-func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (usecase.EnvironmentService, *usecase.Worker, error) { //nolint:ireturn // contract for #13 consumers
-	profiles := map[string]bool{"default": true}
-	// Репозиторий — тонкая обёртка над пулом (без внешних соединений), нужна и выключенному
-	// сервису: Get/RequestDelete читают только БД.
-	repo := postgres.NewRepository(pool)
-	if !cfg.Enabled {
-		return usecase.NewService(repo, usecase.Settings{Enabled: false, Profiles: profiles}), nil, nil
-	}
-	svc := usecase.NewService(repo, usecase.Settings{
-		Enabled: true, MaxActive: cfg.MaxActive, AgentVersion: cfg.AgentVersion, Profiles: profiles,
-	})
-	clock := systemClock{}
+// parts — собранные адаптеры и общие настройки; из них строятся воркеры Build и smoke.
+type parts struct {
+	cfg   config.RuntimeConfig
+	repo  *postgres.Repository
+	cloud usecase.CloudProvider
+	host  usecase.HostConfigurator
+	ag    usecase.AgentClient
+	exec  smoke.Executor
+	sec   usecase.Secrets
+}
 
-	var (
-		cloud usecase.CloudProvider
-		host  usecase.HostConfigurator
-		ag    usecase.AgentClient
-		sec   usecase.Secrets
-	)
-	switch cfg.Provider {
-	case "fake":
-		caCert, caKey, err := throwawayCA()
-		if err != nil {
-			return nil, nil, fmt.Errorf("runtime: fake CA: %w", err)
-		}
-		if sec, err = pki.New(cfg.SecretsKey, caCert, caKey, clock); err != nil {
-			return nil, nil, fmt.Errorf("runtime: secrets: %w", err)
-		}
-		c, h, a := fake.New(fakeCloudDelay)
-		cloud, host, ag = c, h, a
-	case "openstack":
-		osa, err := buildOpenStack(ctx, cfg, clock)
-		if err != nil {
-			return nil, nil, err
-		}
-		cloud, host, ag, sec = osa.cloud, osa.host, osa.agent, osa.secrets
-	default:
-		return nil, nil, fmt.Errorf("runtime: unknown provider %q", cfg.Provider)
-	}
-
-	name, _ := os.Hostname()
-	var suffix [4]byte
-	_, _ = rand.Read(suffix[:])
-	worker := usecase.NewWorker(repo, repo, cloud, host, ag, sec, clock, usecase.WorkerSettings{
-		Owner:       fmt.Sprintf("%s-%x", name, suffix),
-		Concurrency: cfg.MaxConcurrentOps, Lease: workerLease, PollInterval: workerPoll,
+// worker создаёт воркер с заданными владельцем и lease.
+func (p parts) worker(owner string, lease time.Duration) *usecase.Worker {
+	cfg := p.cfg
+	return usecase.NewWorker(p.repo, p.repo, p.cloud, p.host, p.ag, p.sec, systemClock{}, usecase.WorkerSettings{
+		Owner:       owner,
+		Concurrency: cfg.MaxConcurrentOps, Lease: lease, PollInterval: workerPoll,
 		ReconcileInterval: cfg.ReconcileInterval, StartupTimeout: cfg.StartupTimeout,
 		AnsibleTimeout: cfg.AnsibleTimeout, DrainTimeout: cfg.DrainTimeout, DeleteTimeout: cfg.DeleteTimeout,
 		PythonImage: cfg.PythonImage, RImage: cfg.RImage, KernelDNS: cfg.KernelDNS,
 		BlockedPublicIPs: cfg.BlockedPublicIPs, EnvName: cfg.EnvName,
 	})
-	return svc, worker, nil
+}
+
+func newService(repo *postgres.Repository, cfg config.RuntimeConfig) *usecase.Service {
+	return usecase.NewService(repo, usecase.Settings{
+		Enabled: true, MaxActive: cfg.MaxActive, AgentVersion: cfg.AgentVersion, Profiles: map[string]bool{"default": true},
+	})
+}
+
+// assemble создаёт адаптеры по cfg.Provider; cfg.Enabled должен быть true.
+func assemble(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (parts, error) {
+	p := parts{cfg: cfg, repo: postgres.NewRepository(pool)}
+	clock := systemClock{}
+	switch cfg.Provider {
+	case "fake":
+		caCert, caKey, err := throwawayCA()
+		if err != nil {
+			return parts{}, fmt.Errorf("runtime: fake CA: %w", err)
+		}
+		if p.sec, err = pki.New(cfg.SecretsKey, caCert, caKey, clock); err != nil {
+			return parts{}, fmt.Errorf("runtime: secrets: %w", err)
+		}
+		c, h, a := fake.New(fakeCloudDelay)
+		p.cloud, p.host, p.ag, p.exec = c, h, a, a
+	case "openstack":
+		osa, err := buildOpenStack(ctx, cfg, clock)
+		if err != nil {
+			return parts{}, err
+		}
+		p.cloud, p.host, p.ag, p.exec, p.sec = osa.cloud, osa.host, osa.agent, osa.agent, osa.secrets
+	default:
+		return parts{}, fmt.Errorf("runtime: unknown provider %q", cfg.Provider)
+	}
+	return p, nil
+}
+
+func ownerName() string {
+	name, _ := os.Hostname()
+	var suffix [4]byte
+	_, _ = rand.Read(suffix[:])
+	return fmt.Sprintf("%s-%x", name, suffix)
+}
+
+// Build собирает сервис и воркер. При cfg.Enabled=false возвращает сервис, отвечающий
+// ErrDisabled, и nil-воркер; адаптеры не создаются. cfg содержит секреты и не логируется.
+func Build(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (usecase.EnvironmentService, *usecase.Worker, error) { //nolint:ireturn // contract for #13 consumers
+	// Репозиторий — тонкая обёртка над пулом (без внешних соединений), нужна и выключенному
+	// сервису: Get/RequestDelete читают только БД.
+	if !cfg.Enabled {
+		return usecase.NewService(postgres.NewRepository(pool), usecase.Settings{
+			Enabled: false, Profiles: map[string]bool{"default": true},
+		}), nil, nil
+	}
+	p, err := assemble(ctx, cfg, pool)
+	if err != nil {
+		return nil, nil, err
+	}
+	return newService(p.repo, cfg), p.worker(ownerName(), workerLease), nil
+}
+
+// BuildSmokeDeps собирает зависимости runtime-smoke (cfg.Enabled должен быть true).
+func BuildSmokeDeps(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool) (smoke.Deps, error) {
+	if !cfg.Enabled {
+		return smoke.Deps{}, usecase.ErrDisabled
+	}
+	p, err := assemble(ctx, cfg, pool)
+	if err != nil {
+		return smoke.Deps{}, err
+	}
+	return smoke.Deps{
+		Service: newService(p.repo, cfg), Repo: p.repo, Secrets: p.sec, Agent: p.exec, Cloud: p.cloud,
+		NewWorker: p.worker,
+	}, nil
 }
 
 // openStackAdapters — конкретные адаптеры боевого режима.

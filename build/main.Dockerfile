@@ -11,7 +11,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o server ./cmd/main
-# RUNTIME_SMOKE: ./cmd/runtime-smoke добавит Task 12.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o runtime-smoke ./cmd/runtime-smoke
 
 FROM alpine:3.23
 ARG RUNTIME_PYTHON_IMAGE=cellestial-kernel-python:local
@@ -27,6 +27,7 @@ RUN apk add --no-cache python3 ansible-core openssh-client \
     && chown -R app:app /var/lib/cellestial
 WORKDIR /app
 COPY --from=builder /app/server .
+COPY --from=builder /app/runtime-smoke /app/runtime-smoke
 COPY --from=agent /out/ /app/agent/
 COPY runtime-agent/requirements.txt /app/agent/requirements.txt
 COPY runtime-agent/deploy/cellestial-agent.service /app/agent/cellestial-agent.service
