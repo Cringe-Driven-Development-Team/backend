@@ -2,7 +2,7 @@
 
 Одна VPS обслуживает одну назначенную пользовательскую сессию. Агент запускает
 один Docker-контейнер с одним kernel Python или R. Язык и UUID сессии передаются
-при запуске сервиса; переиспользование VPS и управление пулом принадлежат infra.
+при запуске сервиса; VPS создаёт и удаляет backend (`internal/runtime`).
 Клиент API — доверенный backend, проверяющий права пользователей.
 Агент не создаёт VPS, не обращается к S3/PostgreSQL и не изменяет ipynb.
 
@@ -26,8 +26,10 @@ Docker-тесты создают временную bridge-сеть для пр�
 
 ## Назначение и запуск
 
-Infra заранее готовит VPS, образы, bridge-сеть, DNS и firewall. Перед выдачей VPS
-она задаёт `SESSION_ID`, `KERNEL_LANGUAGE`, `KERNEL_NETWORK`, `KERNEL_DNS` и свежий
+VPS создаёт и настраивает модуль `internal/runtime` backend
+([docs/runtime-provisioning.md](../docs/runtime-provisioning.md)): воркер запускает
+playbook infra (роль `runtime_host` готовит образы, bridge-сеть, DNS и firewall).
+Перед стартом сервиса он задаёт `SESSION_ID`, `KERNEL_LANGUAGE`, `KERNEL_NETWORK`, `KERNEL_DNS` и свежий
 `RUNTIME_TOKEN` в защищённом env-файле, затем запускает сервис. Без корректной
 конфигурации и существующей IPv4 bridge-сети агент не стартует; fallback нет.
 Язык — `python|r`, UUID канонизируется. Наличие сети не доказывает наличие firewall.
