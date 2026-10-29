@@ -162,7 +162,8 @@ jobs:
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
-          name=$(printf '%s' "${REF_NAME,,}" | tr -c 'a-z0-9._-\n' '-')
+          name=${REF_NAME,,}
+          name=${name//[^a-z0-9._-]/-}
           echo "name=${name}" >> "$GITHUB_OUTPUT"
       - name: Image metadata
         id: meta
