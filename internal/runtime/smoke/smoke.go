@@ -30,6 +30,7 @@ const (
 	smokeProfile    = "default"
 	stateSucceeded  = "SUCCEEDED"
 	stateFailedExec = "FAILED"
+	stepTimeout     = 2 * time.Minute
 )
 
 // Executor выполняет код в агенте сессии (его реализуют agent.Client и fake.Agent).
@@ -152,7 +153,9 @@ func Run(ctx context.Context, deps Deps, opts Options) (Report, error) {
 	// Токены запрашиваются у сессий, дошедших до READY; при ошибках раньше проверка не применима.
 	ok = ok && rep.TokensDistinct
 
-	left, err := deps.Cloud.ListOwned(context.WithoutCancel(ctx))
+	listCtx, listCancel := context.WithTimeout(context.WithoutCancel(ctx), stepTimeout)
+	left, err := deps.Cloud.ListOwned(listCtx)
+	listCancel()
 	if err != nil {
 		rep.Error = "list owned: " + err.Error()
 		ok = false
@@ -181,7 +184,7 @@ func fail(rep Report, err error) (Report, error) {
 func (s *sessionRun) run(ctx context.Context) {
 	start := time.Now()
 	s.rep.SessionID = s.id.String()
-	err := s.scenario(ctx)
+	err := s.safeScenario(ctx)
 	if err != nil {
 		s.rep.Error = err.Error()
 	}
@@ -190,23 +193,45 @@ func (s *sessionRun) run(ctx context.Context) {
 		s.rep.FinalState = string(env.State)
 	}
 	if err != nil {
-		s.cleanup(ctx)
+		if cerr := s.cleanup(ctx); cerr != nil {
+			s.rep.Error += "; cleanup: " + cerr.Error()
+		}
 	}
 	s.rep.Seconds = time.Since(start).Seconds()
 }
 
-// cleanup по ошибке сценария пытается удалить окружение, чтобы не оставлять ресурсы.
-func (s *sessionRun) cleanup(ctx context.Context) {
+// safeScenario превращает панику сценария в ошибку, чтобы выполнилась очистка.
+func (s *sessionRun) safeScenario(ctx context.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return s.scenario(ctx)
+}
+
+// cleanup по ошибке сценария удаляет окружение, чтобы не оставлять ресурсы. FAILED — конечное
+// состояние, которого воркер достигает только после подтверждённой очистки.
+func (s *sessionRun) cleanup(ctx context.Context) error {
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.opts.Timeout)
 	defer cancel()
-	if err := s.deps.Service.RequestDelete(bg, s.id, "smoke cleanup"); err != nil {
-		return
+	if _, err := s.deps.Repo.Get(bg, s.id); err != nil {
+		if errors.Is(err, usecase.ErrNotFound) {
+			return nil // окружение не создавалось
+		}
+		return fmt.Errorf("get environment: %w", err)
 	}
-	w := s.deps.NewWorker(s.owner("cleanup"), s.opts.Lease)
-	_ = s.drive(bg, w, domain.StateDeleted)
-	if env, err := s.deps.Repo.Get(bg, s.id); err == nil {
+	if err := s.deps.Service.RequestDelete(bg, s.id, "smoke cleanup"); err != nil {
+		return fmt.Errorf("request delete: %w", err)
+	}
+	err := s.drive(bg, s.deps.NewWorker(s.owner("cleanup"), s.opts.Lease), domain.StateDeleted)
+	if env, gerr := s.deps.Repo.Get(bg, s.id); gerr == nil {
 		s.rep.FinalState = string(env.State)
 	}
+	if err != nil {
+		return fmt.Errorf("drive delete: %w", err)
+	}
+	return nil
 }
 
 func (s *sessionRun) owner(role string) string { return "smoke-" + s.id.String()[:8] + "-" + role }
@@ -297,6 +322,8 @@ func (s *sessionRun) drive(ctx context.Context, w *usecase.Worker, want domain.S
 		switch {
 		case env.State == want:
 			return nil
+		case env.State == domain.StateFailed && want == domain.StateDeleted:
+			return nil // FAILED достигается только после подтверждённой очистки
 		case env.State == domain.StateFailed || env.State == domain.StateCleanupPending && want != domain.StateDeleted:
 			return fmt.Errorf("environment %s: %s", env.State, env.LastError)
 		case env.State == domain.StateDeleted:
@@ -347,6 +374,8 @@ func (s *sessionRun) check(ctx context.Context) error {
 }
 
 func (s *sessionRun) waitExecution(ctx context.Context, ep usecase.AgentEndpoint) error {
+	ctx, cancel := context.WithTimeout(ctx, stepTimeout)
+	defer cancel()
 	for {
 		state, err := s.deps.Agent.Execution(ctx, ep, executionID)
 		if err != nil {
@@ -375,6 +404,8 @@ func wantStdout(language string) string {
 }
 
 func (s *sessionRun) checkEvents(ctx context.Context, ep usecase.AgentEndpoint) error {
+	ctx, cancel := context.WithTimeout(ctx, stepTimeout)
+	defer cancel()
 	want := wantStdout(s.opts.Language)
 	for {
 		events, err := s.deps.Agent.Events(ctx, ep, 0)

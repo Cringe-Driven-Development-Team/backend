@@ -270,7 +270,7 @@ func (m *store) Retry(_ context.Context, jb usecase.Job, owner string, at time.T
 	return nil
 }
 
-func setup() (smoke.Deps, *fake.Cloud) {
+func setup() (smoke.Deps, *fake.Cloud, *fake.Host) {
 	st := newStore()
 	cloud, host, ag := fake.New(20 * time.Millisecond)
 	sec := &stubSecrets{}
@@ -284,11 +284,11 @@ func setup() (smoke.Deps, *fake.Cloud) {
 				Owner: owner, Concurrency: 1, Lease: lease, PollInterval: 10 * time.Millisecond, EnvName: "smoke-test",
 			})
 		},
-	}, cloud
+	}, cloud, host
 }
 
 func TestSmokeFakeHappyPath(t *testing.T) {
-	deps, _ := setup()
+	deps, _, _ := setup()
 	rep, err := smoke.Run(context.Background(), deps, smoke.Options{Language: "python", Parallel: 2, Timeout: 30 * time.Second})
 	if err != nil || !rep.OK {
 		t.Fatalf("err=%v report=%+v", err, rep)
@@ -304,7 +304,7 @@ func TestSmokeFakeHappyPath(t *testing.T) {
 }
 
 func TestSmokeKillWorkerAfterVolume(t *testing.T) {
-	deps, cloud := setup()
+	deps, cloud, _ := setup()
 	rep, err := smoke.Run(context.Background(), deps, smoke.Options{
 		Language: "python", KillWorkerAfter: smoke.KillAfterVolume, Timeout: 30 * time.Second, Lease: 100 * time.Millisecond,
 	})
@@ -317,11 +317,63 @@ func TestSmokeKillWorkerAfterVolume(t *testing.T) {
 }
 
 func TestSmokeRejectsBadOptions(t *testing.T) {
-	deps, _ := setup()
+	deps, _, _ := setup()
 	if _, err := smoke.Run(context.Background(), deps, smoke.Options{Language: "go"}); err == nil {
 		t.Fatal("expected language error")
 	}
 	if _, err := smoke.Run(context.Background(), deps, smoke.Options{Language: "r", KillWorkerAfter: "port"}); err == nil {
 		t.Fatal("expected kill-worker-after error")
+	}
+}
+
+// failingExec возвращает FAILED для любого выполнения.
+type failingExec struct{ smoke.Executor }
+
+func (failingExec) Execution(context.Context, usecase.AgentEndpoint, string) (string, error) {
+	return "FAILED", nil
+}
+
+func TestSmokeExecutionFailedCleansUp(t *testing.T) {
+	deps, cloud, _ := setup()
+	deps.Agent = failingExec{deps.Agent}
+	rep, err := smoke.Run(context.Background(), deps, smoke.Options{Language: "python", Timeout: 30 * time.Second, Lease: 100 * time.Millisecond})
+	if err == nil || rep.OK {
+		t.Fatalf("expected failure, report=%+v", rep)
+	}
+	s := rep.Sessions[0]
+	if s.FinalState != string(domain.StateDeleted) || rep.Leftovers != 0 || cloud.Count("server") != 0 {
+		t.Fatalf("report=%+v", rep)
+	}
+}
+
+func TestSmokeTimeoutMidCreateCleansUp(t *testing.T) {
+	deps, cloud, host := setup()
+	host.Block = make(chan struct{}) // Configure не завершится
+	rep, err := smoke.Run(context.Background(), deps, smoke.Options{Language: "python", Timeout: time.Second, Lease: 100 * time.Millisecond})
+	if err == nil || rep.OK {
+		t.Fatalf("expected failure, report=%+v", rep)
+	}
+	if rep.Leftovers != 0 || cloud.Count("server") != 0 || cloud.Count("volume") != 0 {
+		t.Fatalf("report=%+v", rep)
+	}
+	if st := rep.Sessions[0].FinalState; st != string(domain.StateDeleted) && st != string(domain.StateFailed) {
+		t.Fatalf("report=%+v", rep)
+	}
+}
+
+func TestSmokeKillWorkerAfterServer(t *testing.T) {
+	deps, cloud, host := setup()
+	// Configure держит первого воркера после сохранения ServerID, пока его не отменит smoke;
+	// затем блок снимается, и второй воркер завершает создание.
+	host.Block = make(chan struct{})
+	time.AfterFunc(500*time.Millisecond, func() { close(host.Block) })
+	rep, err := smoke.Run(context.Background(), deps, smoke.Options{
+		Language: "python", KillWorkerAfter: smoke.KillAfterServer, Timeout: 30 * time.Second, Lease: 100 * time.Millisecond,
+	})
+	if err != nil || !rep.OK {
+		t.Fatalf("err=%v report=%+v", err, rep)
+	}
+	if !rep.Sessions[0].WorkerKilled || rep.Leftovers != 0 || cloud.Count("server") != 0 {
+		t.Fatalf("report=%+v", rep)
 	}
 }
