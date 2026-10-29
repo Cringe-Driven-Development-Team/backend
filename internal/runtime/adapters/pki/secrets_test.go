@@ -22,6 +22,11 @@ func (c fixedClock) Now() time.Time { return c.t }
 
 func newTestCA(t *testing.T) (certPEM, keyPEM []byte) {
 	t.Helper()
+	return newTestCert(t, true)
+}
+
+func newTestCert(t *testing.T, isCA bool) (certPEM, keyPEM []byte) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +36,7 @@ func newTestCA(t *testing.T) (certPEM, keyPEM []byte) {
 		Subject:               pkix.Name{CommonName: "test-ca"},
 		NotBefore:             time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
 		NotAfter:              time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
-		IsCA:                  true,
+		IsCA:                  isCA,
 		BasicConstraintsValid: true,
 		KeyUsage:              x509.KeyUsageCertSign,
 	}
@@ -100,6 +105,23 @@ func TestNewRejectsBadKey(t *testing.T) {
 	caCert, caKey := newTestCA(t)
 	if _, err := New(make([]byte, 16), caCert, caKey, fixedClock{time.Now()}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestNewRejectsMismatchedCAKey(t *testing.T) {
+	caCert, _ := newTestCA(t)
+	_, otherKey := newTestCA(t)
+	_, err := New(make([]byte, 32), caCert, otherKey, fixedClock{time.Now()})
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestNewRejectsNonCACert(t *testing.T) {
+	cert, key := newTestCert(t, false)
+	_, err := New(make([]byte, 32), cert, key, fixedClock{time.Now()})
+	if err == nil || !strings.Contains(err.Error(), "not a CA") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

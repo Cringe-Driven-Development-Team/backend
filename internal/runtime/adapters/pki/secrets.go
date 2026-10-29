@@ -65,6 +65,13 @@ func New(key []byte, caCertPEM, caKeyPEM []byte, clock usecase.Clock) (*Secrets,
 	if err != nil {
 		return nil, err
 	}
+	if !caCert.BasicConstraintsValid || !caCert.IsCA {
+		return nil, errors.New("pki: CA certificate is not a CA")
+	}
+	pub, ok := caKey.Public().(interface{ Equal(crypto.PublicKey) bool })
+	if !ok || !pub.Equal(caCert.PublicKey) {
+		return nil, errors.New("pki: CA key does not match CA certificate")
+	}
 	return &Secrets{aead: aead, caCert: caCert, caKey: caKey, clock: clock}, nil
 }
 
