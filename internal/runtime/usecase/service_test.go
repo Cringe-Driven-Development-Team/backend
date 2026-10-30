@@ -2,11 +2,12 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -21,20 +22,36 @@ func TestRequestCreateNew(t *testing.T) {
 	id := uuid.New()
 	repo.EXPECT().CreateWithJob(gomock.Any(), gomock.Any(), 3).DoAndReturn(
 		func(_ context.Context, e domain.Environment, _ int) (domain.Environment, bool, error) {
-			require.Equal(t, id, e.SessionID)
-			require.Equal(t, domain.StateQueued, e.State)
-			require.Equal(t, domain.StateReady, e.DesiredState)
+			if diff := cmp.Diff(id, e.SessionID); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(domain.StateQueued, e.State); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(domain.StateReady, e.DesiredState); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
 			if e.OperationID == uuid.Nil {
 				t.Fatal("operation id is nil")
 			}
-			require.Equal(t, "1.2.3", e.AgentVersion)
-			require.Equal(t, "default", e.Profile)
+			if diff := cmp.Diff("1.2.3", e.AgentVersion); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff("default", e.Profile); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
 			return e, true, nil
 		})
 	env, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: id, Language: "python"})
-	require.NoError(t, err)
-	require.Equal(t, "python", env.Language)
-	require.Equal(t, "default", env.Profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff("python", env.Language); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff("default", env.Profile); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func existing(state domain.State, lang string) domain.Environment {
@@ -46,8 +63,12 @@ func TestRequestCreateSameParamsReturnsExisting(t *testing.T) {
 	ex := existing(domain.StateCreating, "r")
 	repo.EXPECT().CreateWithJob(gomock.Any(), gomock.Any(), 3).Return(ex, false, nil)
 	env, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: ex.SessionID, Language: "r", Profile: "default"})
-	require.NoError(t, err)
-	require.Equal(t, ex, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(ex, env); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestRequestCreateDifferentParamsConflict(t *testing.T) {
@@ -55,7 +76,9 @@ func TestRequestCreateDifferentParamsConflict(t *testing.T) {
 	ex := existing(domain.StateCreating, "r")
 	repo.EXPECT().CreateWithJob(gomock.Any(), gomock.Any(), 3).Return(ex, false, nil)
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: ex.SessionID, Language: "python"})
-	require.ErrorIs(t, err, ErrConflict)
+	if gotErr := err; !errors.Is(gotErr, ErrConflict) {
+		t.Fatalf("got %v, want %v", gotErr, ErrConflict)
+	}
 }
 
 func TestRequestCreateFinishedReturnedAsIs(t *testing.T) {
@@ -63,45 +86,63 @@ func TestRequestCreateFinishedReturnedAsIs(t *testing.T) {
 	ex := existing(domain.StateDeleted, "python")
 	repo.EXPECT().CreateWithJob(gomock.Any(), gomock.Any(), 3).Return(ex, false, nil)
 	env, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: ex.SessionID, Language: "python"})
-	require.NoError(t, err)
-	require.Equal(t, domain.StateDeleted, env.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(domain.StateDeleted, env.State); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestRequestCreateInvalidLanguage(t *testing.T) {
 	svc, _ := newSvc(t, true)
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.New(), Language: "julia"})
-	require.ErrorIs(t, err, ErrInvalidLanguage)
+	if gotErr := err; !errors.Is(gotErr, ErrInvalidLanguage) {
+		t.Fatalf("got %v, want %v", gotErr, ErrInvalidLanguage)
+	}
 }
 
 func TestRequestCreateNilSession(t *testing.T) {
 	svc, _ := newSvc(t, true) // repo без ожиданий: вызов CreateWithJob провалит тест
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.Nil, Language: "python"})
-	require.ErrorIs(t, err, ErrInvalidSession)
+	if gotErr := err; !errors.Is(gotErr, ErrInvalidSession) {
+		t.Fatalf("got %v, want %v", gotErr, ErrInvalidSession)
+	}
 }
 
 func TestRequestCreateUnknownProfile(t *testing.T) {
 	svc, _ := newSvc(t, true)
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.New(), Language: "r", Profile: "big"})
-	require.ErrorIs(t, err, ErrUnknownProfile)
+	if gotErr := err; !errors.Is(gotErr, ErrUnknownProfile) {
+		t.Fatalf("got %v, want %v", gotErr, ErrUnknownProfile)
+	}
 }
 
 func TestRequestCreateDisabled(t *testing.T) {
 	svc, _ := newSvc(t, false)
 	_, err := svc.RequestCreate(context.Background(), CreateEnvironment{SessionID: uuid.New(), Language: "r"})
-	require.ErrorIs(t, err, ErrDisabled)
+	if gotErr := err; !errors.Is(gotErr, ErrDisabled) {
+		t.Fatalf("got %v, want %v", gotErr, ErrDisabled)
+	}
 }
 
 func TestRequestDeleteIdempotent(t *testing.T) {
 	svc, repo := newSvc(t, true)
 	id := uuid.New()
 	repo.EXPECT().MarkForDelete(gomock.Any(), id, "why").Return(nil).Times(2)
-	require.NoError(t, svc.RequestDelete(context.Background(), id, "why"))
-	require.NoError(t, svc.RequestDelete(context.Background(), id, "why"))
+	if gotErr := svc.RequestDelete(context.Background(), id, "why"); gotErr != nil {
+		t.Fatal(gotErr)
+	}
+	if gotErr := svc.RequestDelete(context.Background(), id, "why"); gotErr != nil {
+		t.Fatal(gotErr)
+	}
 }
 
 func TestRequestDeleteNotFound(t *testing.T) {
 	svc, repo := newSvc(t, true)
 	id := uuid.New()
 	repo.EXPECT().MarkForDelete(gomock.Any(), id, "x").Return(ErrNotFound)
-	require.ErrorIs(t, svc.RequestDelete(context.Background(), id, "x"), ErrNotFound)
+	if gotErr := svc.RequestDelete(context.Background(), id, "x"); !errors.Is(gotErr, ErrNotFound) {
+		t.Fatalf("got %v, want %v", gotErr, ErrNotFound)
+	}
 }
