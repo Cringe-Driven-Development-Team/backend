@@ -25,7 +25,7 @@ func TestAuthenticateTokenBoundary(t *testing.T) {
 				if !tc.valid {
 					err = errors.New("invalid token")
 				}
-				parser.EXPECT().Parse(tc.token).Return(int64(7), err)
+				parser.EXPECT().Parse(tc.token).Return(testClaims(7), err)
 			}
 			type contextKey struct{}
 			req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(context.WithValue(context.Background(), contextKey{}, "preserved"))
@@ -42,7 +42,7 @@ func TestAuthenticateTokenBoundary(t *testing.T) {
 				w.WriteHeader(http.StatusNoContent)
 			})
 			rec := httptest.NewRecorder()
-			AuthenticateBearer(parser)(next).ServeHTTP(rec, req)
+			AuthenticateBearer(parser, allowSessions{})(next).ServeHTTP(rec, req)
 			if !called || rec.Code != http.StatusNoContent {
 				t.Fatalf("called=%v status=%d", called, rec.Code)
 			}

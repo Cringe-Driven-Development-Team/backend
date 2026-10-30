@@ -1,4 +1,4 @@
-// Package postgres хранит пользователей и сессии в PostgreSQL.
+// Package postgres хранит пользователей в PostgreSQL.
 package postgres
 
 import (
@@ -77,35 +77,4 @@ func (r *UserRepository) UserByID(ctx context.Context, id int64) (domain.User, e
 		return domain.User{}, fmt.Errorf("select user by id: %w", err)
 	}
 	return u, nil
-}
-
-func (r *UserRepository) CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
-	started := time.Now()
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO refresh_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
-		userID, tokenHash, expiresAt,
-	)
-	observability.LogStorage(ctx, "session.create", started, err)
-	if err != nil {
-		return fmt.Errorf("insert refresh session: %w", err)
-	}
-	return nil
-}
-
-// DeleteSession удаляет и читает одним запросом: из двух одновременных
-// refresh с одним токеном сессию получит только один.
-func (r *UserRepository) DeleteSession(ctx context.Context, tokenHash string) (userID int64, expiresAt time.Time, err error) {
-	started := time.Now()
-	err = r.db.QueryRow(ctx,
-		`DELETE FROM refresh_sessions WHERE token_hash = $1 RETURNING user_id, expires_at`,
-		tokenHash,
-	).Scan(&userID, &expiresAt)
-	observability.LogStorage(ctx, "session.delete", started, err)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, time.Time{}, usecase.ErrSessionNotFound
-	}
-	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("delete refresh session: %w", err)
-	}
-	return userID, expiresAt, nil
 }

@@ -9,7 +9,7 @@ import (
 
 func TestIssuedAccessExpiryMatchesJWT(t *testing.T) {
 	issuer := NewAccessToken([]byte("test-secret"), time.Minute)
-	token, expiresAt, err := issuer.IssueAccess(42)
+	token, expiresAt, err := issuer.IssueAccess(testClaims(42))
 	if err != nil {
 		t.Fatal(err)
 	}

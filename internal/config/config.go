@@ -11,15 +11,18 @@ import (
 )
 
 type Config struct {
-	BFFAPIKey                          string
-	LogLevel                           slog.Level
-	Host, Port                         string
-	WriteTimeout, ReadTimeout          time.Duration
-	JWTSecret                          string
-	AccessTTL, RefreshTTL              time.Duration
-	NotebooksBucket                    string
-	DBUser, DBPassword, DBHost, DBName string
-	Runtime                            RuntimeConfig
+	RedisHost, RedisPassword                string
+	RedisPort, RedisDB                      int
+	RedisDialTimeout, RedisOperationTimeout time.Duration
+	BFFAPIKey                               string
+	LogLevel                                slog.Level
+	Host, Port                              string
+	WriteTimeout, ReadTimeout               time.Duration
+	JWTSecret                               string
+	AccessTTL, RefreshTTL                   time.Duration
+	NotebooksBucket                         string
+	DBUser, DBPassword, DBHost, DBName      string
+	Runtime                                 RuntimeConfig
 }
 
 // Load читает окружение процесса.
@@ -77,6 +80,9 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 	}
 	if c.NotebooksBucket == "" {
 		return Config{}, errors.New("S3_NOTEBOOKS_BUCKET is not set")
+	}
+	if err := c.loadRedis(lookup); err != nil {
+		return Config{}, err
 	}
 	rt, err := loadRuntime(lookup)
 	if err != nil {

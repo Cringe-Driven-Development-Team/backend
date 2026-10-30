@@ -19,6 +19,12 @@ services:
       - BFF_API_KEY=${BFF_API_KEY}
       - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
       - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-720h}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis-local-development}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_DIAL_TIMEOUT=${REDIS_DIAL_TIMEOUT:-2s}
+      - REDIS_OPERATION_TIMEOUT=${REDIS_OPERATION_TIMEOUT:-1s}
       # Локальные значения и сам S3 — в docker-compose.override.yml.
       - AWS_REGION=${AWS_REGION:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
@@ -31,6 +37,8 @@ services:
       # ТОЛЬКО ДЛЯ ЛОКАЛЬНОЙ РАЗРАБОТКИ (base64 от 32 нулевых байт). Не использовать в production.
       - RUNTIME_SECRETS_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     depends_on:
+      redis:
+        condition: service_healthy
       db:
         condition: service_healthy
     healthcheck:
@@ -39,6 +47,25 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    # Local development only; production config and Vault belong to infra.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-local-development}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-redis-local-development}
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
 
   db:
@@ -59,4 +86,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  redis_data:
   postgres_data:

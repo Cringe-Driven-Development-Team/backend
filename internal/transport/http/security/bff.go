@@ -1,14 +1,17 @@
 package security
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 )
 
 // S2S verifies the calling service before any user authentication or body parsing.
@@ -38,15 +41,31 @@ func S2S(key, prefix string) func(http.Handler) http.Handler {
 
 // AuthenticateBearer never consults browser cookies. Validator enforces which
 // operations require an authenticated principal.
-func AuthenticateBearer(tokens TokenParser) func(http.Handler) http.Handler {
+type AccessSessions interface {
+	ValidateAccess(context.Context, usecase.SessionClaims) error
+}
+
+func AuthenticateBearer(tokens TokenParser, sessions AccessSessions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
 			values := r.Header.Values("Authorization")
 			if len(values) == 1 {
 				scheme, token, ok := strings.Cut(values[0], " ")
 				if ok && strings.EqualFold(scheme, "Bearer") && token != "" && !strings.ContainsAny(token, " \t\r\n") {
-					if id, err := tokens.Parse(token); err == nil {
-						r = r.WithContext(principal.WithUserID(r.Context(), id))
+					if claims, err := tokens.Parse(token); err == nil {
+						if err = sessions.ValidateAccess(r.Context(), claims); err != nil {
+							if errors.Is(err, usecase.ErrInvalidSession) {
+								httperr.Write(w, http.StatusUnauthorized, api.Unauthorized, "authentication required")
+							} else {
+								httperr.ResponseError(w, r, err)
+							}
+							return
+						}
+						r = r.WithContext(principal.WithSession(r.Context(), claims))
 					}
 				}
 			}

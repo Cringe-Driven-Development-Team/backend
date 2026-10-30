@@ -30,11 +30,26 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      REDIS_TEST_ADDR: 127.0.0.1:6379
+      REDIS_RECOVERY_TESTS: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Install Redis CLI for recovery runbook tests
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
       - name: Check dependencies
         run: go mod tidy -diff
       - name: Build

@@ -17,6 +17,7 @@ require (
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/pashagolub/pgxmock/v5 v5.2.0
 	github.com/pressly/goose/v3 v3.28.0
+	github.com/redis/go-redis/v9 v9.17.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.57.0
 )
@@ -38,6 +39,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

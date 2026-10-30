@@ -7,11 +7,15 @@ import (
 	"testing"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 )
 
 type bffParser struct{ calls int }
 
-func (p *bffParser) Parse(string) (int64, error) { p.calls++; return 42, nil }
+func (p *bffParser) Parse(string) (usecase.SessionClaims, error) {
+	p.calls++
+	return testClaims(42), nil
+}
 
 func TestMandatoryS2SBeforeBearer(t *testing.T) {
 	for _, tc := range []struct {
@@ -31,7 +35,7 @@ func TestMandatoryS2SBeforeBearer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &bffParser{}
-			h := S2S("current", "/api/v1")(AuthenticateBearer(p)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })))
+			h := S2S("current", "/api/v1")(AuthenticateBearer(p, allowSessions{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })))
 			req := httptest.NewRequest("GET", tc.path, nil)
 			req.Header.Set("Authorization", "Bearer access")
 			for _, v := range tc.headers {
@@ -58,7 +62,7 @@ func TestBearerNeverFallsBackToCookie(t *testing.T) {
 			req.Header.Add("Authorization", v)
 		}
 		got := false
-		AuthenticateBearer(p)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { _, got = principal.UserIDFromContext(r.Context()) })).ServeHTTP(httptest.NewRecorder(), req)
+		AuthenticateBearer(p, allowSessions{})(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { _, got = principal.UserIDFromContext(r.Context()) })).ServeHTTP(httptest.NewRecorder(), req)
 		want := len(headers) == 1 && (headers[0] == "Bearer access" || headers[0] == "bearer access")
 		if got != want || (p.calls == 1) != want {
 			t.Fatalf("headers=%v authenticated=%v calls=%d", headers, got, p.calls)

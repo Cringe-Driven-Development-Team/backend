@@ -24,11 +24,11 @@ func newRouterFixture(t *testing.T) routerFixture {
 	f := routerFixture{users: NewMockUserUsecase(ctrl), notebooks: NewMockNotebookUsecase(ctrl)}
 	tokens := usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour)
 	var err error
-	f.access, err = tokens.Issue(1)
+	f.access, err = tokens.Issue(testClaims(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.handler, err = NewRouter(Server{UserHandler: userdelivery.NewHandler(f.users), NotebookHandler: notebookdelivery.NewHandler(f.notebooks)}, tokens, "test-key")
+	f.handler, err = NewRouter(Server{UserHandler: userdelivery.NewHandler(f.users), NotebookHandler: notebookdelivery.NewHandler(f.notebooks)}, tokens, allowSessions{}, "test-key")
 	if err != nil {
 		t.Fatal(err)
 	}

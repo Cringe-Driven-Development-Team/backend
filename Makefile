@@ -41,7 +41,7 @@ health:
 	curl --fail --silent --show-error --max-time 10 http://localhost:$(or $(PORT),8080)/health
 
 logs:
-	docker compose logs --tail=100 api db s3
+	docker compose logs --tail=100 api db redis s3
 
 down:
 	docker compose down
@@ -116,3 +116,9 @@ agent-network-check:
 .PHONY: generate-mocks
 generate-mocks:
 	bash scripts/generate-mocks.sh
+
+# Dedicated real Redis; explicit address makes failures fatal, never skipped.
+.PHONY: redis-test
+redis-test:
+	@test -n "$(REDIS_TEST_ADDR)" || (echo 'set REDIS_TEST_ADDR=host:port'; exit 1)
+	go test -race -count=1 ./internal/user/adapters/redis ./internal/transport/http

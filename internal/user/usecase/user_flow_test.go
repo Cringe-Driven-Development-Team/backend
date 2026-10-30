@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 )
 
 // These flows exercise token rotation and logout against an in-memory session store.
@@ -29,7 +27,7 @@ func TestUserUsecaseRefresh(t *testing.T) {
 			if tt.wantErr == nil {
 				calls = 2
 			}
-			uc := NewUserUsecase(repo, repo, flowIssuer(t, calls), usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
+			uc := NewUserUsecase(repo, repo, flowIssuer(t, calls), flowPasswords{}, flowRefresh{}, refreshTTL)
 			_, first, err := uc.Login(context.Background(), "alice", "password123")
 			if err != nil {
 				t.Fatal(err)
@@ -58,19 +56,19 @@ func TestUserUsecaseRefresh(t *testing.T) {
 func TestUserUsecaseLogout(t *testing.T) {
 	repo := newFakeRepo()
 	repo.addUser("alice", "password123")
-	uc := NewUserUsecase(repo, repo, flowIssuer(t, 1), usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, flowIssuer(t, 1), flowPasswords{}, flowRefresh{}, refreshTTL)
 	_, sess, err := uc.Login(context.Background(), "alice", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := uc.Logout(context.Background(), sess.RefreshToken); err != nil {
+	if err := uc.Logout(context.Background(), sess.RefreshToken, sess.SessionClaims); err != nil {
 		t.Fatalf("Logout() error = %v", err)
 	}
 	if _, err := uc.Refresh(context.Background(), sess.RefreshToken); !errors.Is(err, ErrInvalidRefresh) {
 		t.Errorf("Refresh() после Logout: error = %v, want ErrInvalidRefresh", err)
 	}
-	if err := uc.Logout(context.Background(), sess.RefreshToken); !errors.Is(err, ErrInvalidRefresh) {
+	if err := uc.Logout(context.Background(), sess.RefreshToken, sess.SessionClaims); !errors.Is(err, ErrInvalidRefresh) {
 		t.Errorf("повторный Logout(): error = %v, want ErrInvalidRefresh", err)
 	}
 }

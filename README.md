@@ -4,7 +4,7 @@ Go API учебного проекта «Colab». Общепроектный к�
 
 ## Быстрый старт
 
-Нужны Go версии из [go.mod](go.mod), C-компилятор для тестов с `-race`, Make и Docker с Compose. Локальный Compose запускает API, PostgreSQL и SeaweedFS (S3). Секреты задаются только в `.env`, файл не коммитьте.
+Нужны Go версии из [go.mod](go.mod), C-компилятор для тестов с `-race`, Make и Docker с Compose. Локальный Compose запускает API, PostgreSQL, Redis и SeaweedFS (S3). Секреты задаются только в `.env`, файл не коммитьте.
 
 ```bash
 cp -n .env.example .env
@@ -40,6 +40,7 @@ VPS создаёт и удаляет backend; роли установки аге
 - `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
 - `internal/transport/http` — маршруты, авторизация и HTTP-политики; `internal/{user,notebook}` — domain, usecase, HTTP-обработчики и адаптеры хранения.
 - `migrations/` — SQL-миграции goose; `internal/transport/http/api/api.gen.go` — код, сгенерированный из Apidog, вручную не редактируйте.
+- [Сессии Redis](docs/redis-sessions.md) — конфигурация, отзыв, переключение и восстановление.
 - [Авторизация через BFF](docs/authentication.md) — JSON-токены, Bearer и обязательный S2S-ключ.
 - [Контракт API в Apidog](docs/apidog.md) — ветки, Merge Request и `make generate`.
 - [CI, образ и деплой](docs/release.md) — проверки и выпуск. Production-конфигурация принадлежит [infra](https://github.com/Cringe-Driven-Development-Team/infra).

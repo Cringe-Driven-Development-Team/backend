@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
@@ -44,12 +43,9 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 	ctx := observability.WithRequestID(context.Background(), "req-db")
 	db := newPool(t)
 	failure := errors.New("SECRET-db")
-	expires := time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)
 	db.ExpectQuery(createUserSQL).WithArgs("SECRET-login", "SECRET-hash").WillReturnError(failure)
 	db.ExpectQuery(byLoginSQL).WithArgs("SECRET-login").WillReturnError(failure)
 	db.ExpectQuery(byIDSQL).WithArgs(int64(1)).WillReturnError(failure)
-	db.ExpectExec(createSessionSQL).WithArgs(int64(1), "SECRET-hash", expires).WillReturnError(failure)
-	db.ExpectQuery(deleteSessionSQL).WithArgs("SECRET-hash").WillReturnError(failure)
 	repo := NewUserRepository(db)
 	for _, tc := range []struct {
 		operation string
@@ -58,8 +54,6 @@ func TestUserRepositoryLogsEachFailedOperationOnce(t *testing.T) {
 		{"user.create", func() error { _, err := repo.CreateUser(ctx, "SECRET-login", "SECRET-hash"); return err }},
 		{"user.by_login", func() error { _, _, err := repo.UserByLogin(ctx, "SECRET-login"); return err }},
 		{"user.by_id", func() error { _, err := repo.UserByID(ctx, 1); return err }},
-		{"session.create", func() error { return repo.CreateSession(ctx, 1, "SECRET-hash", expires) }},
-		{"session.delete", func() error { _, _, err := repo.DeleteSession(ctx, "SECRET-hash"); return err }},
 	} {
 		out.Reset()
 		if err := tc.call(); !errors.Is(err, failure) {
