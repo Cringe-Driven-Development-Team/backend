@@ -76,53 +76,48 @@ func startupErr(ctx context.Context, err error) error {
 }
 
 // provision создаёт порт, том и сервер; каждый полученный ID сохраняется сразу, даже вместе
-// с ошибкой облака, чтобы повтор и удаление нашли ресурс.
+// с ошибкой облака, чтобы повтор и удаление нашли ресурс. Ensure* вызывается и для известного ID:
+// первое ожидание готовности могло оборваться, а следующий шаг требует готовый ресурс.
 func (r *jobRun) provision(ctx context.Context, env domain.Environment) error {
 	var err error
-	if env.Resources.PortID == "" || env.Resources.PrivateIP == "" {
-		id, ip, cerr := r.w.cloud.EnsurePort(ctx, env)
-		if id != "" {
-			env.Resources.PortID, env.Resources.PrivateIP = id, ip
-			if env, err = r.save(env, env.State); err != nil {
-				return err
-			}
-		}
-		if cerr != nil {
-			return fmt.Errorf("ensure port: %w", cerr)
+	portID, ip, cerr := r.w.cloud.EnsurePort(ctx, env)
+	if portID != "" && (portID != env.Resources.PortID || ip != env.Resources.PrivateIP) {
+		env.Resources.PortID, env.Resources.PrivateIP = portID, ip
+		if env, err = r.save(env, env.State); err != nil {
+			return err
 		}
 	}
-	if env.Resources.VolumeID == "" {
-		id, cerr := r.w.cloud.EnsureVolume(ctx, env)
-		if id != "" {
-			env.Resources.VolumeID = id
-			if env, err = r.save(env, env.State); err != nil {
-				return err
-			}
-		}
-		if cerr != nil {
-			return fmt.Errorf("ensure volume: %w", cerr)
+	if cerr != nil {
+		return fmt.Errorf("ensure port: %w", cerr)
+	}
+	volumeID, cerr := r.w.cloud.EnsureVolume(ctx, env)
+	if volumeID != "" && volumeID != env.Resources.VolumeID {
+		env.Resources.VolumeID = volumeID
+		if env, err = r.save(env, env.State); err != nil {
+			return err
 		}
 	}
-	if env.Resources.ServerID == "" {
-		// Host key генерируется и сохраняется до создания сервера: повтор берёт тот же ключ.
-		s, serr := r.ensureSecrets()
-		if serr != nil {
-			return serr
+	if cerr != nil {
+		return fmt.Errorf("ensure volume: %w", cerr)
+	}
+	// Host key генерируется и сохраняется до создания сервера: повтор берёт тот же ключ.
+	s, serr := r.ensureSecrets()
+	if serr != nil {
+		return serr
+	}
+	priv, oerr := r.w.sec.Open(s.HostPrivateKey)
+	if oerr != nil {
+		return fmt.Errorf("open host key: %w", oerr)
+	}
+	serverID, cerr := r.w.cloud.EnsureServer(ctx, env, cloudInit(priv, s.HostPublicKey))
+	if serverID != "" && serverID != env.Resources.ServerID {
+		env.Resources.ServerID = serverID
+		if env, err = r.save(env, env.State); err != nil {
+			return err
 		}
-		priv, oerr := r.w.sec.Open(s.HostPrivateKey)
-		if oerr != nil {
-			return fmt.Errorf("open host key: %w", oerr)
-		}
-		id, cerr := r.w.cloud.EnsureServer(ctx, env, cloudInit(priv, s.HostPublicKey))
-		if id != "" {
-			env.Resources.ServerID = id
-			if env, err = r.save(env, env.State); err != nil {
-				return err
-			}
-		}
-		if cerr != nil {
-			return fmt.Errorf("ensure server: %w", cerr)
-		}
+	}
+	if cerr != nil {
+		return fmt.Errorf("ensure server: %w", cerr)
 	}
 	_, err = r.save(env, domain.StateConfiguring)
 	return err

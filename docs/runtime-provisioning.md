@@ -78,7 +78,7 @@ READY → DELETING → DELETED
 | `RUNTIME_PROVIDER` | нет | `openstack` или `fake` |
 | `RUNTIME_SECRETS_KEY` | нет | base64 ровно 32 байт, ключ шифрования секретов |
 | `RUNTIME_ENV_NAME` | для `fake` — `dev-fake`; для `openstack` обязательна | значение метки `cellestial_env` |
-| `RUNTIME_WORK_DIR` | `/var/lib/cellestial/runtime` | рабочий каталог воркера |
+| `RUNTIME_WORK_DIR` | `/var/lib/cellestial/runtime` | рабочий каталог воркера; у каждого процесса свой (эксклюзивная блокировка `.lock`, занятый каталог — ошибка старта) |
 | `RUNTIME_ROOT_DISK_GIB` | `20` | размер загрузочного тома |
 | `RUNTIME_KERNEL_DNS` | `1.1.1.1` | IPv4 DNS для контейнера kernel |
 | `RUNTIME_PYTHON_IMAGE`, `RUNTIME_R_IMAGE` | digest из образа (локально `cellestial-kernel-*:local`) | образы kernel |

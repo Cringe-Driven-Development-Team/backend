@@ -26,6 +26,8 @@ type Artifacts struct {
 
 // Runner реализует usecase.HostConfigurator через ansible-playbook.
 type Runner struct {
+	// lock удерживает блокировку workDir, пока живёт Runner.
+	lock                                           *os.File
 	workDir, playbook, sshKeyFile, sshUser, binary string
 	art                                            Artifacts
 }
@@ -34,7 +36,8 @@ var _ usecase.HostConfigurator = (*Runner)(nil)
 
 // New создаёт Runner.
 //
-// Создаёт workDir (0700) и удаляет в нём оставшиеся от убитого воркера каталоги операций
+// Создаёт workDir (0700), берёт на него эксклюзивную блокировку до конца жизни процесса (у каждого
+// процесса свой каталог, после падения ОС снимает блокировку) и удаляет в нём оставшиеся от убитого воркера каталоги операций
 // (только вида "<uuid>-<цифры>"; сам workDir и посторонние файлы не трогаются).
 func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifacts) (*Runner, error) {
 	absWork, err := filepath.Abs(workDir)
@@ -48,6 +51,14 @@ func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifa
 	if err = os.MkdirAll(absWork, 0o700); err != nil {
 		return nil, fmt.Errorf("create work dir: %w", err)
 	}
+	lock, err := os.OpenFile(filepath.Join(absWork, ".lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open work dir lock: %w", err)
+	}
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("work dir %s is used by another process: %w", absWork, err)
+	}
 	entries, err := os.ReadDir(absWork)
 	if err != nil {
 		return nil, fmt.Errorf("read work dir: %w", err)
@@ -60,7 +71,7 @@ func New(workDir, playbook, sshKeyFile, sshUser, binary string, artifacts Artifa
 			return nil, fmt.Errorf("remove stale operation dir: %w", err)
 		}
 	}
-	return &Runner{workDir: absWork, playbook: absPlaybook, sshKeyFile: sshKeyFile, sshUser: sshUser, binary: binary, art: artifacts}, nil
+	return &Runner{workDir: absWork, playbook: absPlaybook, sshKeyFile: sshKeyFile, sshUser: sshUser, binary: binary, art: artifacts, lock: lock}, nil
 }
 
 var opDirName = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9]+$`)

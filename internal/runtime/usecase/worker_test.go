@@ -283,6 +283,33 @@ func TestCreateIdempotentSteps(t *testing.T) {
 	}
 }
 
+func TestCreateRechecksKnownResources(t *testing.T) {
+	for _, method := range []string{"EnsureVolume", "EnsureServer"} {
+		t.Run(method, func(t *testing.T) {
+			h := newHarness(t)
+			h.s.StartupTimeout = 100 * time.Hour
+			sid := h.request()
+			// Ресурс создан, ID получен, но ожидание готовности оборвалось временной ошибкой.
+			h.cloud.FailAfterOnce(method, fmt.Errorf("%w: wait", usecase.ErrCloudTransient))
+			w := h.worker("w1")
+			_, _ = runOnce(t, w)
+			if env := h.env(sid); env.State != domain.StateCreating {
+				t.Fatalf("state = %s, want CREATING", env.State)
+			}
+			h.clock.Advance(time.Hour)
+			if ok, err := runOnce(t, w); !ok || err != nil {
+				t.Fatalf("RunOnce = %v %v", ok, err)
+			}
+			if got := h.cloud.Calls(method); got != 2 {
+				t.Fatalf("%s calls = %d, want 2", method, got)
+			}
+			if env := h.env(sid); env.State != domain.StateReady {
+				t.Fatalf("state = %s (%s)", env.State, env.LastError)
+			}
+		})
+	}
+}
+
 func TestCreateResumesAfterLostVolumeID(t *testing.T) {
 	h := newHarness(t)
 	h.s.StartupTimeout = 100 * time.Hour

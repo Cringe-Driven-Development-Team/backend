@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 const secretToken = "tok-super-secret-123"
@@ -49,11 +50,11 @@ func setup(t *testing.T) env {
 	art := t.TempDir()
 	write := func(name, s string) string {
 		p := filepath.Join(art, name)
-		noErr(t, os.WriteFile(p, []byte(s), 0o600))
+		require.NoError(t, os.WriteFile(p, []byte(s), 0o600))
 		return p
 	}
 	bin, err := filepath.Abs("testdata/fake-ansible-playbook")
-	noErr(t, err)
+	require.NoError(t, err)
 	pbDir := t.TempDir()
 	r, err := New(work, filepath.Join(pbDir, "playbook.yml"), "/keys/id", "ubuntu", bin, Artifacts{
 		AgentWheel:           "/a/agent.whl",
@@ -62,7 +63,7 @@ func setup(t *testing.T) env {
 		AgentService:         "/a/agent.service",
 		CACertFile:           write("ca.pem", "CA-PEM"),
 	})
-	noErr(t, err)
+	require.NoError(t, err)
 	return env{home: home, work: work, pbDir: pbDir, runner: r}
 }
 
@@ -79,55 +80,55 @@ func cfg() usecase.HostConfig {
 func readHome(t *testing.T, e env, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(e.home, name))
-	noErr(t, err)
+	require.NoError(t, err)
 	return strings.TrimSpace(string(b))
 }
 
 func TestRunnerWritesFilesWithModes(t *testing.T) {
 	e := setup(t)
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
-	eq(t, "dir=700 vars=600", readHome(t, e, "modes.txt"))
-	eq(t, "10.0.0.5 ssh-ed25519 AAAATESTKEY", readHome(t, e, "known_hosts.txt"))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
+	require.Equal(t, "dir=700 vars=600", readHome(t, e, "modes.txt"))
+	require.Equal(t, "10.0.0.5 ssh-ed25519 AAAATESTKEY", readHome(t, e, "known_hosts.txt"))
 }
 
 func TestRunnerPassesNoSecretsInArgs(t *testing.T) {
 	e := setup(t)
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
 	args := readHome(t, e, "args.txt")
-	notContains(t, args, secretToken)
-	notContains(t, args, "KEY")
-	contains(t, args, "playbook.yml")
+	require.NotContains(t, args, secretToken)
+	require.NotContains(t, args, "KEY")
+	require.Contains(t, args, "playbook.yml")
 }
 
 func TestRunnerKillsProcessGroupOnCancel(t *testing.T) {
 	e := setup(t)
-	noErr(t, os.WriteFile(filepath.Join(e.home, "sleep"), nil, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(e.home, "sleep"), nil, 0o600))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- e.runner.Configure(ctx, cfg()) }()
 	pidFile := filepath.Join(e.home, "sleep.pid")
-	eventually(t, func() bool { _, err := os.Stat(pidFile); return err == nil }, 5*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool { _, err := os.Stat(pidFile); return err == nil }, 5*time.Second, 20*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
 	b, err := os.ReadFile(pidFile)
-	noErr(t, err)
+	require.NoError(t, err)
 	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	noErr(t, err)
+	require.NoError(t, err)
 	cancel()
 	select {
 	case err := <-done:
-		isErr(t, err)
+		require.Error(t, err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("Configure did not return")
 	}
-	eventually(t, func() bool { return syscall.Kill(pid, 0) != nil }, 5*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool { return syscall.Kill(pid, 0) != nil }, 5*time.Second, 20*time.Millisecond)
 }
 
 func TestRunnerRemovesWorkDir(t *testing.T) {
 	e := setup(t)
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
 	dir := readHome(t, e, "dir.txt")
 	_, err := os.Stat(dir)
-	isTrue(t, os.IsNotExist(err))
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestRunnerLogsMaskToken(t *testing.T) {
@@ -136,19 +137,19 @@ func TestRunnerLogsMaskToken(t *testing.T) {
 	old := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(old) })
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
 	out := buf.String()
-	contains(t, out, "using token ***")
-	notContains(t, out, secretToken)
+	require.Contains(t, out, "using token ***")
+	require.NotContains(t, out, secretToken)
 }
 
 func TestRunnerVarsContent(t *testing.T) {
 	e := setup(t)
 	c := cfg()
 	vars, err := e.runner.vars(c)
-	noErr(t, err)
+	require.NoError(t, err)
 	// Полный набор ключей: лишний ключ (например, host key) или пропавший — ошибка.
-	eq(t, map[string]any{
+	require.Equal(t, map[string]any{
 		"session_id":         c.SessionID.String(),
 		"language":           "python",
 		"private_ip":         "10.0.0.5",
@@ -171,30 +172,30 @@ func TestRunnerSetsUTF8Locale(t *testing.T) {
 	e := setup(t)
 	t.Setenv("LC_ALL", "POSIX")
 	t.Setenv("LANG", "")
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
-	eq(t, "LC_ALL=C.UTF-8 LANG=C.UTF-8", readHome(t, e, "locale.txt"))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
+	require.Equal(t, "LC_ALL=C.UTF-8 LANG=C.UTF-8", readHome(t, e, "locale.txt"))
 }
 
 func TestRunnerRunsInPlaybookDir(t *testing.T) {
 	e := setup(t)
-	noErr(t, e.runner.Configure(context.Background(), cfg()))
+	require.NoError(t, e.runner.Configure(context.Background(), cfg()))
 	want, err := filepath.EvalSymlinks(e.pbDir)
-	noErr(t, err)
-	eq(t, want, readHome(t, e, "cwd.txt"))
+	require.NoError(t, err)
+	require.Equal(t, want, readHome(t, e, "cwd.txt"))
 }
 
 func TestNewRemovesStaleOperationDirs(t *testing.T) {
 	work := filepath.Join(t.TempDir(), "work")
-	noErr(t, os.MkdirAll(work, 0o700))
+	require.NoError(t, os.MkdirAll(work, 0o700))
 	stale := filepath.Join(work, uuid.NewString()+"-123456")
 	foreignDir := filepath.Join(work, "keep-me")
 	foreignFile := filepath.Join(work, uuid.NewString()+"-999.txt")
-	noErr(t, os.MkdirAll(stale, 0o700))
-	noErr(t, os.WriteFile(filepath.Join(stale, "vars.json"), []byte("{}"), 0o600))
-	noErr(t, os.MkdirAll(foreignDir, 0o700))
-	noErr(t, os.WriteFile(foreignFile, nil, 0o600))
+	require.NoError(t, os.MkdirAll(stale, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(stale, "vars.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.MkdirAll(foreignDir, 0o700))
+	require.NoError(t, os.WriteFile(foreignFile, nil, 0o600))
 	_, err := New(work, "pb.yml", "k", "u", "bin", Artifacts{})
-	noErr(t, err)
+	require.NoError(t, err)
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Fatalf("stale dir still exists: %v", err)
 	}
@@ -207,7 +208,18 @@ func TestNewRemovesStaleOperationDirs(t *testing.T) {
 
 func TestNewFailsWhenWorkDirUncreatable(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "f")
-	noErr(t, os.WriteFile(file, nil, 0o600))
+	require.NoError(t, os.WriteFile(file, nil, 0o600))
 	_, err := New(filepath.Join(file, "sub"), "pb.yml", "k", "u", "bin", Artifacts{})
-	isErr(t, err)
+	require.Error(t, err)
+}
+
+func TestNewFailsWhenWorkDirLocked(t *testing.T) {
+	dir := t.TempDir()
+	_, err := New(dir, "site.yml", "key", "root", "ansible-playbook", Artifacts{})
+	require.NoError(t, err)
+	stale := filepath.Join(dir, "00000000-0000-0000-0000-000000000000-1")
+	require.NoError(t, os.Mkdir(stale, 0o700))
+	_, err = New(dir, "site.yml", "key", "root", "ansible-playbook", Artifacts{})
+	require.Error(t, err)
+	require.DirExists(t, stale, "занятый каталог нельзя чистить")
 }
