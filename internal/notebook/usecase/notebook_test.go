@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
@@ -143,20 +144,22 @@ func TestModifyCellCallback(t *testing.T) {
 			f := newNotebookFixture(t)
 			ctx := context.Background()
 			called := false
-			f.meta.EXPECT().Modify(ctx, int64(7), owner, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (int, error)) error {
+			f.meta.EXPECT().Modify(ctx, int64(7), owner, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (MetadataUpdate, error)) error {
 				called = true
-				count, err := fn(domain.Notebook{ID: 7, OwnerID: owner, FileKey: "key", CellsCount: len(tc.cells)})
+				update, err := fn(domain.Notebook{ID: 7, OwnerID: owner, FileKey: "key", CellsCount: len(tc.cells)})
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("callback error=%v want=%v", err, tc.wantErr)
 				}
-				if err == nil && count != len(tc.want) {
-					t.Fatalf("callback count=%d want=%d", count, len(tc.want))
+				if err == nil && (update.CellsCount != len(tc.want) || !update.Changed || update.FileKey == "key" || update.FileKey == "") {
+					t.Fatalf("callback count=%d want=%d", update.CellsCount, len(tc.want))
 				}
 				return err
 			})
 			gomock.InOrder(f.files.EXPECT().Get(ctx, "key").Return([]byte("input"), nil), f.codec.EXPECT().Parse([]byte("input")).Return(tc.cells, nil))
 			if tc.wantErr == nil {
-				gomock.InOrder(f.codec.EXPECT().Build(tc.want).Return([]byte("output"), nil), f.files.EXPECT().Put(ctx, "key", []byte("output")).Return(nil))
+				gomock.InOrder(f.codec.EXPECT().Rewrite([]byte("input"), tc.want).Return([]byte("output"), nil), f.files.EXPECT().Put(ctx, gomock.Cond(func(k string) bool {
+					return strings.HasPrefix(k, "notebooks/") && strings.HasSuffix(k, ".ipynb") && k != "key"
+				}), []byte("output")).Return(nil))
 			}
 			var err error
 			if tc.remove {
@@ -181,7 +184,7 @@ func TestModifyStorageFailures(t *testing.T) {
 			f := newNotebookFixture(t)
 			ctx := context.Background()
 			source := errors.New(stage + " failed")
-			f.meta.EXPECT().Modify(ctx, int64(7), owner, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (int, error)) error {
+			f.meta.EXPECT().Modify(ctx, int64(7), owner, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (MetadataUpdate, error)) error {
 				_, err := fn(domain.Notebook{ID: 7, FileKey: "key", CellsCount: 1})
 				if !errors.Is(err, source) {
 					t.Fatalf("callback err=%v", err)
@@ -198,12 +201,14 @@ func TestModifyStorageFailures(t *testing.T) {
 					parse.Return(nil, source)
 				} else {
 					parse.Return([]domain.Cell{}, nil)
-					build := f.codec.EXPECT().Build([]domain.Cell{{ID: "fixed-id", Kind: domain.CellKindCode}})
+					build := f.codec.EXPECT().Rewrite([]byte("input"), []domain.Cell{{ID: "fixed-id", Kind: domain.CellKindCode}})
 					if stage == "build" {
 						build.Return(nil, source)
 					} else {
 						build.Return([]byte("output"), nil)
-						f.files.EXPECT().Put(ctx, "key", []byte("output")).Return(source)
+						f.files.EXPECT().Put(ctx, gomock.Cond(func(k string) bool {
+							return strings.HasPrefix(k, "notebooks/") && strings.HasSuffix(k, ".ipynb") && k != "key"
+						}), []byte("output")).Return(source)
 					}
 				}
 			}

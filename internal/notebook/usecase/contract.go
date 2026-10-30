@@ -12,6 +12,9 @@ import (
 const MaxCells = 1000
 
 var (
+	ErrNotebookConflict = errors.New("notebook content has changed")
+	ErrInvalidHash      = errors.New("notebook hash is required")
+	ErrInvalidCellKind  = errors.New("cell kind must be code or markdown")
 	ErrNotebookNotFound = errors.New("notebook not found")
 	ErrCellNotFound     = errors.New("cell not found")
 	ErrEmptyName        = errors.New("notebook name is empty")
@@ -21,6 +24,7 @@ var (
 
 // Usecase работает только с блокнотами владельца.
 type Usecase interface {
+	Editing
 	List(ctx context.Context, ownerID int64) ([]domain.NotebookSummary, error)
 	// Create кладёт в новый блокнот один пустой блок кода.
 	Create(ctx context.Context, ownerID int64, name string) (domain.Notebook, error)
@@ -28,4 +32,13 @@ type Usecase interface {
 	// CreateCell вставляет пустой блок на место index, а без index — в конец.
 	CreateCell(ctx context.Context, id, ownerID int64, kind domain.CellKind, index *int) (domain.Cell, error)
 	DeleteCell(ctx context.Context, id, ownerID int64, index int) error
+}
+
+// Editing проверяет хеш всей редакции перед каждой операцией изменения.
+type Editing interface {
+	Content(ctx context.Context, id, ownerID int64) (domain.Content, error)
+	AddCell(ctx context.Context, id, ownerID int64, hash string, kind domain.CellKind, source string, index *int) (domain.CellChange, error)
+	EditCell(ctx context.Context, id, ownerID int64, hash, cellID, source string) (domain.CellChange, error)
+	MoveCell(ctx context.Context, id, ownerID int64, hash, cellID string, index int) (string, error)
+	RemoveCell(ctx context.Context, id, ownerID int64, hash, cellID string) (string, error)
 }
