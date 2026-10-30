@@ -78,6 +78,9 @@ func (uc *NotebookUsecase) Get(ctx context.Context, id, ownerID int64) (domain.N
 
 // CreateCell вставляет пустой блок на место index, а без index — в конец.
 func (uc *NotebookUsecase) CreateCell(ctx context.Context, id, ownerID int64, kind domain.CellKind, index *int) (domain.Cell, error) {
+	if kind != domain.CellKindCode && kind != domain.CellKindMarkdown {
+		return domain.Cell{}, ErrInvalidCellKind
+	}
 	var cell domain.Cell
 	err := uc.modify(ctx, id, ownerID, func(cells []domain.Cell) ([]domain.Cell, error) {
 		if len(cells) >= MaxCells {
@@ -116,27 +119,7 @@ func (uc *NotebookUsecase) DeleteCell(ctx context.Context, id, ownerID int64, in
 
 // modify меняет блоки через change, пока строка блокнота заблокирована.
 func (uc *NotebookUsecase) modify(ctx context.Context, id, ownerID int64, change func([]domain.Cell) ([]domain.Cell, error)) error {
-	err := uc.meta.Modify(ctx, id, ownerID, func(n domain.Notebook) (int, error) {
-		cells, err := uc.readCells(ctx, n.FileKey)
-		if err != nil {
-			return 0, err
-		}
-		cells, err = change(cells)
-		if err != nil {
-			return 0, err
-		}
-		data, err := uc.codec.Build(cells)
-		if err != nil {
-			return 0, err
-		}
-		if err = uc.files.Put(ctx, n.FileKey, data); err != nil {
-			return 0, err
-		}
-		return len(cells), nil
-	})
-	if errors.Is(err, ErrNotebookNotFound) {
-		return ErrNotebookNotFound
-	}
+	_, err := uc.changeCells(ctx, id, ownerID, nil, change)
 	return err
 }
 

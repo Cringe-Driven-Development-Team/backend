@@ -74,14 +74,14 @@ func TestS2SRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 					if op.method == http.MethodDelete {
 						wantCount = 0
 					}
-					meta.EXPECT().Modify(gomock.Any(), int64(1), int64(1), gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (int, error)) error {
-						count, err := fn(domain.Notebook{ID: 1, OwnerID: 1, FileKey: "fixture.ipynb", CellsCount: 1})
-						if err != nil || count != wantCount {
-							t.Fatalf("callback count=%d err=%v", count, err)
+					meta.EXPECT().Modify(gomock.Any(), int64(1), int64(1), gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, _ int64, fn func(domain.Notebook) (notebookusecase.MetadataUpdate, error)) error {
+						update, err := fn(domain.Notebook{ID: 1, OwnerID: 1, FileKey: "fixture.ipynb", CellsCount: 1})
+						if err != nil || (update.CellsCount != wantCount || !update.Changed || update.FileKey == "fixture.ipynb") {
+							t.Fatalf("callback count=%d err=%v", update.CellsCount, err)
 						}
 						return err
 					})
-					gomock.InOrder(files.EXPECT().Get(gomock.Any(), "fixture.ipynb").Return(data, nil), files.EXPECT().Put(gomock.Any(), "fixture.ipynb", gomock.Cond(func(b []byte) bool {
+					gomock.InOrder(files.EXPECT().Get(gomock.Any(), "fixture.ipynb").Return(data, nil), files.EXPECT().Put(gomock.Any(), gomock.Cond(func(k string) bool { return strings.HasPrefix(k, "notebooks/") && strings.HasSuffix(k, ".ipynb") }), gomock.Cond(func(b []byte) bool {
 						cells, err := ipynb.Parse(b)
 						if err != nil || len(cells) != wantCount {
 							return false
