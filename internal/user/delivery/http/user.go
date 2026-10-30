@@ -64,7 +64,11 @@ func (h *Handler) RefreshToken(ctx context.Context, req api.RefreshTokenRequestO
 	return api.RefreshToken200JSONResponse(pair), nil
 }
 func (h *Handler) LogoutUser(ctx context.Context, req api.LogoutUserRequestObject) (api.LogoutUserResponseObject, error) {
-	err := h.uc.Logout(ctx, req.Body.RefreshToken)
+	claims, ok := principal.SessionFromContext(ctx)
+	if !ok {
+		return api.LogoutUser401JSONResponse{Code: api.Unauthorized, Message: "authentication required"}, nil
+	}
+	err := h.uc.Logout(ctx, req.Body.RefreshToken, claims)
 	if errors.Is(err, usecase.ErrInvalidRefresh) {
 		return api.LogoutUser401JSONResponse{Code: api.Unauthorized, Message: "refresh token is invalid or expired"}, nil
 	}

@@ -16,7 +16,7 @@ import (
 
 const BaseURL = "/api/v1"
 
-func NewRouter(srv Server, tokens security.TokenParser, bffKey string) (http.Handler, error) {
+func NewRouter(srv Server, tokens security.TokenParser, sessions security.AccessSessions, bffKey string) (http.Handler, error) {
 	if strings.TrimSpace(bffKey) == "" {
 		return nil, errors.New("BFF_API_KEY is not set")
 	}
@@ -51,6 +51,6 @@ func NewRouter(srv Server, tokens security.TokenParser, bffKey string) (http.Han
 		ErrorHandlerFunc: httperr.RequestError,
 	})
 
-	handler := security.S2S(bffKey, BaseURL)(security.AuthenticateBearer(tokens)(r))
+	handler := security.S2S(bffKey, BaseURL)(security.AuthenticateBearer(tokens, sessions)(r))
 	return middleware.RequestID(middleware.Logging(middleware.Recover(handler))), nil
 }

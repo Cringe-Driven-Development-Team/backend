@@ -21,12 +21,12 @@ import (
 func bffRouter(t *testing.T, key string) (http.Handler, *bffUsers, string) {
 	t.Helper()
 	issuer := usersecurity.NewAccessToken([]byte("bff-jwt-test-key"), time.Minute)
-	access, expires, err := issuer.IssueAccess(1)
+	access, expires, err := issuer.IssueAccess(testClaims(1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	users := &bffUsers{session: usecase.Session{UserID: 1, AccessToken: access, AccessExpiresAt: expires, RefreshToken: "private-refresh-token", ExpiresAt: time.Now().Add(time.Hour)}}
-	router, err := NewRouter(Server{UserHandler: userdelivery.NewHandler(users), NotebookHandler: notebookdelivery.NewHandler(bffNotebooks{})}, issuer, key)
+	users := &bffUsers{session: usecase.Session{SessionClaims: testClaims(1), AccessToken: access, AccessExpiresAt: expires, RefreshToken: "private-refresh-token", ExpiresAt: time.Now().Add(time.Hour)}}
+	router, err := NewRouter(Server{UserHandler: userdelivery.NewHandler(users), NotebookHandler: notebookdelivery.NewHandler(bffNotebooks{})}, issuer, allowSessions{}, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestBFFSessionLifecycleAndLogs(t *testing.T) {
 
 func TestRouterRejectsEmptyBFFKey(t *testing.T) {
 	for _, key := range []string{"", " \t"} {
-		if _, err := NewRouter(Server{}, nil, key); err == nil {
+		if _, err := NewRouter(Server{}, nil, allowSessions{}, key); err == nil {
 			t.Fatal("empty key accepted")
 		}
 	}

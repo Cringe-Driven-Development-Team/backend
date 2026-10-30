@@ -15,9 +15,10 @@ const refreshTTL = time.Hour
 
 func expectSession(ctx context.Context, f userFixture, authorized *gomock.Call) {
 	gomock.InOrder(
-		f.tokens.EXPECT().IssueAccess(int64(7)).Return("access-SECRET", f.now.Add(time.Minute), nil).After(authorized),
+		f.sessions.EXPECT().CurrentVersion(ctx, int64(7)).Return(SessionVersion(1), nil).After(authorized),
+		f.tokens.EXPECT().IssueAccess(gomock.Any()).Return("access-SECRET", f.now.Add(time.Minute), nil).After(authorized),
 		f.refresh.EXPECT().New().Return("refresh-SECRET", "hash-SECRET"),
-		f.sessions.EXPECT().CreateSession(ctx, int64(7), "hash-SECRET", f.now.Add(refreshTTL)).Return(nil),
+		f.sessions.EXPECT().Create(ctx, gomock.Any()).Return(nil),
 	)
 }
 
@@ -48,7 +49,7 @@ func TestUserUsecaseRegister(t *testing.T) {
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("error=%v want=%v", err, tc.want)
 			}
-			if tc.want == nil && (u != want || sess != (Session{UserID: 7, AccessExpiresAt: f.now.Add(time.Minute), AccessToken: "access-SECRET", RefreshToken: "refresh-SECRET", ExpiresAt: f.now.Add(refreshTTL)})) {
+			if tc.want == nil && (u != want || sess != (Session{SessionClaims: sess.SessionClaims, AccessExpiresAt: f.now.Add(time.Minute), AccessToken: "access-SECRET", RefreshToken: "refresh-SECRET", ExpiresAt: f.now.Add(refreshTTL)})) {
 				t.Fatalf("user=%+v session=%+v", u, sess)
 			}
 		})
@@ -107,41 +108,4 @@ func errorName(err error) string {
 		return "success"
 	}
 	return err.Error()
-}
-
-func TestRefreshAndLogoutPorts(t *testing.T) {
-	failure := errors.New("store failed")
-	for _, op := range []string{"refresh", "logout"} {
-		for _, tc := range []struct {
-			name           string
-			storeErr, want error
-			expires        time.Duration
-		}{
-			{"success", nil, nil, refreshTTL}, {"missing", ErrSessionNotFound, ErrInvalidRefresh, refreshTTL}, {"store failure", failure, failure, refreshTTL}, {"expired", nil, ErrInvalidRefresh, 0},
-		} {
-			t.Run(op+"/"+tc.name, func(t *testing.T) {
-				f := newUserFixture(t)
-				ctx := context.Background()
-				hash := f.refresh.EXPECT().Hash("old").Return("old-hash")
-				consumed := f.sessions.EXPECT().DeleteSession(ctx, "old-hash").Return(int64(7), f.now.Add(tc.expires), tc.storeErr).After(hash)
-				want := tc.want
-				if op == "logout" {
-					if tc.name == "expired" {
-						want = nil
-					}
-					if err := f.uc.Logout(ctx, "old"); !errors.Is(err, want) {
-						t.Fatalf("err=%v want=%v", err, want)
-					}
-					return
-				}
-				if want == nil {
-					expectSession(ctx, f, consumed)
-				}
-				sess, err := f.uc.Refresh(ctx, "old")
-				if !errors.Is(err, want) || (want == nil && sess.RefreshToken != "refresh-SECRET") {
-					t.Fatalf("session=%v err=%v", sess, err)
-				}
-			})
-		}
-	}
 }

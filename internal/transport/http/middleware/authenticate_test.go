@@ -15,11 +15,11 @@ import (
 
 func TestAuthenticateBearer(t *testing.T) {
 	tokens := usersecurity.NewAccessToken([]byte("test-secret"), time.Minute)
-	valid, err := tokens.Issue(42)
+	valid, err := tokens.Issue(testClaims(42))
 	if err != nil {
 		t.Fatal(err)
 	}
-	expired, err := usersecurity.NewAccessToken([]byte("test-secret"), -time.Minute).Issue(42)
+	expired, err := usersecurity.NewAccessToken([]byte("test-secret"), -time.Minute).Issue(testClaims(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestAuthenticateBearer(t *testing.T) {
 			req.Header.Set("Authorization", tt.header)
 			req.Header.Set("X-BFF-Key", "test-key")
 			rec := httptest.NewRecorder()
-			security.AuthenticateBearer(tokens)(Validator(spec, "/api/v1")(specHandler)).ServeHTTP(rec, req)
+			security.AuthenticateBearer(tokens, allowSessions{})(Validator(spec, "/api/v1")(specHandler)).ServeHTTP(rec, req)
 			wantStatus := http.StatusUnauthorized
 			if tt.authenticated {
 				wantStatus = http.StatusOK

@@ -23,12 +23,12 @@ var (
 type Usecase interface {
 	Register(ctx context.Context, login, password string) (domain.User, Session, error)
 	Login(ctx context.Context, login, password string) (domain.User, Session, error)
-	// Refresh делает ротацию: старая сессия удаляется, вместо неё создаётся новая.
+	// Refresh атомарно меняет refresh-токен, сохраняя sid и версию.
 	Refresh(ctx context.Context, refreshToken string) (Session, error)
-	Logout(ctx context.Context, refreshToken string) error
+	Logout(ctx context.Context, refreshToken string, claims SessionClaims) error
 	CurrentUser(ctx context.Context, id int64) (domain.User, error)
 }
 
 type TokenIssuer interface {
-	IssueAccess(userID int64) (token string, expiresAt time.Time, err error)
+	IssueAccess(claims SessionClaims) (token string, expiresAt time.Time, err error)
 }

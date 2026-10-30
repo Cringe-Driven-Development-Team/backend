@@ -27,3 +27,12 @@ Playbook ждёт `/health` внутри Compose и проверяет чере�
 Параметры S3 роль `app` передаёт из infra vars и Vault. API использует `S3_NOTEBOOKS_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` и `AWS_ENDPOINT_URL_S3`. Локально используется SeaweedFS, в production — Selectel.
 
 Откат выполняется из infra прежним опубликованным SHA-тегом по [инструкции Ansible](https://github.com/Cringe-Driven-Development-Team/infra/blob/main/ansible/README.md). Миграции Down автоматически не запускаются: старый бинарник должен быть совместим с уже применённой схемой. Перед откатом сверяйте digest образа с исходным запуском публикации.
+
+## Выпуск перехода на Redis
+
+Job `test` поднимает настоящий Redis 8 и проверяет TTL, атомарную ротацию,
+отзыв, гонки, потерю ответа и восстановление данных. Изолированный restart-тест
+проверяет AOF. Перед первым выпуском остановите старый API и следуйте
+[runbook](redis-sessions.md): старые refresh-сессии очищаются, новый JWT требует
+sid/версии. Откат на stateless API требует смены JWT-ключа и удаления старого
+verification key; одного очищения refresh недостаточно.

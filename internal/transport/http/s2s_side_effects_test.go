@@ -41,7 +41,7 @@ func TestS2SRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 				handler, err := NewRouter(Server{
 					UserHandler:     userdelivery.NewHandler(users),
 					NotebookHandler: notebookdelivery.NewHandler(uc),
-				}, usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour), "test-key")
+				}, usersecurity.NewAccessToken([]byte("jwt-test-secret"), time.Hour), allowSessions{}, "test-key")
 				if err != nil {
 					t.Fatal(err)
 				}
