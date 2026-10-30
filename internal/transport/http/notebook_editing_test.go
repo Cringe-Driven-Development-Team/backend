@@ -51,7 +51,7 @@ func (n *editingNotebooks) RemoveCell(ctx context.Context, id, owner int64, hash
 
 func TestNotebookEditingBFFPipeline(t *testing.T) {
 	issuer := usersecurity.NewAccessToken([]byte("editing-test-key"), time.Hour)
-	access, err := issuer.Issue(1)
+	access, err := issuer.Issue(testClaims(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestNotebookEditingBFFPipeline(t *testing.T) {
 	handler, err := NewRouter(Server{
 		UserHandler:     userdelivery.NewHandler(nil),
 		NotebookHandler: notebookdelivery.NewHandler(notebooks),
-	}, issuer, "editing-bff-key")
+	}, issuer, allowSessions{}, "editing-bff-key")
 	if err != nil {
 		t.Fatal(err)
 	}
