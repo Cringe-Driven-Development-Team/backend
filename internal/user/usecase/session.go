@@ -4,7 +4,7 @@ import "time"
 
 // Session получает клиент после входа или refresh.
 type Session struct {
-	UserID          int64
+	SessionClaims
 	AccessExpiresAt time.Time
 	AccessToken     string
 	RefreshToken    string

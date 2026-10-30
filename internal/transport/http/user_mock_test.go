@@ -74,17 +74,17 @@ func (mr *MockUserUsecaseMockRecorder) Login(ctx, login, password any) *gomock.C
 }
 
 // Logout mocks base method.
-func (m *MockUserUsecase) Logout(ctx context.Context, refreshToken string) error {
+func (m *MockUserUsecase) Logout(ctx context.Context, refreshToken string, claims usecase.SessionClaims) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logout", ctx, refreshToken)
+	ret := m.ctrl.Call(m, "Logout", ctx, refreshToken, claims)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logout indicates an expected call of Logout.
-func (mr *MockUserUsecaseMockRecorder) Logout(ctx, refreshToken any) *gomock.Call {
+func (mr *MockUserUsecaseMockRecorder) Logout(ctx, refreshToken, claims any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockUserUsecase)(nil).Logout), ctx, refreshToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockUserUsecase)(nil).Logout), ctx, refreshToken, claims)
 }
 
 // Refresh mocks base method.

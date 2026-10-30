@@ -40,7 +40,7 @@ func newRouter(t *testing.T, uc usecase.Usecase) http.Handler {
 		t.Fatal(err)
 	}
 	strict := api.NewStrictHandlerWithOptions(testServer{userHandler: NewHandler(uc)}, nil, api.StrictHTTPServerOptions{RequestErrorHandlerFunc: httperr.RequestError, ResponseErrorHandlerFunc: httperr.ResponseError})
-	return security.AuthenticateBearer(testTokens(t))(api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1", Middlewares: []api.MiddlewareFunc{middleware.Validator(spec, "/api/v1")}}))
+	return security.AuthenticateBearer(testTokens(t), allowSessions{})(api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1", Middlewares: []api.MiddlewareFunc{middleware.Validator(spec, "/api/v1")}}))
 }
 func newSession(userID int64) usecase.Session {
 	return usecase.Session{
@@ -76,7 +76,7 @@ func TestAuthErrors(t *testing.T) {
 			case "auth/refresh":
 				uc.EXPECT().Refresh(gomock.Any(), "refresh").Return(usecase.Session{}, tc.err)
 			case "auth/logout":
-				uc.EXPECT().Logout(gomock.Any(), "refresh").Return(tc.err)
+				uc.EXPECT().Logout(gomock.Any(), "refresh", gomock.Any()).Return(tc.err)
 			case "users/me":
 				uc.EXPECT().CurrentUser(gomock.Any(), int64(42)).Return(domain.User{}, tc.err)
 			}

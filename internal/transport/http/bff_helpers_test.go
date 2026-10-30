@@ -39,7 +39,7 @@ func (u *bffUsers) Refresh(_ context.Context, refresh string) (usecase.Session, 
 	u.session.RefreshToken += "-rotated"
 	return u.session, nil
 }
-func (u *bffUsers) Logout(_ context.Context, refresh string) error {
+func (u *bffUsers) Logout(_ context.Context, refresh string, _ usecase.SessionClaims) error {
 	if err := u.validateRefresh(refresh); err != nil {
 		return err
 	}

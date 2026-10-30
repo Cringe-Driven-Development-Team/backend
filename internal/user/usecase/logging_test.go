@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
-	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
 )
 
@@ -20,7 +19,7 @@ func TestSuccessfulUserActionsLogOnceWithoutSecrets(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(old) })
 	ctx := observability.WithRequestID(context.Background(), "req-user")
 	repo := newFakeRepo()
-	uc := NewUserUsecase(repo, repo, flowIssuer(t, 3), usersecurity.PasswordHasher{}, usersecurity.RefreshTokens{}, refreshTTL)
+	uc := NewUserUsecase(repo, repo, flowIssuer(t, 3), flowPasswords{}, flowRefresh{}, refreshTTL)
 	_, registered, err := uc.Register(ctx, "alice-SECRET", "password-SECRET")
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +32,7 @@ func TestSuccessfulUserActionsLogOnceWithoutSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := uc.Logout(ctx, refreshed.RefreshToken); err != nil {
+	if err := uc.Logout(ctx, refreshed.RefreshToken, refreshed.SessionClaims); err != nil {
 		t.Fatal(err)
 	}
 	_ = registered

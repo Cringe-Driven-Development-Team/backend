@@ -2,12 +2,15 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
+	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -17,7 +20,7 @@ import (
 type fakeRepo struct {
 	mu       sync.Mutex
 	users    map[int64]fakeUser
-	sessions map[string]fakeSession
+	sessions map[string]RefreshSession
 	// lastID растёт с каждым пользователем, как IDENTITY в Postgres.
 	lastID int64
 }
@@ -27,13 +30,8 @@ type fakeUser struct {
 	hash string
 }
 
-type fakeSession struct {
-	userID    int64
-	expiresAt time.Time
-}
-
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{users: map[int64]fakeUser{}, sessions: map[string]fakeSession{}}
+	return &fakeRepo{users: map[int64]fakeUser{}, sessions: map[string]RefreshSession{}}
 }
 
 // addUser кладёт пользователя с паролем. MinCost, чтобы тесты не ждали bcrypt.
@@ -83,27 +81,66 @@ func (r *fakeRepo) UserByID(_ context.Context, id int64) (domain.User, error) {
 	return u.User, nil
 }
 
-func (r *fakeRepo) CreateSession(_ context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+func (r *fakeRepo) CurrentVersion(context.Context, int64) (SessionVersion, error) { return 1, nil }
+func (r *fakeRepo) Create(_ context.Context, s NewSession) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.sessions[tokenHash] = fakeSession{userID: userID, expiresAt: expiresAt}
+	r.sessions[s.TokenHash] = s.RefreshSession
 	return nil
 }
-
-func (r *fakeRepo) DeleteSession(_ context.Context, tokenHash string) (int64, time.Time, error) {
+func (r *fakeRepo) Find(_ context.Context, h string) (RefreshSession, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	s, ok := r.sessions[tokenHash]
+	s, ok := r.sessions[h]
 	if !ok {
-		return 0, time.Time{}, ErrSessionNotFound
+		return RefreshSession{}, ErrInvalidSession
 	}
-	delete(r.sessions, tokenHash)
-	return s.userID, s.expiresAt, nil
+	return s, nil
 }
+func (r *fakeRepo) Rotate(_ context.Context, h string, n NewSession) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[h]
+	if !ok || s.SessionClaims != n.SessionClaims {
+		return ErrInvalidSession
+	}
+	delete(r.sessions, h)
+	r.sessions[n.TokenHash] = n.RefreshSession
+	return nil
+}
+func (r *fakeRepo) Revoke(_ context.Context, h string, c SessionClaims) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sessions[h]
+	if !ok || s.SessionClaims != c {
+		return ErrInvalidSession
+	}
+	delete(r.sessions, h)
+	return nil
+}
+func (r *fakeRepo) RevokeAll(context.Context, int64) error { panic("unused in these flows") }
+func (r *fakeRepo) ValidateAccess(context.Context, SessionClaims) error {
+	panic("unused in these flows")
+}
+
+type flowPasswords struct{}
+
+func (flowPasswords) Hash(p string) (string, error) {
+	h, e := bcrypt.GenerateFromPassword([]byte(p), bcrypt.MinCost)
+	return string(h), e
+}
+func (flowPasswords) Compare(h, p string) (bool, error) {
+	return bcrypt.CompareHashAndPassword([]byte(h), []byte(p)) == nil, nil
+}
+
+type flowRefresh struct{}
+
+func (flowRefresh) New() (string, string) { v := uuid.NewString(); return v, (flowRefresh{}).Hash(v) }
+func (flowRefresh) Hash(v string) string  { return fmt.Sprintf("%x", sha256.Sum256([]byte(v))) }
 
 func flowIssuer(t *testing.T, calls int) *MockTokenIssuer {
 	t.Helper()
 	issuer := NewMockTokenIssuer(gomock.NewController(t))
-	issuer.EXPECT().IssueAccess(int64(1)).Return("access-1", time.Now().Add(time.Minute), nil).Times(calls)
+	issuer.EXPECT().IssueAccess(gomock.Any()).Return("access-1", time.Now().Add(time.Minute), nil).Times(calls)
 	return issuer
 }

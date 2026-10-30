@@ -44,10 +44,10 @@ func TestBFFAuthContract(t *testing.T) {
 			case tc.operation == "refresh" && tc.status == 200:
 				uc.EXPECT().Refresh(gomock.Any(), "body-refresh").Return(sess, nil)
 			case tc.operation == "logout" && tc.status == 204:
-				uc.EXPECT().Logout(gomock.Any(), "body-refresh").Return(nil)
+				uc.EXPECT().Logout(gomock.Any(), "body-refresh", gomock.Any()).Return(nil)
 			}
 			strict := api.NewStrictHandlerWithOptions(testServer{userHandler: NewHandler(uc)}, nil, api.StrictHTTPServerOptions{RequestErrorHandlerFunc: httperr.RequestError, ResponseErrorHandlerFunc: httperr.ResponseError})
-			handler := security.AuthenticateBearer(testTokens(t))(api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1", Middlewares: []api.MiddlewareFunc{middleware.Validator(spec, "/api/v1")}}))
+			handler := security.AuthenticateBearer(testTokens(t), allowSessions{})(api.HandlerWithOptions(strict, api.GorillaServerOptions{BaseURL: "/api/v1", Middlewares: []api.MiddlewareFunc{middleware.Validator(spec, "/api/v1")}}))
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/"+tc.operation, strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-BFF-Key", "test-key")

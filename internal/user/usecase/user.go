@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/domain"
+	"github.com/google/uuid"
 )
 
 type UserUsecase struct {
@@ -71,32 +72,44 @@ func (uc *UserUsecase) Login(ctx context.Context, login, password string) (domai
 }
 
 func (uc *UserUsecase) Refresh(ctx context.Context, refreshToken string) (Session, error) {
-	userID, expiresAt, err := uc.sessions.DeleteSession(ctx, uc.refresh.Hash(refreshToken))
-	if errors.Is(err, ErrSessionNotFound) {
+	oldHash := uc.refresh.Hash(refreshToken)
+	old, err := uc.sessions.Find(ctx, oldHash)
+	if err != nil {
+		return Session{}, refreshError(err)
+	}
+	if !uc.now().Before(old.ExpiresAt) {
 		return Session{}, ErrInvalidRefresh
 	}
+	sess, replacement, err := uc.prepareSession(old.SessionClaims)
 	if err != nil {
 		return Session{}, err
 	}
-	if !uc.now().Before(expiresAt) {
-		return Session{}, ErrInvalidRefresh
+	if err = uc.sessions.Rotate(ctx, oldHash, replacement); err != nil {
+		return Session{}, refreshError(err)
 	}
-	sess, err := uc.startSession(ctx, userID)
-	if err == nil {
-		slog.InfoContext(ctx, "session.refresh", slog.String("outcome", "success"), slog.Int64("user_id", userID))
-	}
-	return sess, err
+	slog.InfoContext(ctx, "session.refresh", slog.String("outcome", "success"), slog.Int64("user_id", old.UserID))
+	return sess, nil
 }
 
-func (uc *UserUsecase) Logout(ctx context.Context, refreshToken string) error {
-	_, _, err := uc.sessions.DeleteSession(ctx, uc.refresh.Hash(refreshToken))
-	if errors.Is(err, ErrSessionNotFound) {
+func refreshError(err error) error {
+	if errors.Is(err, ErrInvalidSession) {
 		return ErrInvalidRefresh
 	}
+	return err
+}
+
+func (uc *UserUsecase) Logout(ctx context.Context, refreshToken string, claims SessionClaims) error {
+	err := uc.sessions.Revoke(ctx, uc.refresh.Hash(refreshToken), claims)
 	if err == nil {
 		slog.InfoContext(ctx, "session.logout", slog.String("outcome", "success"))
 	}
-	return err
+	return refreshError(err)
+}
+
+// RevokeAll invalidates previously issued authorization; password changes require
+// their own cross-store and concurrent-login policy.
+func (uc *UserUsecase) RevokeAll(ctx context.Context, userID int64) error {
+	return uc.sessions.RevokeAll(ctx, userID)
 }
 
 func (uc *UserUsecase) CurrentUser(ctx context.Context, id int64) (domain.User, error) {
@@ -108,14 +121,31 @@ func (uc *UserUsecase) CurrentUser(ctx context.Context, id int64) (domain.User, 
 }
 
 func (uc *UserUsecase) startSession(ctx context.Context, userID int64) (Session, error) {
-	access, accessExpiresAt, err := uc.tokens.IssueAccess(userID)
+	version, err := uc.sessions.CurrentVersion(ctx, userID)
 	if err != nil {
 		return Session{}, err
 	}
-	refresh, hash := uc.refresh.New()
-	expiresAt := uc.now().Add(uc.refreshTTL)
-	if err := uc.sessions.CreateSession(ctx, userID, hash, expiresAt); err != nil {
+	sid, err := uuid.NewRandom()
+	if err != nil {
 		return Session{}, err
 	}
-	return Session{UserID: userID, AccessToken: access, AccessExpiresAt: accessExpiresAt, RefreshToken: refresh, ExpiresAt: expiresAt}, nil
+	sess, replacement, err := uc.prepareSession(SessionClaims{UserID: userID, SessionID: sid.String(), Version: version})
+	if err != nil {
+		return Session{}, err
+	}
+	if err = uc.sessions.Create(ctx, replacement); err != nil {
+		return Session{}, err
+	}
+	return sess, nil
+}
+
+func (uc *UserUsecase) prepareSession(claims SessionClaims) (Session, NewSession, error) {
+	access, accessExpiresAt, err := uc.tokens.IssueAccess(claims)
+	if err != nil {
+		return Session{}, NewSession{}, err
+	}
+	refresh, hash := uc.refresh.New()
+	expiresAt := uc.now().Add(uc.refreshTTL)
+	return Session{SessionClaims: claims, AccessToken: access, AccessExpiresAt: accessExpiresAt, RefreshToken: refresh, ExpiresAt: expiresAt},
+		NewSession{RefreshSession: RefreshSession{SessionClaims: claims, TokenHash: hash, ExpiresAt: expiresAt}, AccessExpiresAt: accessExpiresAt}, nil
 }
