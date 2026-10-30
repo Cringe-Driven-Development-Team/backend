@@ -13,6 +13,13 @@ coverage-summary.txt
 .codex
 .claude
 .mcp.json
-runtime-agent/
+runtime-agent/.venv/
+runtime-agent/.pytest_cache/
+runtime-agent/.ruff_cache/
+runtime-agent/build/
+runtime-agent/dist/
+runtime-agent/tests/
+runtime-agent/**/__pycache__/
+runtime-agent/**/*.egg-info/
 
 .apidog/

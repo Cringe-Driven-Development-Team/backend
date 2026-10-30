@@ -1,0 +1,21 @@
+#!/bin/sh
+# Fake ansible-playbook for tests. Records facts into $HOME.
+echo "$@" > "$HOME/args.txt"
+pwd -P > "$HOME/cwd.txt"
+echo "LC_ALL=$LC_ALL LANG=$LANG" > "$HOME/locale.txt"
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-i" ]; then inv="$2"; fi
+  shift
+done
+dir=$(dirname "$inv")
+echo "$dir" > "$HOME/dir.txt"
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+echo "dir=$(mode "$dir") vars=$(mode "$dir/vars.json")" > "$HOME/modes.txt"
+cp "$dir/known_hosts" "$HOME/known_hosts.txt"
+tok=$(sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' "$dir/vars.json")
+echo "using token $tok"
+if [ -n "$FAKE_SLEEP" ] || [ -f "$HOME/sleep" ]; then
+  sleep 60 &
+  echo $! > "$HOME/sleep.pid"
+  wait
+fi
