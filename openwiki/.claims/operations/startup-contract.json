@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d51e5c0ee6eb27510047ca0184296c3b63f2ec4a6e356b9abfc8060660aff041",
+  "claims": [
+    {
+      "id": "claim_e56f6d47f8b14def8f6ea6e90dad8ed4",
+      "statement": "newServer проверяет PostgreSQL, применяет migrations.Up и проверяет Redis до сборки HTTP-сервера; S3 клиент создаётся без проверки бакета.",
+      "evidence": [
+        {
+          "resource": "repo://internal/app/app.go#L29-L94",
+          "version": "repo-lines-v1:sha256:bbbaa3801a114fa5d2032bece143b7e1acfa85129502c71fe855e5176508551d:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1MzZkMWNmNDU1ZTNkNDc0ZWJjNTVjZjJjMTY1MGMwNDlkMWE2ZDg2NTRmMjBlNDVjYzFmZGI3NTNlOWZhMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNjI5MTE4ZTQ4NjMzNjg5NWExMWQ2NjQ4OTZmNjM4MzM0NzcyZDRjYTIzZjczOGFiYWQxNTI2ZjlmNmNlNzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://migrations/migrations.go#L15-L34",
+          "version": "repo-lines-v1:sha256:af99dacde6d267e11456d9fc84a2bf9de0eec171b4545054c081f87c7048c733:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZmE3ODUyZGRjYmUzZmQ5NjM3YTJkZGI5MmIzNTdmOTNiN2JjZDJhNmY5Mzg0NjM5MWFiNWUxYTdmNzVkZDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA0YWRlYzMzODk5ODJiMzJlNWM0ZjI1MWIwZmVjMGU3NzYzZjRlZjFkMjYwODdmYTIwMWEzNWM5NjJmZWY5NzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1568398c45324591a37e30659b81db50",
+      "statement": "Run обрабатывает SIGINT/SIGTERM через Shutdown с timeout 10 секунд и закрывает зависимости при выходе.",
+      "evidence": [
+        {
+          "resource": "repo://internal/app/run.go#L26-L52",
+          "version": "repo-lines-v1:sha256:499c72c0f5fc81f3db3519820ba4473975a60fea00c9b0a6ea77fa925eb4f2bc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjOTE2ZmU2NDUyOWFhMWZkNmJiYTVhMzhmMjk4YmVmZjAxOTU1NGNjNTg2ZmY0NTFmNjk5NTk3YTQ4NDFiNjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjZTc5NDJmNzM0OGMwYWMyYzExNjViYTgwNzFlNGI2NGEzM2U1Mzg5ZTdhMGQ1M2FkODljNWU5MDVjZjI0OGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_44d3da1b30814f779835d651a92c55c2",
+      "statement": "GET /health отвечает alive без обращения к хранилищам.",
+      "evidence": [
+        {
+          "resource": "repo://internal/transport/http/router.go#L34-L39",
+          "version": "repo-lines-v1:sha256:d9099c5218648e976b21a47f3c5a68c7df1a056e676a58c5c452426b4d30dfcb:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTFkNzMzYjYzMjhmMTExMjg3ZDYyYzFkZGJkYTJiODE5ZDRkOGZhMDM4YTJkZDcwMzMyMzVmZTkzMTNjZmFjZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTAwOWM0YTRhZDA4NDcyMmE1ZDJhNGFmYmEzMGJhMGM0NmMzYmQ3NmM1YjQ0MzRkMTRjNjgzMWYwZWMwYjQ1YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDhiZWE5ODgwMjdkOGQzYTY1MDM3NWNmMjJhMmIwOGY4ZWE0NzA4YTEzYjExMjNlYzk1ZDkxZTE4MzBmZGJiZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ab94298be5ff4553bffdd0c4e7c13ca7",
+      "statement": "HTTP-контракт принадлежит Apidog; make generate скачивает спецификацию и запускает генератор Go.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L55-L59",
+          "version": "repo-lines-v1:sha256:78d2fc3fecd19259cfdcc4303edc734bbda99faf6509dc2e635ad7227cb1d966:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTdmNGY4YWM0ZTVlMjJlZjQ4NmY2MmI0ZDNlZGQ5ODkzYzIxY2RlODFlOGRmZDU3YWQzODQxNzcxNDc5NTVkOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzE1MTE3ZGYxNTI0Mjc4MzE4M2IzMDgzNzc1M2Q4MDRmOTQ0NWFlYTJlZGM2YTc3NjY5NTFhZDc1ZDYxODFmYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODgwOGE0YTQ3ZmIxNTc3NWQzNjBhODQ2M2I2YzY5NTEwZDJjMjgzOTFjMzlkYzQwM2EwNGFjNjdkNTQ0MmQyOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2M2OGQ5MmViMzNhMTdiYTQ3MzQ4MTIyZGU3ZDBhNTdjYzhiMTY4MjYxYjUyYTBjZTc0ZmYxOTg2OTI0NDhkMiJ9"
+        },
+        {
+          "resource": "repo://docs/apidog.md#L1-L7",
+          "version": "repo-lines-v1:sha256:73bbcc5c87d74dbbedf5d50fd130c7f394f5731bcac993b98efe63a963361551:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjBiZDg1NDExMzZiMjczYTRhMzZmNDgzZjE1ZTEyOGIzMTdmYjdlZGIwY2FlMDZlZmI4ZjhmMzYzZmViNmQ4MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzcxNzJjZTg2YTQwYWFkYTMwMDA0OTYwMWQ1YTdiZjY4YjZiN2I1MTQ3ZjY3YWRmNTYzOTg1MDY4ZDJiODhmZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTViNjUxY2M3MWExZjdjMDY1ZTk1ZmJkZjJiOWIyNmJhYjAxYTZmMWMzMGYzNTExYzVkYmEwNjZlMTg0ODZmOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_86f1bd8ff09d4a91852cfa22fcae7e7b",
+      "statement": "make check выполняет check-fast, tidy diff, сборку, test и lint.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L25-L35",
+          "version": "repo-lines-v1:sha256:965e0d9a5cb5fa5b93cac51a92ffadd3878618d583ad4cb51e5312f1807a4053:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyNjMwNWJiNjFkZTZlNWZiMmQxOWY4YzZmM2E3M2Q2MzkyMzM1MGNmM2MxZGY4ZTcxZTk5YjYwNDBkYmY2ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4YzE0YjI2OGEzYWU1YTQzN2M1M2FmYTkwY2VhYWZiZjJkYmM2NjFkYzc5YTVkMGUzN2M2ZjA5OWI0OTVmODYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0Zjc1NTM0M2VlZGVlMTMwYTE5YjI0YjM1MmI4OTZmYmJlMWJjZTBiN2UyZDUwNjg5ZTUzNGRiODZmMWE3NWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlM2U1M2QxMjE5MmJkOTA4NGFlNjI3NWZiNjM2Y2U5MmZmYzE2NTUwOGM3MjMwNThiNjg1Nzk0Nzg0NzdiYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5c7212f5477148c691da921556c0dce0",
+      "statement": "Конфигурация требует BFF_API_KEY, JWT_SECRET и S3_NOTEBOOKS_BUCKET, а Redis-настройки валидируются отдельно.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L72-L91",
+          "version": "repo-lines-v1:sha256:752bfd500adf53c4fe513ddee70a8caf130a38558dedf98867c8f4246e3d8280:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiYTJmMjEyNDIwYzY5YmM3NTk2YTFhYjJhZTZlYmI3MDExNDMwOTcwNTdjYTQ3MWU3YTZhODZmYjkzZDQ1YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlOTlkNWYyMGUxZGM3ZjY4MzA3YWJhMTg0N2ZlZWU5OGY3NGY4MDg1NzFmNWExYzk5N2MxN2RkZTY3NzIwMzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc4ZGQ5MDk4YTVkMDZjM2U0NWI0MjU4ZDAyMTAxOTY2NDI3Mjc3MTU1NGIxMzRlMjViMTM4MGY0M2NkNmE3MmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0MWI0NWZlOTIxY2RlZmZkMjE1NjdlMDhlZTg2ZDU0ZjY4NmMxZWQ1YWRmYTM3NTA1OWU2OThjMThkMjg1NGQifQ"
+        },
+        {
+          "resource": "repo://internal/config/redis.go#L11-L44",
+          "version": "repo-lines-v1:sha256:d8e7894c13dd087c8e18a1535414cc390791d5e78bcda202c3221e9ad6687c7c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyNGJhNDY4OTUxMDZjNTU2NDZiZWU1NWNiZGI3YjNlNzc1N2U4NDNkZTE4NDcyODUzMDBhMjVmYjkwMDNiOWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ5MGNkNDcwZDUyZTM1OWU5NTRlMDM5NTdmYzExNzAzY2M5MDc3NDM5NTZiZGJkYzlmMzkxODc0OGEyZTY2YjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-31T14:34:07.758Z"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "pages": {
+    "/openwiki/architecture/auth-sessions.md": {
+      "pageVersion": "sha256:0d2a53ea89604374e11853b62c48f8c6008e2ddf42118e5c026d1fd23b362a91",
+      "completedBy": "codex",
+      "completedRunId": "7d53f0ef-8621-4ea5-81f3-76a973264433",
+      "gitHead": "30d62561c9e2c067764239e4b68dd477c9abb982",
+      "sourceFingerprint": "sha256:d166adb545fe35e005f16a967b2f90193ba4fb3e61397b175d5f59e20c5fcb28"
+    },
+    "/openwiki/architecture/notebooks.md": {
+      "pageVersion": "sha256:4a6644ea4ca3f2fcbf85737a6d895dbb165f67bdae7ad558c888caad93ca25db",
+      "completedBy": "codex",
+      "completedRunId": "7d53f0ef-8621-4ea5-81f3-76a973264433",
+      "gitHead": "30d62561c9e2c067764239e4b68dd477c9abb982",
+      "sourceFingerprint": "sha256:d166adb545fe35e005f16a967b2f90193ba4fb3e61397b175d5f59e20c5fcb28"
+    },
+    "/openwiki/operations/startup-contract.md": {
+      "pageVersion": "sha256:d51e5c0ee6eb27510047ca0184296c3b63f2ec4a6e356b9abfc8060660aff041",
+      "completedBy": "codex",
+      "completedRunId": "7d53f0ef-8621-4ea5-81f3-76a973264433",
+      "gitHead": "30d62561c9e2c067764239e4b68dd477c9abb982",
+      "sourceFingerprint": "sha256:d166adb545fe35e005f16a967b2f90193ba4fb3e61397b175d5f59e20c5fcb28"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:10eb51ade803fbc6844e081fa9c9f4fd2861bd6648222ecc1f014f957c9696dc",
+      "completedBy": "codex",
+      "completedRunId": "7d53f0ef-8621-4ea5-81f3-76a973264433",
+      "gitHead": "30d62561c9e2c067764239e4b68dd477c9abb982",
+      "sourceFingerprint": "sha256:d166adb545fe35e005f16a967b2f90193ba4fb3e61397b175d5f59e20c5fcb28"
+    }
+  }
+}
