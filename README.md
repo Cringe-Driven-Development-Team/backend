@@ -32,6 +32,15 @@ UUID сессии и язык задаются при запуске; лимит
 Production-установка, firewall и пул VPS принадлежат `infra`; интеграция с Go API,
 пользователями и ipynb выполняется отдельно.
 
+## Wiki кода
+
+Собственная `openwiki/quickstart.md` после ручной генерации описывает код Go API на исходном SHA.
+Проверка: `bun scripts/openwiki-check.ts --against <полный актуальный SHA backend/main>` (нужен Bun).
+До генерации используйте документацию и исходники ниже; stale wiki служит только указателем.
+[Brief генерации](openwiki/INSTRUCTIONS.md) задаёт корпус и границы; общий поиск четырёх репозиториев
+настраивается по [README docs](https://github.com/Cringe-Driven-Development-Team/docs#readme).
+Без MCP читайте Markdown нужного клона. Код и wiki не доказывают состояние прода.
+
 ## Код и документация
 
 - `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
