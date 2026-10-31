@@ -22,8 +22,7 @@
 
 ## Code Review Rules
 
-- Пиши заголовки и пояснения замечаний к PR на русском языке.
-  Имена файлов, идентификаторы, команды и метки приоритета сохраняй без перевода.
+- Пиши заголовки и пояснения замечаний к PR на русском языке. Имена файлов, идентификаторы, команды и метки приоритета сохраняй без перевода.
 
 ## Целевые продуктовые требования
 
@@ -43,13 +42,13 @@
 - Локально: Docker Compose с Go API, PostgreSQL 18, Redis 8 и SeaweedFS (S3).
 - `runtime-agent/`: Python 3.13 сервис systemd; одна VPS, одна сессия, один контейнер/kernel.
   SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
-  Jupyter — закрытый TCP без host mounts; сеть и firewall готовит infra по docs/runtime-agent-network.md.
+  Jupyter — закрытый TCP без host mounts; сеть и firewall реализует infra (роль `runtime_host`) по docs/runtime-agent-network.md.
 
-Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор (`-race`), Make, curl, Docker с Compose. `.env` — см. [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
-go mod tidy -diff      # проверить согласованность go.mod/go.sum без изменения
+go mod tidy -diff      # проверить согласованность go.mod/go.sum
 make build            # собрать bin/server
 make test             # тесты с -race, coverage.out и итоговое покрытие
 make lint             # статический анализ
@@ -62,7 +61,7 @@ make health           # GET /health; make logs — последние логи; 
 make run              # то же окружение с логами в терминале
 make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
 make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
-make agent-network-check # отдельная VPS с firewall infra; не обычный CI
+make agent-network-check # отдельная VPS с firewall infra; не обычный CI. smoke: — docs/runtime-provisioning.md
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с `-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов). Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`, `migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается. Последняя строка — итоговое покрытие; CI пишет ту же строку в summary. Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
@@ -85,8 +84,8 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 В `cmd/` размещай только точки входа в приложение; допустим README с описанием микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай в `internal/` (сборка и запуск API — `internal/app`).
 
 Карта кода: `cmd/main` → `internal/app` (сборка и запуск), `internal/config` — окружение.
-`internal/transport/http` — роутер, `/health`, API-генерация, middleware,
-security, principal и httperr; `internal/{user,notebook}/delivery/http`
+`internal/runtime` — VPS сессий (воркер, OpenStack, Ansible), `cmd/runtime-smoke` — ручная проверка;
+`internal/transport/http` — роутер, `/health`, API-генерация, middleware, security, principal, httperr; `internal/{user,notebook}/delivery/http`
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
 Сессии — Redis primary через `usecase.SessionStore`, пользователи — PostgreSQL; [runbook](docs/redis-sessions.md).
@@ -103,8 +102,9 @@ security, principal и httperr; `internal/{user,notebook}/delivery/http`
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
-- Агент не создаёт VPS; UUID сессии и язык назначаются перед запуском сервиса.
-  Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
+- Агент сам VPS не создаёт: создание, настройку (воркер запускает playbook) и удаление runtime-VPS выполняет
+  `internal/runtime` ([docs](docs/runtime-provisioning.md)). Роли (`runtime_host`, `runtime_agent`, `site.yml`, mount `/app/deploy/runtime`): установка агента/systemd, mTLS-доступ Go API
+  к агенту, сеть/firewall и секреты — в `infra`; запускает их воркер `internal/runtime`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие

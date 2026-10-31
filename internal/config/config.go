@@ -22,6 +22,7 @@ type Config struct {
 	AccessTTL, RefreshTTL                   time.Duration
 	NotebooksBucket                         string
 	DBUser, DBPassword, DBHost, DBName      string
+	Runtime                                 RuntimeConfig
 }
 
 // Load читает окружение процесса.
@@ -83,6 +84,11 @@ func LoadFrom(lookup func(string) (string, bool)) (Config, error) {
 	if err := c.loadRedis(lookup); err != nil {
 		return Config{}, err
 	}
+	rt, err := loadRuntime(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+	c.Runtime = rt
 	return c, nil
 }
 

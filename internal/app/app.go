@@ -15,6 +15,8 @@ import (
 	notebooks3 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/s3"
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
 	notebookusecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	runtimemodule "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime"
+	runtimeusecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	httptransport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/postgres"
 	userredis "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/redis"
@@ -26,13 +28,23 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// application — собранное приложение. Environments пока не используется HTTP-слоем (задача #13).
+type application struct {
+	Server       *http.Server
+	Environments runtimeusecase.EnvironmentService
+	// RuntimeWorker nil, если RUNTIME_ENABLED=false.
+	RuntimeWorker *runtimeusecase.Worker
+	RuntimeMode   string
+	Close         func()
+}
+
 // newServer собирает приложение; вызывающий закрывает ресурсы после остановки.
-func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
+func newServer(ctx context.Context, cfg config.Config) (*application, error) {
 	dbURL := cfg.PostgresURL()
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
-		return nil, nil, startupError("database_connect", fmt.Errorf("unable to connect to database: %w", err))
+		return nil, startupError("database_connect", fmt.Errorf("unable to connect to database: %w", err))
 	}
 	client := redis.NewClient(&redis.Options{Addr: net.JoinHostPort(cfg.RedisHost, strconv.Itoa(cfg.RedisPort)), Password: cfg.RedisPassword, DB: cfg.RedisDB,
 		DialTimeout: cfg.RedisDialTimeout, ReadTimeout: cfg.RedisOperationTimeout, WriteTimeout: cfg.RedisOperationTimeout, PoolTimeout: cfg.RedisOperationTimeout, ContextTimeoutEnabled: true, MaxRetries: -1})
@@ -45,19 +57,19 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 	}()
 
 	if err = pool.Ping(ctx); err != nil {
-		return nil, nil, startupError("database_connect", fmt.Errorf("database ping failed: %w", err))
+		return nil, startupError("database_connect", fmt.Errorf("database ping failed: %w", err))
 	}
 	slog.Info("connected to postgres successfully")
 
 	if err = migrations.Up(ctx, pool); err != nil {
-		return nil, nil, startupError("database_migrate", err)
+		return nil, startupError("database_migrate", err)
 	}
 
 	redisCtx, redisCancel := context.WithTimeout(ctx, cfg.RedisDialTimeout)
 	err = client.Ping(redisCtx).Err()
 	redisCancel()
 	if err != nil {
-		return nil, nil, startupError("redis_connect", fmt.Errorf("redis ping: %w", err))
+		return nil, startupError("redis_connect", fmt.Errorf("redis ping: %w", err))
 	}
 	sessions := userredis.NewStore(client, "", cfg.RedisOperationTimeout)
 	tokens := usersecurity.NewAccessToken([]byte(cfg.JWTSecret), cfg.AccessTTL)
@@ -66,18 +78,22 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 
 	s3Client, err := notebooks3.NewClient(ctx)
 	if err != nil {
-		return nil, nil, startupError("s3_client", err)
+		return nil, startupError("s3_client", err)
 	}
 	notebookUsecase := notebookusecase.NewNotebookUsecase(
 		notebookpostgres.NewNotebookRepository(pool),
 		notebooks3.NewFileStorage(s3Client, cfg.NotebooksBucket),
 		ipynb.Codec{},
 	)
+	envs, worker, err := runtimemodule.Build(ctx, cfg.Runtime, pool)
+	if err != nil {
+		return nil, startupError("runtime_init", err)
+	}
 	userHandler := userdelivery.NewHandler(userUsecase)
 	srv := httptransport.Server{UserHandler: userHandler, NotebookHandler: notebookdelivery.NewHandler(notebookUsecase)}
 	router, err := httptransport.NewRouter(srv, tokens, sessions, cfg.BFFAPIKey)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	bindAddr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
@@ -90,5 +106,8 @@ func newServer(ctx context.Context, cfg config.Config) (*http.Server, func(), er
 	}
 
 	ready = true
-	return httpServer, closeResources, nil
+	return &application{
+		Server: httpServer, Environments: envs, RuntimeWorker: worker,
+		RuntimeMode: cfg.Runtime.Provider, Close: closeResources,
+	}, nil
 }

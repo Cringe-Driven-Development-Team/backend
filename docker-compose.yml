@@ -31,6 +31,11 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_ENDPOINT_URL_S3=${AWS_ENDPOINT_URL_S3:-}
       - S3_NOTEBOOKS_BUCKET=${S3_NOTEBOOKS_BUCKET:-}
+      # Локальная разработка: фейковый провайдер, реальное облако не используется.
+      - RUNTIME_ENABLED=true
+      - RUNTIME_PROVIDER=fake
+      # ТОЛЬКО ДЛЯ ЛОКАЛЬНОЙ РАЗРАБОТКИ (base64 от 32 нулевых байт). Не использовать в production.
+      - RUNTIME_SECRETS_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     depends_on:
       redis:
         condition: service_healthy

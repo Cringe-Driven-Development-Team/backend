@@ -15,7 +15,7 @@ import (
 
 func startupError(stage string, err error) error {
 	switch stage {
-	case "database_connect", "database_migrate", "s3_client", "redis_connect", "http_listen":
+	case "database_connect", "database_migrate", "s3_client", "redis_connect", "runtime_init", "http_listen":
 		return observability.WithCode(err, stage)
 	default:
 		return observability.WithCode(err, "internal_error")
@@ -26,11 +26,31 @@ func startupError(stage string, err error) error {
 func Run(cfg config.Config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	server, closeResources, err := newServer(ctx, cfg)
+	app, err := newServer(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	defer closeResources()
+	defer app.Close()
+	server := app.Server
+
+	workerCtx, stopWorker := context.WithCancel(ctx)
+	workerDone := make(chan struct{})
+	if app.RuntimeWorker != nil {
+		slog.Info("runtime worker started", slog.String("provider", app.RuntimeMode))
+		go func() {
+			defer close(workerDone)
+			if err := app.RuntimeWorker.Run(workerCtx); err != nil {
+				slog.Error("runtime worker stopped", slog.String("error", err.Error()))
+			}
+		}()
+	} else {
+		close(workerDone)
+	}
+	defer func() {
+		stopWorker()
+		<-workerDone
+	}()
+
 	slog.Info("starting server", slog.String("addr", server.Addr), slog.String("write_timeout", server.WriteTimeout.String()), slog.String("read_timeout", server.ReadTimeout.String()))
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()

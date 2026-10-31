@@ -26,11 +26,14 @@ UUID сессии и язык задаются при запуске; лимит
 Контейнер без host mounts; связь агента с Jupyter — закрытый TCP без публикации порта.
 Доступ kernel к интернету ограничивает firewall infra по [контракту сети](docs/runtime-agent-network.md).
 
+Создание, настройку и удаление VPS сессий в Selectel выполняет модуль `internal/runtime`:
+[docs/runtime-provisioning.md](docs/runtime-provisioning.md).
+
 Проверки: `make agent-setup agent-lint agent-test agent-build`;
 с Docker — `make agent-images agent-integration`; локальный Python kernel —
 `make agent-test-jupyter`. Сетевая приёмка на отдельной VPS — `make agent-network-check`.
-Production-установка, firewall и пул VPS принадлежат `infra`; интеграция с Go API,
-пользователями и ipynb выполняется отдельно.
+VPS создаёт и удаляет backend; роли установки агента, реализация firewall и секреты
+принадлежат `infra`. Интеграция с пользователями и ipynb выполняется отдельно.
 
 ## Wiki кода
 

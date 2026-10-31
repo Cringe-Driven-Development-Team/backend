@@ -1,7 +1,10 @@
 # Сеть runtime-agent: контракт backend и infra
 
 Агент обслуживает одну сессию на выделенной VPS. Backend запускает контейнер в
-подготовленной infra сети, но не создаёт сеть, NAT, firewall или VPS. Имя сети
+подготовленной сети, но не создаёт сеть, NAT, firewall или VPS. Политику ниже
+реализует роль `runtime_host` в infra ([infra#89](https://github.com/Cringe-Driven-Development-Team/infra/issues/89)),
+а применяет backend-воркер при создании каждой VPS
+([runtime-provisioning.md](runtime-provisioning.md)); сама политика не меняется. Имя сети
 передаётся через KERNEL_NETWORK, IPv4 DNS — через KERNEL_DNS. Запуск отклоняет
 неизвестную сеть, host/default bridge, IPv6 и internal-сеть без выхода в интернет.
 
