@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0d2a53ea89604374e11853b62c48f8c6008e2ddf42118e5c026d1fd23b362a91",
+  "claims": [
+    {
+      "id": "claim_28875e5d88714949963994f864aad62f",
+      "statement": "S2S проверяется до Bearer и Validator, а request ID оборачивает весь роутер.",
+      "evidence": [
+        {
+          "resource": "repo://internal/transport/http/router.go#L19-L56",
+          "version": "repo-lines-v1:sha256:e6542e5eb40663b154d09d030e18b57d2de9157717cc3f66f85af37e034a243e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmMGQ2MmQ1YTI4YzE1MDNlNzljYmE0ZDdjZDg1ODk0ODY1MjJkOTBkNzdiMGVkM2ZhNjFlMjVhNGI2NGI3MzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5NmI1NjgzNTI2NjJjNjdlMzY0ZmM4ZDA2OTdhMWU2MjEwMWE2NzlkZGU5Y2E1MjIwZDk0MTliZTViZDA2MDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/transport/http/security/bff.go#L18-L44",
+          "version": "repo-lines-v1:sha256:6460f093942fe58dcb39232c0c5a6661f135f8cecfc446e5b0172701727ea209:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjNWI0ZjEzYjcyMTdkYTY4ZTA2ZDE0NGRjNGE5YTU1ZmIzNzQ4ODFhMjAxMDFmZTIyODY5NDdhZThhMTlmMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmYTc2ZmU1NzkzMTYwZTYzNzY3OWY4MjdkNjRhZDhjMjMwOWJjZTBlOTVhZjIzZTdiNTZlNzZlOGY2ZTU2YjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZlYmRiOTQ4ODQzMDM1NDAzMWM1MGQ5M2Y0Mjg4ZDdkNTY5MGI2NmJiZjBjOTQ0MDRjYjQwYWQ4YWI0OTNhNzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk0NWEwMDM1ZmM5ZTA4NDE0ZWMwMzBlNzljMjAzY2QxNGQ5NGU5YWVjMTM0NzdiNWVmNjA2MjZhZTNkN2M1ZTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4d505c4caa1945928b142f03a496bfbb",
+      "statement": "Bearer не читает cookies и проверяет состояние access в SessionStore перед установкой principal.",
+      "evidence": [
+        {
+          "resource": "repo://internal/transport/http/security/bff.go#L47-L75",
+          "version": "repo-lines-v1:sha256:985080cf9491993cccaf3d60f98da27e33323777fd8616e29d68095d2b84d290:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmMjllMzUzNWY0MzkzNjY4ZDdkOTBhMWVkYmU0ODdhZDU3YmMzN2RmMDY4ZTY2YTFlOWNiZTQ3ZGI1NDIyMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c09ea8849b1543a59899951c26db3453",
+      "statement": "Register записывает пользователя до startSession, без отката записи пользователя при ошибке сессии.",
+      "evidence": [
+        {
+          "resource": "repo://internal/user/usecase/user.go#L34-L57",
+          "version": "repo-lines-v1:sha256:c56929a20785ec5dd1098cf5fc15af2ab1de0b83c15433836af9fc00a1a8002b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5YjhlMWQzZjhiMDM5Njk2MWI1YWMyOTg2Yjg1MGZkM2JiODI2MDFiOTJjZDk0Nzg2ZTA3ZTM2NmE3YzgyYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMWI0OWRjNzJmNjMyNjNkYzRmODFkZDIxZGYzZWRiZmU2NWU5NjVlN2FmMjhjNDM4OGFmMjc0NThlZTYwY2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ5NWJmODM2NTRhZDk1Zjk2MzA1YWVlZGI4M2JjOTJiZjcwZWI2YTlmZjc1MzZiOTBhODc3NjU2ZGQzZDI4NzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZhMWQzNmVkOGU3MGRlNzMzNDAxYjYyYjEzZjE2ZjZjOTQyYjQ1OTQzZTI5YTY1NjQ4ZmVmYzY2MTk4YjRkNTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cb38e298f2f045649b815fdd66e64c52",
+      "statement": "Refresh сохраняет SID и версию; Lua заменяет refresh индекс и сохраняет максимальный access deadline, Logout удаляет обе записи.",
+      "evidence": [
+        {
+          "resource": "repo://internal/user/adapters/redis/session.lua#L81-L107",
+          "version": "repo-lines-v1:sha256:7b50b78b0617181b5c3e67432fda143b24a569bd516e2c3b6d810b6afbb5e642:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwODIzMDkyOGE1YTczYjZiMDFhOWI5MzEzMmFjYmY5YjllMzIzNzgwMmIzYmE0NWEyMzc3ZTI2OTIyZTIwNDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmNjVmYTU1N2VkZTU0ZWE4ZDgwZWM2MDUyODNlODBiMjZiMTNjMjNmZDNhMjljYjlhZDdkZDAxZTY4ZjFmNDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFhMDUyNzE1NzAxYzQ1ODkzNWI0YmFjMTA5YmJiZDVjYTYyNDlhMGZkYjA5MGQ5OTVlNWNlOTJiNjBjYmY4YmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/user/usecase/user.go#L84-L121",
+          "version": "repo-lines-v1:sha256:6236ee1525ba183347ed3c318a22780b234f6bf647edcbd369edcd8e94da04b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMWI0OWRjNzJmNjMyNjNkYzRmODFkZDIxZGYzZWRiZmU2NWU5NjVlN2FmMjhjNDM4OGFmMjc0NThlZTYwY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU4YTFjNWI3NzU5YTRlOGIxZTE0YWNmZDg3MjI4MzI4MDY3MTFhNzM1ZjNkZDM0OTRiNjJkNzdmOWM2ZDI2NTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVmYTkwOTE3MTExNThhYjFhNWEwOGFlZWQzMzY4NmYxZGJlMzJlYjFjZDMyMjE0MDNmYjU0MjFkZjc2OWJjMGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e5511254b95743dfb218b2dc47b24e45",
+      "statement": "Redis standalone primary авторитетно проверяет версию и сроки сессий; мутации не повторяются при timeout.",
+      "evidence": [
+        {
+          "resource": "repo://internal/app/app.go#L37-L38",
+          "version": "repo-lines-v1:sha256:969a87a75d4572914fd6fa6b5f1f95096c7fccd9fd4620c0adc34083a20a9d98:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFhNTk5NWZlMWUwZWJlYzk2MzNlOTEwMjllMDAwMjVjMTg1M2Q0ZjdlMTZiMDk4YTA0MjVmZWMxNjE3NmE1OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODY4OTZlNDU3OTZkMDIwNzdkYTlhMDM5NDRlNDU3NTMwZDAzNGU3NGMwOWRjYWMwOTViMTVmY2JjODJmZTcwMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGYzMmIxMjM3ZGYwZmU3ZGViY2I2N2VkYzkzMDExYjkzODFjNzliMmUwYjBlYzhiZWJiMzBkMjI0ZTRkOTFmNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDYxNzAzYThkYzlhOGEwZWUwOTNmYmRkYjFjMzI0MmZjODI3OTFmM2YwMTZiOTZmYTE2ODMxYmUxNDZkYTc0ZSJ9"
+        },
+        {
+          "resource": "repo://internal/user/adapters/redis/session.go#L1-L25",
+          "version": "repo-lines-v1:sha256:51c7dfba28c85c0757f14e9f263a0fca629fa71382437c78a908a696bfd4faa3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0ODA4YWQyODJiOGMwMmQwYzBjMDc0MzA2ZjJiNDg1ZjMwMmY4YWM3ZDE3ZTg5YjRiZjkzZTUzMmQxYThkODEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYzNlMTZkZjY0NDUyMTdkNzg4NmFiZDdjNzg2NTBjZDFhMmVhYWU1M2I1MWZmNWIxZDI1ZGJjNmZmNWNjMzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2MTA1YzZlODYwYzBhZTllMzk1ZGFiYWYzNzM2OTQ5MGFmMmM4YWM4MjBjNDgwNWJhZWZhOGY2M2ViZTNlYjEifQ"
+        },
+        {
+          "resource": "repo://internal/user/adapters/redis/session.go#L64-L84",
+          "version": "repo-lines-v1:sha256:83a2e2a3cbf2021f88f67f1a4fdae7109f5430029ca3f893d77f29fcf31c56bc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhOTUwMTc1MWE0ZWFiNzVmYTEyZmZiZWNkMzc3NzAzZDZlMGYwN2RiYjc3MDYzOWM2MzJkZjJjNTk4NTBiMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyMjNkNjBlNGY5MTg4Y2FhMjA5YWE3ZWUxNTkyZjFjNGI1MTE2OTBjODA5NzgzYzU4OTRmOGY3ZWM2ZDlkMDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyNjc1MWEzZGE2MzVlYmMzY2VmZDY3NzZlODM5NWRlZjA1Y2Y1ZGE5NzRhNWUwYzNmOTczNDViOTZiYjE4NTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxYjVlNTZlMTkwMDMzNWVhNDM0MmNmNTI1MmU4YjFjMDg2NDZkNDljODc4MjIyMGQ5NGQ5ODYzNzUwOTdmMDkifQ"
+        },
+        {
+          "resource": "repo://internal/user/adapters/redis/session.lua#L1-L78",
+          "version": "repo-lines-v1:sha256:4a1fa0d76201ad9e44f846ddf0812d781ca8dd63d4836306f82ce7971b56bc3b:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MjgyYWI1NDFlMDI1ZTcyYzI5OGUzNDEyZWI4MzE2ZTA0OGNjYzA3ODUwMmQ1MGFlNjdmNDRmYzRlYzBkNWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4MzMyZmU2NjdiYzUxYWM0YTUxYmEwZWZlNzM0NDQxYzkwZGVmNTVjNjBhMjZkN2RiMjc1ZWNiYmNmNDJmMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZhOWY1MTZhYjJhM2RkNDU4YjA2ZWJkZmNjZWJlODZmMjQxOWQyZjQyMzE1YWYzODI1MjU2OWI2MTE2OTUxNGQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-31T14:34:07.758Z"
+  }
+}

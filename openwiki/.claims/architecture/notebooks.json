@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:4a6644ea4ca3f2fcbf85737a6d895dbb165f67bdae7ad558c888caad93ca25db",
+  "claims": [
+    {
+      "id": "claim_f1d04e6588b34d7bb0df63f759bf4ee5",
+      "statement": "Get проверяет владельца в PostgreSQL до чтения файла, List читает только метаданные.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/adapters/postgres/notebook.go#L28-L80",
+          "version": "repo-lines-v1:sha256:e7c40c7a7e2de7467a692130ecf4a8e9575ac8415be82e0e1249c7dd013d2671:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyNzE1MmM1Y2M1MDEzZDQ2NzRiMjIyODY2YTc1NzQyMjZiMjU0MTRhMDkxOGYxYjVjMDhkM2M4ZmMwNmI1MWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjMmE4YTBmOGYzNjliZGFhZTYwYWQ0NDgwMDYyYzkzMDY2OTM1N2RjN2Q5ZjVjODg2NzE0MDUwYWUwMDU4OTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJmMzljYWJlNTdkNmM4OGVhZWVhNDVmZTRiOWM3MTc0N2U4YTkwODEwNTg5OWIzNGQxN2JhYzUxZTEwNmQ3ZmEifQ"
+        },
+        {
+          "resource": "repo://internal/notebook/usecase/notebook.go#L27-L77",
+          "version": "repo-lines-v1:sha256:67f6119e109a59de870901890d17bc47581d4f63b9574a02128f46eb4b63f685:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRhYzRkMTVhODg4NzRiMzM3MzE5NTg0ZTIwMDQ5Zjc0MGEzYWZiMjJkZGE4M2YyYWY3MmI0N2I5N2U1ZjZiNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0YmNkNzRlYjcyYWE1MDM4M2Q1MTJkZTMzNzNkNDlhN2U3NGI0ODg2Mzk0NDI0MDJkNjA4NzhjODUxZGE4YmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e1ebb92e24a8416687953054e812e78e",
+      "statement": "Create пишет S3 до метаданных и при ошибке metadata.Create не удаляет объект.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/usecase/notebook.go#L32-L60",
+          "version": "repo-lines-v1:sha256:f5b654494b3af090dac944efb9a442398a466b6fb19d16046f2ad1559024e7f7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmYWU3NWFkMzU5NGVjYjg4NTk1MTExYzc1YTIyNmE2N2MwNGUwNDU4NmM0MzYyMDZlYTBkYzBiMDI4ZTYyZTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0MjFhMTUyYzljMTg0MmQxNmZhY2UzYjM0MDUwNjczNmFlNDJkODJiNGMyMDM4NjE1OWE1ZGU4M2M1ZDU4ZDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUwMTY2M2M2NGZmMmIyOGYyYzFjZTk5MmMxYzY3NTZlZDQ0YjJjMDI5ZjY4MmU4NmY4YTkxMDFiMDA2Mzc2N2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_93f6e5d5ad914a5a8b6eba28e63d84ce",
+      "statement": "Изменения блоков выполняются под SELECT FOR UPDATE, но S3 Put предшествует SQL UPDATE и commit, поэтому общей атомарности хранилищ нет.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/adapters/postgres/notebook.go#L85-L116",
+          "version": "repo-lines-v1:sha256:273f393e61a98275d79f575abece4713ded1ea3b4e86a2933b74ec5eb5994fad:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyNzAyMzhkMTQ4ZGRjNzhmMGVjY2ZhOWQ5NWNmM2RhZTU5YTMzMmEzZjBhYWFlMDZjZTVhMTEzZDAzNTRjNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZkNTU3YjVlZjljY2U4Mzg2MjA3ZTg5NDYzNjJlNzg4NDU2OWJkMzhhMzhjZjI3MGYzOTk0MWU2MDVmMjgzZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIyYTA5YWI4MzI0NzA2ZjMxN2UwYzE4MWY2YTdkMjlmZWVlZjQzODMzNjY2ZTAyNzk3YTNkMDc0M2IwY2I2YmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0Y2U3MTY3NDZiYzU1ZTllNGRmNzFiYTQyZTM1MzYzNWJiYjY0NjUxMjFiNDIzNWI1NjA1N2FlMGY4NDAyOTUifQ"
+        },
+        {
+          "resource": "repo://internal/notebook/usecase/notebook.go#L117-L140",
+          "version": "repo-lines-v1:sha256:7f4f95b094a06b63ddcb309609e8c9617b3e767a6e6771ec216d435cf402d2b1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmMjMwODdmMWEyY2FjZTg1MzdlYmQwMTQxMDYwY2Q3NGEyYzA0NTUzMGE2ZTEyMTMyMjIxMjc4YWViYjM1MzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlZDYxZWMxOGIzYzYyNTJlZTVjMDJkNGY1YTNmMTRiYzVmMzJhOWQ3MjFhOGUyOGUxYjI0YmI3Yzc1NGZjYzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1N2QzMTBlZTg3NWJiMGM2MDFkM2Y2YThhYjA5NDlkY2UwYTZjODZjMjI4YTMzNDhiNWE5ODhhMGEyYjcwZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5ZDkzZTVhOWQ2ZDU3ZDYwMWRmNWJmY2M4ZGYwNTJjMDZmODA5M2MyOWM3MjIyNmI0OTVhYzJlMGI4ZTk5OWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d5238d5b167a40cbb0747903e0319c0b",
+      "statement": "ipynb Codec принимает code/markdown и string/array source, а Build записывает nbformat 4.5 с пустыми outputs и null execution_count.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/adapters/ipynb/ipynb.go#L33-L93",
+          "version": "repo-lines-v1:sha256:971a2508d4f8301ce89ecf86bb77b84d4b76de974ad9bb4ce80a55393ab7a602:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3MzU4YzlkNTQ1NDA3YmIzNzExZWMyMjFiN2E5ODczYmI5NzUzMjIxYTVjMzUyY2YzZDY2MTU2YTMxMWM2N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhYTE0NjYzYWFlMDEwZjFiNjRjZjJjMTBlYjMyZWQ5NzJjNzU3ZTViM2FhZjM1MzY3N2IyNDJmZjhiNTQ5YWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlhOTY4Y2Q3MTE3YjA3MDJmOWFkN2UxMjJiNDkyZWE4NThlOGRlYWIzZGUwODNhYTM4MjcwMWQyYmNmZjRhNWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f6a12f82da8b41fbb6dd73402e30c309",
+      "statement": "S3 Get и Put используют context timeout пять секунд; Put перезаписывает объект.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/adapters/s3/files.go#L32-L88",
+          "version": "repo-lines-v1:sha256:1373bf31d31c98e87d10e27098a5300a40dc180d285b7735bae366d84575ce75:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5YWNjNjk5ODk3OWM3YTliMTgyNTNiYjJiZGQ3OGEyYjJlODYyMjNjZjY4Y2MzMTJhYTc1OTcwZjNhNGIyN2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBjY2Q0NGQ4ZjNhMTU4ZjQ2ZWQ2ZDM0YTVlMTRjOTFiNmIzNTg2MjA5Nzk5ZmNhOGRhOGU5ODVkNmVkM2Y4N2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-10-31T14:34:07.758Z"
+  }
+}
