@@ -26,6 +26,7 @@ type Usecase interface {
 	// Refresh атомарно меняет refresh-токен, сохраняя sid и версию.
 	Refresh(ctx context.Context, refreshToken string) (Session, error)
 	Logout(ctx context.Context, refreshToken string, claims SessionClaims) error
+	RevokeAll(ctx context.Context, userID int64) error
 	CurrentUser(ctx context.Context, id int64) (domain.User, error)
 }
 

@@ -117,3 +117,17 @@ func (mr *MockUsecaseMockRecorder) Register(ctx, login, password any) *gomock.Ca
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockUsecase)(nil).Register), ctx, login, password)
 }
+
+// RevokeAll mocks base method.
+func (m *MockUsecase) RevokeAll(ctx context.Context, userID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokeAll", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevokeAll indicates an expected call of RevokeAll.
+func (mr *MockUsecaseMockRecorder) RevokeAll(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeAll", reflect.TypeOf((*MockUsecase)(nil).RevokeAll), ctx, userID)
+}

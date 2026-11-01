@@ -44,7 +44,7 @@ func (h *Handler) CreateNotebook(ctx context.Context, req api.CreateNotebookRequ
 	n, err := h.uc.Create(ctx, userID(ctx), req.Body.Name)
 	switch {
 	case errors.Is(err, usecase.ErrEmptyName):
-		return api.CreateNotebook400JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateNotebook400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (h *Handler) GetNotebook(ctx context.Context, req api.GetNotebookRequestObj
 	n, err := h.uc.Get(ctx, req.Id, userID(ctx))
 	switch {
 	case errors.Is(err, usecase.ErrNotebookNotFound):
-		return api.GetNotebook404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
+		return api.GetNotebook404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -68,11 +68,11 @@ func (h *Handler) CreateCell(ctx context.Context, req api.CreateCellRequestObjec
 	cell, err := h.uc.CreateCell(ctx, req.Id, userID(ctx), domain.CellKind(req.Body.Kind), req.Body.Index)
 	switch {
 	case errors.Is(err, usecase.ErrNotebookNotFound):
-		return api.CreateCell404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
+		return api.CreateCell404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
 	case errors.Is(err, usecase.ErrIndexOutOfRange):
-		return api.CreateCell400JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case errors.Is(err, usecase.ErrTooManyCells):
-		return api.CreateCell409JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateCell409JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (h *Handler) DeleteCell(ctx context.Context, req api.DeleteCellRequestObjec
 	err := h.uc.DeleteCell(ctx, req.Id, userID(ctx), req.Index)
 	switch {
 	case errors.Is(err, usecase.ErrNotebookNotFound), errors.Is(err, usecase.ErrCellNotFound):
-		return api.DeleteCell404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
+		return api.DeleteCell404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}

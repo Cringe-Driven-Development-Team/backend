@@ -71,7 +71,7 @@ func TestValidationErrorWithHTMLIsJSON(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != http.StatusBadRequest || result.Code != api.ValidationError || rec.Header().Get("Content-Type") != "application/json" {
+	if rec.Code != http.StatusBadRequest || result.Code != api.ErrorCodeValidationError || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unsafe validation response: %d %v %s", rec.Code, rec.Header(), rec.Body)
 	}
 }
