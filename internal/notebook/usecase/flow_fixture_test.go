@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/ipynb"
@@ -125,4 +126,13 @@ func newTestUsecase() (*NotebookUsecase, *fakeMeta, *fakeFiles) {
 		return "c" + strconv.Itoa(next)
 	}
 	return uc, meta, files
+}
+
+func testRevision(t *testing.T, uc *NotebookUsecase, id, ownerID int64) string {
+	t.Helper()
+	snapshot, err := uc.Content(context.Background(), id, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snapshot.Hash
 }

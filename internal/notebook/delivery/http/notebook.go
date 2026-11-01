@@ -44,7 +44,7 @@ func (h *Handler) CreateNotebook(ctx context.Context, req api.CreateNotebookRequ
 	n, err := h.uc.Create(ctx, userID(ctx), req.Body.Name)
 	switch {
 	case errors.Is(err, usecase.ErrEmptyName):
-		return api.CreateNotebook400JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateNotebook400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (h *Handler) GetNotebook(ctx context.Context, req api.GetNotebookRequestObj
 	n, err := h.uc.Get(ctx, req.Id, userID(ctx))
 	switch {
 	case errors.Is(err, usecase.ErrNotebookNotFound):
-		return api.GetNotebook404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
+		return api.GetNotebook404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -65,14 +65,20 @@ func (h *Handler) GetNotebook(ctx context.Context, req api.GetNotebookRequestObj
 
 // CreateCell отвечает 201 с новым блоком; 409 означает предел блоков.
 func (h *Handler) CreateCell(ctx context.Context, req api.CreateCellRequestObject) (api.CreateCellResponseObject, error) {
-	cell, err := h.uc.CreateCell(ctx, req.Id, userID(ctx), domain.CellKind(req.Body.Kind), req.Body.Index)
+	hash, err := parseIfMatch(req.Params.IfMatch)
+	if err != nil {
+		return api.CreateCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
+	}
+	cell, err := h.uc.CreateCell(ctx, req.Id, userID(ctx), hash, domain.CellKind(req.Body.Kind), req.Body.Index)
 	switch {
 	case errors.Is(err, usecase.ErrNotebookNotFound):
-		return api.CreateCell404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
-	case errors.Is(err, usecase.ErrIndexOutOfRange):
-		return api.CreateCell400JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateCell404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
+	case errors.Is(err, usecase.ErrNotebookConflict):
+		return api.CreateCell409JSONResponse{Code: api.NotebookEditingErrorCodeNotebookConflict, Message: err.Error()}, nil
+	case errors.Is(err, usecase.ErrIndexOutOfRange), errors.Is(err, usecase.ErrInvalidHash), errors.Is(err, usecase.ErrInvalidCellKind):
+		return api.CreateCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case errors.Is(err, usecase.ErrTooManyCells):
-		return api.CreateCell409JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.CreateCell409JSONResponse{Code: api.NotebookEditingErrorCodeValidationError, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -81,10 +87,18 @@ func (h *Handler) CreateCell(ctx context.Context, req api.CreateCellRequestObjec
 
 // DeleteCell отвечает 204 или 404, если нет блокнота или блока.
 func (h *Handler) DeleteCell(ctx context.Context, req api.DeleteCellRequestObject) (api.DeleteCellResponseObject, error) {
-	err := h.uc.DeleteCell(ctx, req.Id, userID(ctx), req.Index)
+	hash, err := parseIfMatch(req.Params.IfMatch)
+	if err != nil {
+		return api.DeleteCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
+	}
+	err = h.uc.DeleteCell(ctx, req.Id, userID(ctx), hash, req.Index)
 	switch {
+	case errors.Is(err, usecase.ErrNotebookConflict):
+		return api.DeleteCell409JSONResponse{Code: api.NotebookEditingErrorCodeNotebookConflict, Message: err.Error()}, nil
+	case errors.Is(err, usecase.ErrInvalidHash):
+		return api.DeleteCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case errors.Is(err, usecase.ErrNotebookNotFound), errors.Is(err, usecase.ErrCellNotFound):
-		return api.DeleteCell404JSONResponse{Code: api.NotFound, Message: err.Error()}, nil
+		return api.DeleteCell404JSONResponse{Code: api.ErrorCodeNotFound, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}

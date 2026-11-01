@@ -2,17 +2,17 @@
 
 Разрабатываем аналог Google Colab: блокноты с блоками Python/R и текста. Правила работы с задачами, ветками и PR — в [README.md](README.md). Как завести и закрыть задачу — в [CONTRIBUTING.md](https://github.com/Cringe-Driven-Development-Team/.github/blob/main/CONTRIBUTING.md) организации; в Codex и Claude Code используй командный скилл `cdd-tasks`. Код/PR/issues — Cringe-Driven-Development-Team/backend; api-N, `Closes #N`, review ментора, кроме настроенного исключения YarikMix (см. README). Учебный repo — копия main без Actions и новых PR.
 
-## Общепроектная wiki
+## Wiki и общий поиск
 
-[OpenWiki в docs](https://github.com/Cringe-Driven-Development-Team/docs/tree/main/openwiki) — производный указатель; начни с [quickstart](https://github.com/Cringe-Driven-Development-Team/docs/blob/main/openwiki/quickstart.md).
-Обращайся к wiki при конкретном общепроектном вопросе или неясности; не загружай её в начале каждой задачи.
-При наличии MCP найди соседний клон `docs` относительно основного checkout (работает и из worktree):
-`git -C "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/../docs" rev-parse --show-toplevel`.
-Проверь, что его `origin` указывает на `Cringe-Driven-Development-Team/docs`; полученный абсолютный путь передавай как `root` в `openwiki_search` / `openwiki_read`, а не корень компонента. Определяй путь заново, не рассчитывай на память между сессиями.
-Без MCP читай `openwiki/quickstart.md` в соседнем `docs` или по ссылке выше. Если соседнего клона нет, используй GitHub Markdown и предложи клонировать `docs` рядом; при исчезнувшем пути ищи в `docs` напрямую.
-Перед использованием проверь актуальность клона и в его корне выполни `bun run wiki:check --against <SHA>`, передав полный актуальный SHA `docs/main`.
-Если wiki устарела, используй её только для поиска путей. Каждое нужное утверждение сверь с каноническим документом на актуальном SHA; исходный SHA wiki не подтверждает текущий код.
-Факты о реализации проверяй по актуальному коду компонента и контракту API; состояние прода — по стенду.
+При конкретном вопросе о Go API начни с собственной `openwiki/quickstart.md`; не читай wiki в начале каждой задачи.
+Корень checkout: `git rev-parse --show-toplevel`; проверь `origin`: `Cringe-Driven-Development-Team/backend`. Перед использованием: `bun scripts/openwiki-check.ts --against <полный актуальный SHA backend/main>`.
+При stale wiki — только указатель; утверждения сверь с актуальным кодом и Apidog. Без wiki читай README, docs и исходники.
+Для межрепозиторных вопросов используй общий workspace соседних `docs`, `frontend`, `backend`, `infra`: настройка — в README docs. При нескольких пространствах проверь `openwiki workspace current`, выбери через `openwiki workspace use`. В MCP используй `openwiki_search`, затем `openwiki_read` с ID wiki из результата; не считай чужую страницу локальной.
+Карта владения — docs, клиент/BFF — frontend, выкладка — infra; внутренности `@cdd-team/*` — frontend-packages по карте docs.
+Без MCP читай Markdown quickstart нужного клона или GitHub: https://github.com/Cringe-Driven-Development-Team/backend/tree/main/openwiki. Соседний docs из worktree: `git -C "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/../docs" rev-parse --show-toplevel`.
+Проверь его `origin`: `Cringe-Driven-Development-Team/docs`; без клона — https://github.com/Cringe-Driven-Development-Team/docs/tree/main/openwiki.
+В docs проверяй `bun run wiki:check --against <полный актуальный SHA docs/main>`, в платформах — их `bun scripts/openwiki-check.ts --against <SHA main>`.
+Пути определяй заново. SHA одной wiki не подтверждает соседний код; состояние прода проверяй по стенду, будущие фичи — в `/modules/` docs.
 
 ## Учебный проект: совместимость и прод
 
@@ -22,8 +22,7 @@
 
 ## Code Review Rules
 
-- Пиши заголовки и пояснения замечаний к PR на русском языке.
-  Имена файлов, идентификаторы, команды и метки приоритета сохраняй без перевода.
+- Пиши заголовки и пояснения замечаний к PR на русском языке. Имена файлов, идентификаторы, команды и метки приоритета сохраняй без перевода.
 
 ## Целевые продуктовые требования
 
@@ -43,13 +42,13 @@
 - Локально: Docker Compose с Go API, PostgreSQL 18, Redis 8 и SeaweedFS (S3).
 - `runtime-agent/`: Python 3.13 сервис systemd; одна VPS, одна сессия, один контейнер/kernel.
   SESSION_ID и KERNEL_LANGUAGE задаются при запуске. SQLite и токен — только на хосте.
-  Jupyter — закрытый TCP без host mounts; сеть и firewall готовит infra по docs/runtime-agent-network.md.
+  Jupyter — закрытый TCP без host mounts; сеть и firewall реализует infra (роль `runtime_host`) по docs/runtime-agent-network.md.
 
-Нужны Go, C-компилятор для `-race`, Make, curl и Docker с Compose. Настройки локального `.env` — в [.env.example](.env.example). Команды из корня:
+Нужны Go, C-компилятор (`-race`), Make, curl, Docker с Compose. `.env` — см. [.env.example](.env.example). Команды из корня:
 
 ```bash
 go mod download       # скачать зависимости
-go mod tidy -diff      # проверить согласованность go.mod/go.sum без изменения
+go mod tidy -diff      # проверить согласованность go.mod/go.sum
 make build            # собрать bin/server
 make test             # тесты с -race, coverage.out и итоговое покрытие
 make lint             # статический анализ
@@ -62,7 +61,7 @@ make health           # GET /health; make logs — последние логи; 
 make run              # то же окружение с логами в терминале
 make agent-setup agent-lint agent-test agent-build # Python-агент: установка и проверки
 make agent-images agent-integration # Docker-образы Python/R и интеграционные тесты
-make agent-network-check # отдельная VPS с firewall infra; не обычный CI
+make agent-network-check # отдельная VPS с firewall infra; не обычный CI. smoke: — docs/runtime-provisioning.md
 ```
 
 `make test` и CI используют `scripts/test.sh`: тестируются все пакеты с `-race -count=1 -coverpkg=./...` (включая вызовы из тестов других пакетов). Из `coverage.out` исключаются `internal/transport/http/api`, `cmd/apidog`, `migrations` и `cmd/main`. Логика приложения в `internal/app` учитывается. Последняя строка — итоговое покрытие; CI пишет ту же строку в summary. Цель — ≥50%, автоматического порога нет. Отчёт: `go tool cover -func=coverage.out`.
@@ -85,15 +84,15 @@ Pyright с Python из `runtime-agent/.venv` и тесты агента. Без 
 В `cmd/` размещай только точки входа в приложение; допустим README с описанием микросервиса. Тесты в `cmd/` запрещены: проверяемую логику и её тесты размещай в `internal/` (сборка и запуск API — `internal/app`).
 
 Карта кода: `cmd/main` → `internal/app` (сборка и запуск), `internal/config` — окружение.
-`internal/transport/http` — роутер, `/health`, API-генерация, middleware,
-security, principal и httperr; `internal/{user,notebook}/delivery/http`
+`internal/runtime` — VPS сессий (воркер, OpenStack, Ansible), `cmd/runtime-smoke` — ручная проверка;
+`internal/transport/http` — роутер, `/health`, API-генерация, middleware, security, principal, httperr; `internal/{user,notebook}/delivery/http`
 → `usecase` (сценарии, порты) → `domain`; `adapters/{postgres,s3,security,ipynb}`
 реализуют порты. Usecase не импортирует HTTP или адаптеры; domain не знает о них.
 Сессии — Redis primary через `usecase.SessionStore`, пользователи — PostgreSQL; [runbook](docs/redis-sessions.md).
 `internal/tooling/apidog` — экспорт контракта; `migrations` — встроенные goose SQL.
 `internal/transport/http/api/api.gen.go` не редактируй вручную. Контракт и `make generate` описаны в [docs/apidog.md](docs/apidog.md).
 
-Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика используй `r.Context()`. Порядок: request ID → logging → recover → S2S → Bearer → Validator. Общие middleware оборачивают весь роутер, чтобы request ID был на всех ответах, включая S2S-отказы, 404 и 405. API обслуживает только BFF; `BFF_API_KEY` обязателен, `GET /health` исключён.
+Сохраняй контекст запроса при передаче дальше; для операций БД из обработчика используй `r.Context()`. Порядок: request ID → logging → recover → S2S → Bearer → ограничение тела блокнотов (512 КиБ) → Validator. Общие middleware оборачивают весь роутер, чтобы request ID был на всех ответах, включая S2S-отказы, 404 и 405. API обслуживает только BFF; `BFF_API_KEY` обязателен, `GET /health` исключён.
 
 ## Границы backend и эксплуатация
 
@@ -103,8 +102,9 @@ security, principal и httperr; `internal/{user,notebook}/delivery/http`
 Факты о реализации проверяй по актуальному коду и конфигурации.
 
 - Backend отвечает за Go API, данные и бизнес-логику; местный Compose — для разработки.
-- Агент не создаёт VPS; UUID сессии и язык назначаются перед запуском сервиса.
-  Production-установка systemd и доступ Go API к агенту принадлежат `infra`.
+- Агент сам VPS не создаёт: создание, настройку (воркер запускает playbook) и удаление runtime-VPS выполняет
+  `internal/runtime` ([docs](docs/runtime-provisioning.md)). Роли (`runtime_host`, `runtime_agent`, `site.yml`, mount `/app/deploy/runtime`): установка агента/systemd, mTLS-доступ Go API
+  к агенту, сеть/firewall и секреты — в `infra`; запускает их воркер `internal/runtime`.
 - `infra`: Pulumi, Ansible Vault, production Compose и Caddyfile. Не переноси
   production-конфигурацию в backend и не коммить открытые секреты.
 - Проект Compose на VPS — `cellestial`, каталог `/opt/cellestial`; существующие

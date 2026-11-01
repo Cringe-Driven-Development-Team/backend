@@ -10,6 +10,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
+	github.com/gophercloud/gophercloud/v2 v2.12.0
 	github.com/gorilla/mux v1.8.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
@@ -58,6 +59,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

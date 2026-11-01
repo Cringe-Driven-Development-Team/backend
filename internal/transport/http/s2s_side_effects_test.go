@@ -2,6 +2,8 @@ package httptransport
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -92,7 +94,9 @@ func TestS2SRejectionDoesNotTouchNotebookStorage(t *testing.T) {
 						return true
 					})).Return(nil))
 				}
-				rec = serveRouter(handler, notebookMutationRequest(op.method, op.path, access))
+				positive := notebookMutationRequest(op.method, op.path, access)
+				positive.Header.Set("If-Match", fmt.Sprintf("\"%x\"", sha256.Sum256(data)))
+				rec = serveRouter(handler, positive)
 				if rec.Code != op.status {
 					t.Fatalf("valid request failed: status=%d body=%s", rec.Code, rec.Body)
 				}

@@ -107,9 +107,9 @@ func TestNotFound(t *testing.T) {
 				} else {
 					f.meta.EXPECT().Modify(ctx, idOwner[0], idOwner[1], gomock.Any()).Return(ErrNotebookNotFound)
 					if op == "create cell" {
-						_, err = f.uc.CreateCell(ctx, idOwner[0], idOwner[1], domain.CellKindCode, nil)
+						_, err = f.uc.CreateCell(ctx, idOwner[0], idOwner[1], contentHash([]byte("input")), domain.CellKindCode, nil)
 					} else {
-						err = f.uc.DeleteCell(ctx, idOwner[0], idOwner[1], 0)
+						err = f.uc.DeleteCell(ctx, idOwner[0], idOwner[1], contentHash([]byte("input")), 0)
 					}
 				}
 				if !errors.Is(err, ErrNotebookNotFound) {
@@ -163,10 +163,10 @@ func TestModifyCellCallback(t *testing.T) {
 			}
 			var err error
 			if tc.remove {
-				err = f.uc.DeleteCell(ctx, 7, owner, *tc.index)
+				err = f.uc.DeleteCell(ctx, 7, owner, contentHash([]byte("input")), *tc.index)
 			} else {
 				var cell domain.Cell
-				cell, err = f.uc.CreateCell(ctx, 7, owner, domain.CellKindMarkdown, tc.index)
+				cell, err = f.uc.CreateCell(ctx, 7, owner, contentHash([]byte("input")), domain.CellKindMarkdown, tc.index)
 				if tc.wantErr == nil && cell != (domain.Cell{ID: "fixed-id", Kind: domain.CellKindMarkdown}) {
 					t.Fatalf("cell=%v", cell)
 				}
@@ -212,7 +212,7 @@ func TestModifyStorageFailures(t *testing.T) {
 					}
 				}
 			}
-			_, err := f.uc.CreateCell(ctx, 7, owner, domain.CellKindCode, nil)
+			_, err := f.uc.CreateCell(ctx, 7, owner, contentHash([]byte("input")), domain.CellKindCode, nil)
 			if !errors.Is(err, source) {
 				t.Fatal(err)
 			}

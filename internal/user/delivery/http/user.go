@@ -23,9 +23,9 @@ func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestO
 	u, sess, err := h.uc.Register(ctx, req.Body.Login, req.Body.Password)
 	switch {
 	case errors.Is(err, usecase.ErrLoginTaken):
-		return api.RegisterUser409JSONResponse{Code: api.LoginTaken, Message: "login is already taken"}, nil
+		return api.RegisterUser409JSONResponse{Code: api.ErrorCodeLoginTaken, Message: "login is already taken"}, nil
 	case errors.Is(err, usecase.ErrPasswordTooLong):
-		return api.RegisterUser400JSONResponse{Code: api.ValidationError, Message: err.Error()}, nil
+		return api.RegisterUser400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestO
 func (h *Handler) LoginUser(ctx context.Context, req api.LoginUserRequestObject) (api.LoginUserResponseObject, error) {
 	u, sess, err := h.uc.Login(ctx, req.Body.Login, req.Body.Password)
 	if errors.Is(err, usecase.ErrInvalidCredentials) {
-		return api.LoginUser401JSONResponse{Code: api.InvalidCredentials, Message: "invalid login or password"}, nil
+		return api.LoginUser401JSONResponse{Code: api.ErrorCodeInvalidCredentials, Message: "invalid login or password"}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (h *Handler) LoginUser(ctx context.Context, req api.LoginUserRequestObject)
 func (h *Handler) RefreshToken(ctx context.Context, req api.RefreshTokenRequestObject) (api.RefreshTokenResponseObject, error) {
 	sess, err := h.uc.Refresh(ctx, req.Body.RefreshToken)
 	if errors.Is(err, usecase.ErrInvalidRefresh) {
-		return api.RefreshToken401JSONResponse{Code: api.Unauthorized, Message: "refresh token is invalid or expired"}, nil
+		return api.RefreshToken401JSONResponse{Code: api.ErrorCodeUnauthorized, Message: "refresh token is invalid or expired"}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -66,22 +66,33 @@ func (h *Handler) RefreshToken(ctx context.Context, req api.RefreshTokenRequestO
 func (h *Handler) LogoutUser(ctx context.Context, req api.LogoutUserRequestObject) (api.LogoutUserResponseObject, error) {
 	claims, ok := principal.SessionFromContext(ctx)
 	if !ok {
-		return api.LogoutUser401JSONResponse{Code: api.Unauthorized, Message: "authentication required"}, nil
+		return api.LogoutUser401JSONResponse{Code: api.ErrorCodeUnauthorized, Message: "authentication required"}, nil
 	}
 	err := h.uc.Logout(ctx, req.Body.RefreshToken, claims)
 	if errors.Is(err, usecase.ErrInvalidRefresh) {
-		return api.LogoutUser401JSONResponse{Code: api.Unauthorized, Message: "refresh token is invalid or expired"}, nil
+		return api.LogoutUser401JSONResponse{Code: api.ErrorCodeUnauthorized, Message: "refresh token is invalid or expired"}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	return api.LogoutUser204Response{}, nil
 }
+func (h *Handler) LogoutAllUserSessions(ctx context.Context, _ api.LogoutAllUserSessionsRequestObject) (api.LogoutAllUserSessionsResponseObject, error) {
+	id, ok := principal.UserIDFromContext(ctx)
+	if !ok {
+		return api.LogoutAllUserSessions401JSONResponse{Code: api.ErrorCodeUnauthorized, Message: "authentication required"}, nil
+	}
+	if err := h.uc.RevokeAll(ctx, id); err != nil {
+		return nil, err
+	}
+	return api.LogoutAllUserSessions204Response{}, nil
+}
+
 func (h *Handler) GetCurrentUser(ctx context.Context, _ api.GetCurrentUserRequestObject) (api.GetCurrentUserResponseObject, error) {
 	id, _ := principal.UserIDFromContext(ctx)
 	u, err := h.uc.CurrentUser(ctx, id)
 	if errors.Is(err, usecase.ErrUserNotFound) {
-		return api.GetCurrentUser401JSONResponse{Code: api.Unauthorized, Message: "user no longer exists"}, nil
+		return api.GetCurrentUser401JSONResponse{Code: api.UserProfileErrorCodeUnauthorized, Message: "user no longer exists"}, nil
 	}
 	if err != nil {
 		return nil, err

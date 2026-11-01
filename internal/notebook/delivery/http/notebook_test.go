@@ -58,6 +58,7 @@ func do(t *testing.T, uc usecase.Usecase, method, path, body string, withToken b
 	t.Helper()
 	req := httptest.NewRequest(method, "/api/v1"+path, strings.NewReader(body))
 	req.Header.Set("X-BFF-Key", "test-key")
+	req.Header.Set("If-Match", `"hash"`)
 	req = req.WithContext(context.WithValue(req.Context(), notebookRequestKey{}, t.Name()))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
@@ -82,35 +83,35 @@ func TestErrors(t *testing.T) {
 		wantCode   api.ErrorCode
 	}{
 		{name: "список без токена", method: http.MethodGet, path: "/notebooks", noToken: true,
-			wantStatus: http.StatusUnauthorized, wantCode: api.Unauthorized},
+			wantStatus: http.StatusUnauthorized, wantCode: api.ErrorCodeUnauthorized},
 		{name: "удаление без токена", method: http.MethodDelete, path: "/notebooks/1/cells/0", noToken: true,
-			wantStatus: http.StatusUnauthorized, wantCode: api.Unauthorized},
+			wantStatus: http.StatusUnauthorized, wantCode: api.ErrorCodeUnauthorized},
 		{name: "id не число", method: http.MethodGet, path: "/notebooks/abc",
-			wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "id меньше 1", method: http.MethodGet, path: "/notebooks/0",
-			wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "kind не из enum", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"python"}`,
-			wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "лишнее поле в CreateCellRequest", method: http.MethodPost, path: "/notebooks/1/cells",
 			body:       `{"kind":"code","source":"print(1)"}`,
-			wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "пустое тело", method: http.MethodPost, path: "/notebooks", body: `{}`,
-			wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 
 		{name: "имя из пробелов", method: http.MethodPost, path: "/notebooks", body: `{"name":"   "}`,
-			err: usecase.ErrEmptyName, wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			err: usecase.ErrEmptyName, wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "чужой блокнот", method: http.MethodGet, path: "/notebooks/1",
-			err: usecase.ErrNotebookNotFound, wantStatus: http.StatusNotFound, wantCode: api.NotFound},
+			err: usecase.ErrNotebookNotFound, wantStatus: http.StatusNotFound, wantCode: api.ErrorCodeNotFound},
 		{name: "блок в чужой блокнот", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"code"}`,
-			err: usecase.ErrNotebookNotFound, wantStatus: http.StatusNotFound, wantCode: api.NotFound},
+			err: usecase.ErrNotebookNotFound, wantStatus: http.StatusNotFound, wantCode: api.ErrorCodeNotFound},
 		{name: "index за концом", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"code","index":5}`,
-			err: usecase.ErrIndexOutOfRange, wantStatus: http.StatusBadRequest, wantCode: api.ValidationError},
+			err: usecase.ErrIndexOutOfRange, wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "предел блоков", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"code"}`,
-			err: usecase.ErrTooManyCells, wantStatus: http.StatusConflict, wantCode: api.ValidationError},
+			err: usecase.ErrTooManyCells, wantStatus: http.StatusConflict, wantCode: api.ErrorCodeValidationError},
 		{name: "удаление несуществующего блока", method: http.MethodDelete, path: "/notebooks/1/cells/7",
-			err: usecase.ErrCellNotFound, wantStatus: http.StatusNotFound, wantCode: api.NotFound},
+			err: usecase.ErrCellNotFound, wantStatus: http.StatusNotFound, wantCode: api.ErrorCodeNotFound},
 		{name: "S3 недоступен", method: http.MethodGet, path: "/notebooks/1",
-			err: errors.New("s3 is down"), wantStatus: http.StatusInternalServerError, wantCode: api.Internal},
+			err: errors.New("s3 is down"), wantStatus: http.StatusInternalServerError, wantCode: api.ErrorCodeInternal},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -120,7 +121,7 @@ func TestErrors(t *testing.T) {
 				case tt.method == http.MethodGet:
 					uc.EXPECT().Get(gomock.Any(), int64(1), int64(1)).Return(domain.Notebook{}, tt.err)
 				case tt.method == http.MethodDelete:
-					uc.EXPECT().DeleteCell(gomock.Any(), int64(1), int64(1), 7).Return(tt.err)
+					uc.EXPECT().DeleteCell(gomock.Any(), int64(1), int64(1), "hash", 7).Return(tt.err)
 				case tt.path == "/notebooks":
 					uc.EXPECT().Create(gomock.Any(), int64(1), "   ").Return(domain.Notebook{}, tt.err)
 				default:
@@ -128,7 +129,7 @@ func TestErrors(t *testing.T) {
 					if err := json.Unmarshal([]byte(tt.body), &body); err != nil {
 						t.Fatal(err)
 					}
-					uc.EXPECT().CreateCell(gomock.Any(), int64(1), int64(1), domain.CellKind(body.Kind), body.Index).Return(domain.Cell{}, tt.err)
+					uc.EXPECT().CreateCell(gomock.Any(), int64(1), int64(1), "hash", domain.CellKind(body.Kind), body.Index).Return(domain.Cell{}, tt.err)
 				}
 			}
 			rec := do(t, uc, tt.method, tt.path, tt.body, !tt.noToken)
@@ -215,7 +216,7 @@ func TestCreateAndGetNotebook(t *testing.T) {
 func TestCreateCell(t *testing.T) {
 	uc := NewMockUsecase(gomock.NewController(t))
 	index := 0
-	uc.EXPECT().CreateCell(gomock.Any(), int64(3), int64(1), domain.CellKindMarkdown, &index).Return(domain.Cell{ID: "c2", Kind: domain.CellKindMarkdown}, nil)
+	uc.EXPECT().CreateCell(gomock.Any(), int64(3), int64(1), "hash", domain.CellKindMarkdown, &index).Return(domain.Cell{ID: "c2", Kind: domain.CellKindMarkdown}, nil)
 	rec := do(t, uc, http.MethodPost, "/notebooks/3/cells", `{"kind":"markdown","index":0}`, true)
 
 	if rec.Code != http.StatusCreated {
@@ -233,7 +234,7 @@ func TestCreateCell(t *testing.T) {
 
 func TestDeleteCell(t *testing.T) {
 	uc := NewMockUsecase(gomock.NewController(t))
-	uc.EXPECT().DeleteCell(gomock.Any(), int64(3), int64(1), 0).Return(nil)
+	uc.EXPECT().DeleteCell(gomock.Any(), int64(3), int64(1), "hash", 0).Return(nil)
 	rec := do(t, uc, http.MethodDelete, "/notebooks/3/cells/0", "", true)
 
 	if rec.Code != http.StatusNoContent {

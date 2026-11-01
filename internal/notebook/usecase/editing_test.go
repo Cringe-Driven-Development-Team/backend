@@ -144,7 +144,7 @@ func TestOldSnapshotAndLegacyMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = uc.CreateCell(ctx, n.ID, owner, domain.CellKindCode, nil); err != nil {
+	if _, err = uc.CreateCell(ctx, n.ID, owner, testRevision(t, uc, n.ID, owner), domain.CellKindCode, nil); err != nil {
 		t.Fatal(err)
 	}
 	if meta.notebooks[n.ID].FileKey == n.FileKey || string(files.data[n.FileKey]) != old {
@@ -153,7 +153,7 @@ func TestOldSnapshotAndLegacyMutations(t *testing.T) {
 	if _, err = uc.EditCell(ctx, n.ID, owner, snapshot.Hash, n.Cells[0].ID, "stale"); !errors.Is(err, ErrNotebookConflict) {
 		t.Fatalf("legacy mutation did not invalidate hash: %v", err)
 	}
-	if err = uc.DeleteCell(ctx, n.ID, owner, 0); err != nil {
+	if err = uc.DeleteCell(ctx, n.ID, owner, testRevision(t, uc, n.ID, owner), 0); err != nil {
 		t.Fatal(err)
 	}
 }

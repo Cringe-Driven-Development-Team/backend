@@ -87,32 +87,32 @@ func (mr *MockUsecaseMockRecorder) Create(ctx, ownerID, name any) *gomock.Call {
 }
 
 // CreateCell mocks base method.
-func (m *MockUsecase) CreateCell(ctx context.Context, id, ownerID int64, kind domain.CellKind, index *int) (domain.Cell, error) {
+func (m *MockUsecase) CreateCell(ctx context.Context, id, ownerID int64, hash string, kind domain.CellKind, index *int) (domain.Cell, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateCell", ctx, id, ownerID, kind, index)
+	ret := m.ctrl.Call(m, "CreateCell", ctx, id, ownerID, hash, kind, index)
 	ret0, _ := ret[0].(domain.Cell)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateCell indicates an expected call of CreateCell.
-func (mr *MockUsecaseMockRecorder) CreateCell(ctx, id, ownerID, kind, index any) *gomock.Call {
+func (mr *MockUsecaseMockRecorder) CreateCell(ctx, id, ownerID, hash, kind, index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCell", reflect.TypeOf((*MockUsecase)(nil).CreateCell), ctx, id, ownerID, kind, index)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCell", reflect.TypeOf((*MockUsecase)(nil).CreateCell), ctx, id, ownerID, hash, kind, index)
 }
 
 // DeleteCell mocks base method.
-func (m *MockUsecase) DeleteCell(ctx context.Context, id, ownerID int64, index int) error {
+func (m *MockUsecase) DeleteCell(ctx context.Context, id, ownerID int64, hash string, index int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteCell", ctx, id, ownerID, index)
+	ret := m.ctrl.Call(m, "DeleteCell", ctx, id, ownerID, hash, index)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteCell indicates an expected call of DeleteCell.
-func (mr *MockUsecaseMockRecorder) DeleteCell(ctx, id, ownerID, index any) *gomock.Call {
+func (mr *MockUsecaseMockRecorder) DeleteCell(ctx, id, ownerID, hash, index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCell", reflect.TypeOf((*MockUsecase)(nil).DeleteCell), ctx, id, ownerID, index)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCell", reflect.TypeOf((*MockUsecase)(nil).DeleteCell), ctx, id, ownerID, hash, index)
 }
 
 // EditCell mocks base method.

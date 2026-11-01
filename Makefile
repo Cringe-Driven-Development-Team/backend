@@ -50,7 +50,10 @@ run:
 	docker compose up --build
 
 docker-build:
-	docker build -f build/main.Dockerfile -t colab-backend:local .
+	docker build -f build/main.Dockerfile -t colab-backend:local \
+		--build-arg RUNTIME_PYTHON_IMAGE=cellestial-kernel-python:local \
+		--build-arg RUNTIME_R_IMAGE=cellestial-kernel-r:local \
+		--build-arg RUNTIME_AGENT_VERSION=local .
 
 SPEC_FILE := internal/transport/http/api/openapi.yaml
 

@@ -25,6 +25,9 @@ func (uc *NotebookUsecase) Content(ctx context.Context, id, ownerID int64) (doma
 	if err != nil {
 		return domain.Content{}, err
 	}
+	if len(data) > MaxNotebookBytes {
+		return domain.Content{}, ErrTooLarge
+	}
 	cells, err := uc.codec.Parse(data)
 	if err != nil {
 		return domain.Content{}, err
@@ -33,8 +36,11 @@ func (uc *NotebookUsecase) Content(ctx context.Context, id, ownerID int64) (doma
 }
 
 func (uc *NotebookUsecase) AddCell(ctx context.Context, id, ownerID int64, hash string, kind domain.CellKind, source string, index *int) (domain.CellChange, error) {
+	if len(source) > MaxSourceBytes {
+		return domain.CellChange{}, ErrTooLarge
+	}
 	var cell domain.Cell
-	result, err := uc.changeCells(ctx, id, ownerID, &hash, func(cells []domain.Cell) ([]domain.Cell, error) {
+	result, err := uc.changeCells(ctx, id, ownerID, hash, func(cells []domain.Cell) ([]domain.Cell, error) {
 		if kind != domain.CellKindCode && kind != domain.CellKindMarkdown {
 			return nil, ErrInvalidCellKind
 		}
@@ -59,8 +65,11 @@ func (uc *NotebookUsecase) AddCell(ctx context.Context, id, ownerID int64, hash 
 }
 
 func (uc *NotebookUsecase) EditCell(ctx context.Context, id, ownerID int64, hash, cellID, source string) (domain.CellChange, error) {
+	if len(source) > MaxSourceBytes {
+		return domain.CellChange{}, ErrTooLarge
+	}
 	var cell domain.Cell
-	result, err := uc.changeCells(ctx, id, ownerID, &hash, func(cells []domain.Cell) ([]domain.Cell, error) {
+	result, err := uc.changeCells(ctx, id, ownerID, hash, func(cells []domain.Cell) ([]domain.Cell, error) {
 		index := cellIndex(cells, cellID)
 		if index < 0 {
 			return nil, ErrCellNotFound
@@ -76,7 +85,7 @@ func (uc *NotebookUsecase) EditCell(ctx context.Context, id, ownerID int64, hash
 }
 
 func (uc *NotebookUsecase) MoveCell(ctx context.Context, id, ownerID int64, hash, cellID string, index int) (string, error) {
-	result, err := uc.changeCells(ctx, id, ownerID, &hash, func(cells []domain.Cell) ([]domain.Cell, error) {
+	result, err := uc.changeCells(ctx, id, ownerID, hash, func(cells []domain.Cell) ([]domain.Cell, error) {
 		from := cellIndex(cells, cellID)
 		if from < 0 {
 			return nil, ErrCellNotFound
@@ -95,12 +104,12 @@ func (uc *NotebookUsecase) MoveCell(ctx context.Context, id, ownerID int64, hash
 }
 
 func (uc *NotebookUsecase) RemoveCell(ctx context.Context, id, ownerID int64, hash, cellID string) (string, error) {
-	result, err := uc.changeCells(ctx, id, ownerID, &hash, func(cells []domain.Cell) ([]domain.Cell, error) {
+	result, err := uc.changeCells(ctx, id, ownerID, hash, func(cells []domain.Cell) ([]domain.Cell, error) {
 		index := cellIndex(cells, cellID)
 		if index < 0 {
 			return nil, ErrCellNotFound
 		}
-		return slices.Delete(cells, index, index+1), nil
+		return deleteCellAt(cells, index)
 	})
 	return result.Hash, err
 }
@@ -109,20 +118,23 @@ func cellIndex(cells []domain.Cell, id string) int {
 	return slices.IndexFunc(cells, func(c domain.Cell) bool { return c.ID == id })
 }
 
-// changeCells сериализует все записи (включая legacy) блокировкой строки БД.
+// changeCells проверяет редакцию и сериализует все записи блокировкой строки БД.
 // Новый объект загружается до коммита; старый не изменяется и не удаляется.
-func (uc *NotebookUsecase) changeCells(ctx context.Context, id, ownerID int64, expected *string, change func([]domain.Cell) ([]domain.Cell, error)) (domain.Content, error) {
+func (uc *NotebookUsecase) changeCells(ctx context.Context, id, ownerID int64, expected string, change func([]domain.Cell) ([]domain.Cell, error)) (domain.Content, error) {
 	var result domain.Content
 	err := uc.meta.Modify(ctx, id, ownerID, func(n domain.Notebook) (MetadataUpdate, error) {
-		if expected != nil && *expected == "" {
+		if expected == "" {
 			return MetadataUpdate{}, ErrInvalidHash
 		}
 		data, err := uc.files.Get(ctx, n.FileKey)
 		if err != nil {
 			return MetadataUpdate{}, err
 		}
+		if len(data) > MaxNotebookBytes {
+			return MetadataUpdate{}, ErrTooLarge
+		}
 		hash := contentHash(data)
-		if expected != nil && *expected != hash {
+		if expected != hash {
 			return MetadataUpdate{}, ErrNotebookConflict
 		}
 		cells, err := uc.codec.Parse(data)
@@ -141,6 +153,9 @@ func (uc *NotebookUsecase) changeCells(ctx context.Context, id, ownerID int64, e
 		updated, err := uc.codec.Rewrite(data, cells)
 		if err != nil {
 			return MetadataUpdate{}, err
+		}
+		if len(updated) > MaxNotebookBytes {
+			return MetadataUpdate{}, ErrTooLarge
 		}
 		key := "notebooks/" + uuid.NewString() + ".ipynb"
 		if err = uc.files.Put(ctx, key, updated); err != nil {

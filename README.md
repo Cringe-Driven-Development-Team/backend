@@ -26,11 +26,29 @@ UUID сессии и язык задаются при запуске; лимит
 Контейнер без host mounts; связь агента с Jupyter — закрытый TCP без публикации порта.
 Доступ kernel к интернету ограничивает firewall infra по [контракту сети](docs/runtime-agent-network.md).
 
+Создание, настройку и удаление VPS сессий в Selectel выполняет модуль `internal/runtime`:
+[docs/runtime-provisioning.md](docs/runtime-provisioning.md).
+
 Проверки: `make agent-setup agent-lint agent-test agent-build`;
 с Docker — `make agent-images agent-integration`; локальный Python kernel —
 `make agent-test-jupyter`. Сетевая приёмка на отдельной VPS — `make agent-network-check`.
-Production-установка, firewall и пул VPS принадлежат `infra`; интеграция с Go API,
-пользователями и ipynb выполняется отдельно.
+VPS создаёт и удаляет backend; роли установки агента, реализация firewall и секреты
+принадлежат `infra`. Интеграция с пользователями и ipynb выполняется отдельно.
+
+## Wiki кода
+
+Собственная `openwiki/quickstart.md` после ручной генерации описывает код Go API на исходном SHA.
+Проверка: `bun scripts/openwiki-check.ts --against <полный актуальный SHA backend/main>` (нужен Bun).
+До генерации используйте документацию и исходники ниже; stale wiki служит только указателем.
+[Brief генерации](openwiki/INSTRUCTIONS.md) задаёт корпус и границы; общий поиск четырёх репозиториев
+настраивается по [README docs](https://github.com/Cringe-Driven-Development-Team/docs#readme).
+Без MCP читайте Markdown нужного клона. Код и wiki не доказывают состояние прода.
+
+Изменения `openwiki/**` в `main` запускают [Publish docs wiki](.github/workflows/publish-docs-wiki.yml):
+он вызывает `pages.yml` в `docs/main`; для диагностики доступен ручной запуск.
+Нужен secret `DOCS_PAGES_TOKEN` с Actions: write только для репозитория docs;
+настройка и публичная wiki — в [README docs](https://github.com/Cringe-Driven-Development-Team/docs#readme).
+Локальная проверка dispatch без GitHub: `bun test scripts/openwiki-publish.test.ts`.
 
 ## Код и документация
 

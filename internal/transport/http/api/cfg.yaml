@@ -12,6 +12,7 @@ output-options:
     - loginUser
     - refreshToken
     - logoutUser
+    - logoutAllUserSessions
     - getCurrentUser
     - listNotebooks
     - createNotebook

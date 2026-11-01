@@ -54,10 +54,10 @@ func validationError(_ context.Context, err error, w http.ResponseWriter, _ *htt
 	var securityErr *openapi3filter.SecurityRequirementsError
 	switch {
 	case errors.As(err, &securityErr):
-		httperr.Write(w, http.StatusUnauthorized, api.Unauthorized, "authentication required")
+		httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")
 	case opts.StatusCode == http.StatusNotFound:
-		httperr.Write(w, http.StatusNotFound, api.NotFound, "no such endpoint")
+		httperr.Write(w, http.StatusNotFound, api.ErrorCodeNotFound, "no such endpoint")
 	default:
-		httperr.Write(w, http.StatusBadRequest, api.ValidationError, err.Error())
+		httperr.Write(w, http.StatusBadRequest, api.ErrorCodeValidationError, err.Error())
 	}
 }

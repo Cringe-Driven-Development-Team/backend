@@ -150,12 +150,50 @@ func (e NotebookEditingErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for UserProfileErrorCode.
+const (
+	UserProfileErrorCodeInternal               UserProfileErrorCode = "internal"
+	UserProfileErrorCodeInvalidCurrentPassword UserProfileErrorCode = "invalid_current_password"
+	UserProfileErrorCodeLoginTaken             UserProfileErrorCode = "login_taken"
+	UserProfileErrorCodePayloadTooLarge        UserProfileErrorCode = "payload_too_large"
+	UserProfileErrorCodeS2sForbidden           UserProfileErrorCode = "s2s_forbidden"
+	UserProfileErrorCodeUnauthorized           UserProfileErrorCode = "unauthorized"
+	UserProfileErrorCodeUnsupportedMediaType   UserProfileErrorCode = "unsupported_media_type"
+	UserProfileErrorCodeValidationError        UserProfileErrorCode = "validation_error"
+)
+
+// Valid indicates whether the value is a known member of the UserProfileErrorCode enum.
+func (e UserProfileErrorCode) Valid() bool {
+	switch e {
+	case UserProfileErrorCodeInternal:
+		return true
+	case UserProfileErrorCodeInvalidCurrentPassword:
+		return true
+	case UserProfileErrorCodeLoginTaken:
+		return true
+	case UserProfileErrorCodePayloadTooLarge:
+		return true
+	case UserProfileErrorCodeS2sForbidden:
+		return true
+	case UserProfileErrorCodeUnauthorized:
+		return true
+	case UserProfileErrorCodeUnsupportedMediaType:
+		return true
+	case UserProfileErrorCodeValidationError:
+		return true
+	default:
+		return false
+	}
+}
+
 // AddNotebookCellRequest defines model for AddNotebookCellRequest.
 type AddNotebookCellRequest struct {
 	// Index Индекс вставки от 0 до текущего числа блоков включительно. Без поля — в конец.
-	Index  *int                       `json:"index,omitempty"`
-	Kind   AddNotebookCellRequestKind `json:"kind"`
-	Source string                     `json:"source"`
+	Index *int                       `json:"index,omitempty"`
+	Kind  AddNotebookCellRequestKind `json:"kind"`
+
+	// Source  Максимум 65536 байт UTF-8 (64 КиБ); превышение даёт 413.
+	Source string `json:"source"`
 }
 
 // AddNotebookCellRequestKind defines model for AddNotebookCellRequest.Kind.
@@ -164,7 +202,9 @@ type AddNotebookCellRequestKind string
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
 	Tokens TokenPair `json:"tokens"`
-	User   User      `json:"user"`
+
+	// User Examples: {"avatar_url":null,"id":1,"login":"example"}
+	User User `json:"user"`
 }
 
 // Cell Блок блокнота
@@ -175,7 +215,7 @@ type Cell struct {
 	// Kind Вид блока
 	Kind CellKind `json:"kind"`
 
-	// Source Содержимое блока
+	// Source Содержимое блока Максимум 65536 байт UTF-8 (64 КиБ); превышение даёт 413.
 	Source string `json:"source"`
 }
 
@@ -207,7 +247,7 @@ type Credentials struct {
 
 // EditNotebookCellRequest defines model for EditNotebookCellRequest.
 type EditNotebookCellRequest struct {
-	// Source Новое полное содержимое блока; пустая строка допустима. Тип и ID блока сохраняются.
+	// Source Новое полное содержимое блока; пустая строка допустима. Тип и ID блока сохраняются. Максимум 65536 байт UTF-8 (64 КиБ); превышение даёт 413.
 	Source string `json:"source"`
 }
 
@@ -317,12 +357,26 @@ type TokenPair struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// User defines model for User.
+// User Examples: {"avatar_url":null,"id":1,"login":"example"}
 type User struct {
+	// AvatarUrl Абсолютный публичный HTTPS URL CDN для прямой загрузки аватара браузером, без Bearer и X-BFF-Key. null, если аватар не загружен. Ключ S3 в API не раскрывается. Домен CDN задаётся конфигурацией. Параметры avatar_url и публичную выдачу CDN необходимо согласовать с frontend до реализации.
+	//
+	// Examples: null
+	AvatarUrl *string `json:"avatar_url"`
+
 	// Id ID
 	Id    int64  `json:"id"`
 	Login string `json:"login"`
 }
+
+// UserProfileError defines model for UserProfileError.
+type UserProfileError struct {
+	Code    UserProfileErrorCode `json:"code"`
+	Message string               `json:"message"`
+}
+
+// UserProfileErrorCode defines model for UserProfileError.Code.
+type UserProfileErrorCode string
 
 // LoginUserParams defines parameters for LoginUser.
 type LoginUserParams struct {
@@ -332,6 +386,12 @@ type LoginUserParams struct {
 
 // LogoutUserParams defines parameters for LogoutUser.
 type LogoutUserParams struct {
+	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
+	XBFFKey string `json:"X-BFF-Key"`
+}
+
+// LogoutAllUserSessionsParams defines parameters for LogoutAllUserSessions.
+type LogoutAllUserSessionsParams struct {
 	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
 	XBFFKey string `json:"X-BFF-Key"`
 }
@@ -370,12 +430,18 @@ type GetNotebookParams struct {
 type CreateCellParams struct {
 	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
 	XBFFKey string `json:"X-BFF-Key"`
+
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
 }
 
 // DeleteCellParams defines parameters for DeleteCell.
 type DeleteCellParams struct {
 	// XBFFKey Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.
 	XBFFKey string `json:"X-BFF-Key"`
+
+	// IfMatch Ровно один сильный ETag из последнего ответа. Списки, *, W/ и пустые значения недопустимы (400). При несовпадении — 409 notebook_conflict без применения изменений.
+	IfMatch string `json:"If-Match"`
 }
 
 // GetNotebookContentParams defines parameters for GetNotebookContent.
@@ -461,6 +527,9 @@ type ServerInterface interface {
 	// LogoutUser Выход
 	// (POST /auth/logout)
 	LogoutUser(w http.ResponseWriter, r *http.Request, params LogoutUserParams)
+	// LogoutAllUserSessions Выход со всех устройств
+	// (POST /auth/logout-all)
+	LogoutAllUserSessions(w http.ResponseWriter, r *http.Request, params LogoutAllUserSessionsParams)
 	// RefreshToken Обновление токенов
 	// (POST /auth/refresh)
 	RefreshToken(w http.ResponseWriter, r *http.Request, params RefreshTokenParams)
@@ -592,6 +661,51 @@ func (siw *ServerInterfaceWrapper) LogoutUser(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.LogoutUser(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LogoutAllUserSessions operation middleware
+func (siw *ServerInterfaceWrapper) LogoutAllUserSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LogoutAllUserSessionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-BFF-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-BFF-Key")]; found {
+		var XBFFKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-BFF-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-BFF-Key", valueList[0], &XBFFKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-BFF-Key", Err: err})
+			return
+		}
+
+		params.XBFFKey = XBFFKey
+
+	} else {
+		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LogoutAllUserSessions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -878,6 +992,29 @@ func (siw *ServerInterfaceWrapper) CreateCell(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateCell(w, r, id, params)
 	}))
@@ -938,6 +1075,29 @@ func (siw *ServerInterfaceWrapper) DeleteCell(w http.ResponseWriter, r *http.Req
 	} else {
 		err = fmt.Errorf("Header parameter X-BFF-Key is required, but not found")
 		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-BFF-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err = fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
 		return
 	}
 
@@ -1499,6 +1659,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.HandleFunc(options.BaseURL+"/auth/logout-all", wrapper.LogoutAllUserSessions).Methods(http.MethodPost)
+
 	r.HandleFunc(options.BaseURL+"/auth/register", wrapper.RegisterUser).Methods(http.MethodPost)
 
 	r.HandleFunc(options.BaseURL+"/auth/login", wrapper.LoginUser).Methods(http.MethodPost)
@@ -1673,6 +1835,64 @@ func (response LogoutUser403JSONResponse) VisitLogoutUserResponse(w http.Respons
 type LogoutUser500JSONResponse Error
 
 func (response LogoutUser500JSONResponse) VisitLogoutUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LogoutAllUserSessionsRequestObject struct {
+	Params LogoutAllUserSessionsParams
+}
+
+type LogoutAllUserSessionsResponseObject interface {
+	VisitLogoutAllUserSessionsResponse(w http.ResponseWriter) error
+}
+
+type LogoutAllUserSessions204Response struct {
+}
+
+func (response LogoutAllUserSessions204Response) VisitLogoutAllUserSessionsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type LogoutAllUserSessions401JSONResponse Error
+
+func (response LogoutAllUserSessions401JSONResponse) VisitLogoutAllUserSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LogoutAllUserSessions403JSONResponse Error
+
+func (response LogoutAllUserSessions403JSONResponse) VisitLogoutAllUserSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LogoutAllUserSessions500JSONResponse Error
+
+func (response LogoutAllUserSessions500JSONResponse) VisitLogoutAllUserSessionsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1892,6 +2112,20 @@ func (response ListNotebooks403JSONResponse) VisitListNotebooksResponse(w http.R
 	return err
 }
 
+type ListNotebooks413JSONResponse Error
+
+func (response ListNotebooks413JSONResponse) VisitListNotebooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListNotebooks500JSONResponse Error
 
 func (response ListNotebooks500JSONResponse) VisitListNotebooksResponse(w http.ResponseWriter) error {
@@ -1967,6 +2201,20 @@ func (response CreateNotebook403JSONResponse) VisitCreateNotebookResponse(w http
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNotebook413JSONResponse Error
+
+func (response CreateNotebook413JSONResponse) VisitCreateNotebookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2060,6 +2308,20 @@ func (response GetNotebook404JSONResponse) VisitGetNotebookResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebook413JSONResponse Error
+
+func (response GetNotebook413JSONResponse) VisitGetNotebookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2158,7 +2420,7 @@ func (response CreateCell404JSONResponse) VisitCreateCellResponse(w http.Respons
 	return err
 }
 
-type CreateCell409JSONResponse Error
+type CreateCell409JSONResponse NotebookEditingError
 
 func (response CreateCell409JSONResponse) VisitCreateCellResponse(w http.ResponseWriter) error {
 
@@ -2168,6 +2430,20 @@ func (response CreateCell409JSONResponse) VisitCreateCellResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCell413JSONResponse Error
+
+func (response CreateCell413JSONResponse) VisitCreateCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2256,6 +2532,34 @@ func (response DeleteCell404JSONResponse) VisitDeleteCellResponse(w http.Respons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCell409JSONResponse NotebookEditingError
+
+func (response DeleteCell409JSONResponse) VisitDeleteCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCell413JSONResponse Error
+
+func (response DeleteCell413JSONResponse) VisitDeleteCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2359,6 +2663,20 @@ func (response GetNotebookContent404JSONResponse) VisitGetNotebookContentRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotebookContent413JSONResponse Error
+
+func (response GetNotebookContent413JSONResponse) VisitGetNotebookContentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2481,6 +2799,20 @@ func (response AddNotebookCell409JSONResponse) VisitAddNotebookCellResponse(w ht
 	return err
 }
 
+type AddNotebookCell413JSONResponse Error
+
+func (response AddNotebookCell413JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AddNotebookCell500JSONResponse NotebookEditingError
 
 func (response AddNotebookCell500JSONResponse) VisitAddNotebookCellResponse(w http.ResponseWriter) error {
@@ -2595,6 +2927,20 @@ func (response RemoveNotebookCell409JSONResponse) VisitRemoveNotebookCellRespons
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveNotebookCell413JSONResponse Error
+
+func (response RemoveNotebookCell413JSONResponse) VisitRemoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2718,6 +3064,20 @@ func (response EditNotebookCell409JSONResponse) VisitEditNotebookCellResponse(w 
 	return err
 }
 
+type EditNotebookCell413JSONResponse Error
+
+func (response EditNotebookCell413JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EditNotebookCell500JSONResponse NotebookEditingError
 
 func (response EditNotebookCell500JSONResponse) VisitEditNotebookCellResponse(w http.ResponseWriter) error {
@@ -2837,6 +3197,20 @@ func (response MoveNotebookCell409JSONResponse) VisitMoveNotebookCellResponse(w 
 	return err
 }
 
+type MoveNotebookCell413JSONResponse Error
+
+func (response MoveNotebookCell413JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type MoveNotebookCell500JSONResponse NotebookEditingError
 
 func (response MoveNotebookCell500JSONResponse) VisitMoveNotebookCellResponse(w http.ResponseWriter) error {
@@ -2873,7 +3247,7 @@ func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http
 	return err
 }
 
-type GetCurrentUser401JSONResponse Error
+type GetCurrentUser401JSONResponse UserProfileError
 
 func (response GetCurrentUser401JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
 
@@ -2887,7 +3261,7 @@ func (response GetCurrentUser401JSONResponse) VisitGetCurrentUserResponse(w http
 	return err
 }
 
-type GetCurrentUser403JSONResponse Error
+type GetCurrentUser403JSONResponse UserProfileError
 
 func (response GetCurrentUser403JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
 
@@ -2901,7 +3275,7 @@ func (response GetCurrentUser403JSONResponse) VisitGetCurrentUserResponse(w http
 	return err
 }
 
-type GetCurrentUser500JSONResponse Error
+type GetCurrentUser500JSONResponse UserProfileError
 
 func (response GetCurrentUser500JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
 
@@ -2923,6 +3297,9 @@ type StrictServerInterface interface {
 	// LogoutUser Выход
 	// (POST /auth/logout)
 	LogoutUser(ctx context.Context, request LogoutUserRequestObject) (LogoutUserResponseObject, error)
+	// LogoutAllUserSessions Выход со всех устройств
+	// (POST /auth/logout-all)
+	LogoutAllUserSessions(ctx context.Context, request LogoutAllUserSessionsRequestObject) (LogoutAllUserSessionsResponseObject, error)
 	// RefreshToken Обновление токенов
 	// (POST /auth/refresh)
 	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
@@ -3062,6 +3439,32 @@ func (sh *strictHandler) LogoutUser(w http.ResponseWriter, r *http.Request, para
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(LogoutUserResponseObject); ok {
 		if err := validResponse.VisitLogoutUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LogoutAllUserSessions operation middleware
+func (sh *strictHandler) LogoutAllUserSessions(w http.ResponseWriter, r *http.Request, params LogoutAllUserSessionsParams) {
+	var request LogoutAllUserSessionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LogoutAllUserSessions(ctx, request.(LogoutAllUserSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LogoutAllUserSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LogoutAllUserSessionsResponseObject); ok {
+		if err := validResponse.VisitLogoutAllUserSessionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -3473,87 +3876,117 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"6miZ0WfxrPJFHK9aS63/HwA=",
+	"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",
+	"92txC/eVpwJzY63Z8WfRsvZFEj2s3Vr7vwEA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
