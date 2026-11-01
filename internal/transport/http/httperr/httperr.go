@@ -25,27 +25,27 @@ func Internal(w http.ResponseWriter, r *http.Request, err error) {
 	slog.ErrorContext(r.Context(), "http.internal_error",
 		slog.String("error_code", observability.ErrorCode(err)),
 	)
-	Write(w, http.StatusInternalServerError, api.Internal, "internal server error")
+	Write(w, http.StatusInternalServerError, api.ErrorCodeInternal, "internal server error")
 }
 
 // RequestError отвечает, когда сгенерированный код не смог разобрать запрос.
 func RequestError(w http.ResponseWriter, _ *http.Request, err error) {
-	Write(w, http.StatusBadRequest, api.ValidationError, err.Error())
+	Write(w, http.StatusBadRequest, api.ErrorCodeValidationError, err.Error())
 }
 
 // ResponseError отвечает на ошибки, которые вернули хендлеры.
 func ResponseError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, ErrNotImplemented) {
-		Write(w, http.StatusNotImplemented, api.NotImplemented, "not implemented yet")
+		Write(w, http.StatusNotImplemented, api.ErrorCodeNotImplemented, "not implemented yet")
 		return
 	}
 	Internal(w, r, err)
 }
 
 func NotFound(w http.ResponseWriter, _ *http.Request) {
-	Write(w, http.StatusNotFound, api.NotFound, "no such endpoint")
+	Write(w, http.StatusNotFound, api.ErrorCodeNotFound, "no such endpoint")
 }
 
 func MethodNotAllowed(w http.ResponseWriter, _ *http.Request) {
-	Write(w, http.StatusMethodNotAllowed, api.ValidationError, "method not allowed")
+	Write(w, http.StatusMethodNotAllowed, api.ErrorCodeValidationError, "method not allowed")
 }

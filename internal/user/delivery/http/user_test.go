@@ -121,7 +121,7 @@ func TestHandlerLoginVerificationFailure(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := api.Error{Code: api.Internal, Message: "internal server error"}
+	want := api.Error{Code: api.ErrorCodeInternal, Message: "internal server error"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("error response (-want +got):\n%s", diff)
 	}

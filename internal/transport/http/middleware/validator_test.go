@@ -40,8 +40,8 @@ func TestContractOperationSecurityPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	public := map[string]bool{"RegisterUser": true, "LoginUser": true, "RefreshToken": true}
-	// BFF logout requires Bearer in addition to the refresh body.
-	protected := map[string]bool{"LogoutUser": true, "GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
+	// Both logout operations require Bearer; single-session logout also requires a refresh body.
+	protected := map[string]bool{"LogoutUser": true, "LogoutAllUserSessions": true, "GetCurrentUser": true, "ListNotebooks": true, "CreateNotebook": true, "GetNotebook": true, "CreateCell": true, "DeleteCell": true}
 	seen := 0
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {

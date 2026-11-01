@@ -106,6 +106,9 @@ func TestHTTPImmediateRevocationAcrossInstances(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		routers[instance].ServeHTTP(w, r)
+		if w.Code == http.StatusNoContent && w.Body.Len() != 0 {
+			t.Fatal("logout response must have no body")
+		}
 		return w.Code
 	}
 	expect := func(got, want int) {
@@ -150,10 +153,13 @@ func TestHTTPImmediateRevocationAcrossInstances(t *testing.T) {
 	expect(request(0, "POST", "/auth/logout", access, `{"refresh_token":"`+refresh+`"}`, "bff"), 401)
 	expect(request(1, "POST", "/auth/refresh", "", `{"refresh_token":"`+refresh+`"}`, "bff"), 401)
 	expect(request(1, "GET", "/users/me", device, "", "bff"), 200)
-	if err := stores[0].RevokeAll(ctx, claims.UserID); err != nil {
-		t.Fatal(err)
-	}
+	anotherDevice, anotherRefresh, _ := issue(claims.UserID)
+	expect(request(0, "POST", "/auth/logout-all", device, "", "bff"), 204)
 	expect(request(1, "GET", "/users/me", device, "", "bff"), 401)
+	expect(request(1, "GET", "/users/me", anotherDevice, "", "bff"), 401)
+	expect(request(0, "POST", "/auth/logout-all", device, "", "bff"), 401)
+	expect(request(1, "POST", "/auth/refresh", "", `{"refresh_token":"`+deviceRefresh+`"}`, "bff"), 401)
+	expect(request(1, "POST", "/auth/refresh", "", `{"refresh_token":"`+anotherRefresh+`"}`, "bff"), 401)
 	expect(request(1, "GET", "/users/me", other, "", "bff"), 200)
 	fresh, _, _ := issue(1)
 	expect(request(1, "GET", "/users/me", fresh, "", "bff"), 200)

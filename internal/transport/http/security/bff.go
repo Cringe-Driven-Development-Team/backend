@@ -31,7 +31,7 @@ func S2S(key, prefix string) func(http.Handler) http.Handler {
 				matched = subtle.ConstantTimeCompare(hash[:], allowed[:])
 			}
 			if matched != 1 {
-				httperr.Write(w, http.StatusForbidden, api.S2sForbidden, "service access forbidden")
+				httperr.Write(w, http.StatusForbidden, api.ErrorCodeS2sForbidden, "service access forbidden")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -59,7 +59,7 @@ func AuthenticateBearer(tokens TokenParser, sessions AccessSessions) func(http.H
 					if claims, err := tokens.Parse(token); err == nil {
 						if err = sessions.ValidateAccess(r.Context(), claims); err != nil {
 							if errors.Is(err, usecase.ErrInvalidSession) {
-								httperr.Write(w, http.StatusUnauthorized, api.Unauthorized, "authentication required")
+								httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")
 							} else {
 								httperr.ResponseError(w, r, err)
 							}
