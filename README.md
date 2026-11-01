@@ -44,6 +44,12 @@ VPS создаёт и удаляет backend; роли установки аге
 настраивается по [README docs](https://github.com/Cringe-Driven-Development-Team/docs#readme).
 Без MCP читайте Markdown нужного клона. Код и wiki не доказывают состояние прода.
 
+Изменения `openwiki/**` в `main` запускают [Publish docs wiki](.github/workflows/publish-docs-wiki.yml):
+он вызывает `pages.yml` в `docs/main`; для диагностики доступен ручной запуск.
+Нужен secret `DOCS_PAGES_TOKEN` с Actions: write только для репозитория docs;
+настройка и публичная wiki — в [README docs](https://github.com/Cringe-Driven-Development-Team/docs#readme).
+Локальная проверка dispatch без GitHub: `bun test scripts/openwiki-publish.test.ts`.
+
 ## Код и документация
 
 - `cmd/main` — точка входа; `internal/app` собирает зависимости, `internal/config` читает окружение.
