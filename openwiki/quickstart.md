@@ -1,72 +1,89 @@
 ---
 type: guide
 title: "Навигация по Go API"
-description: "Карта backend: сборка приложения, авторизация, хранение блокнотов и владельцы соседних систем."
-tags: [backend, navigation, architecture]
+description: "Карта Go API Cellestial, хранилищ, HTTP-границы, runtime и локальных проверок. Порядок чтения OpenWiki."
+tags: [backend, architecture, navigation, openwiki]
+verified:
+  - by: openwiki/0.7.2
+    at: 2026-11-20T18:28:51.294Z
 sources:
   - id: openwiki-source-8037e2358a2c4f9b2c722a11
     resource: repo://AGENTS.md
   - id: openwiki-source-c35a1716a4af1d6a4899a1c3
     resource: repo://cmd/main/main.go
+  - id: openwiki-source-86b6f7183f24ef4d377f93e1
+    resource: repo://docs/openapi.md
   - id: openwiki-source-a009d602e55f848ea26930dd
     resource: repo://internal/app/app.go
   - id: openwiki-source-5450c45ea05d5ffd1d8ee804
     resource: repo://internal/app/run.go
+  - id: openwiki-source-c1af176bb103419425143738
+    resource: repo://internal/notebook/adapters/postgres/notebook.go
+  - id: openwiki-source-55b426b919298d5817843eb0
+    resource: repo://internal/transport/http/router.go
   - id: openwiki-source-012f2c78e3b1446dfc35803f
     resource: repo://Makefile
-generated: { by: "codex", at: "2026-11-02T21:58:51.903Z" }
-verified:
-  - by: openwiki/0.7.2
-    at: 2026-11-02T21:58:51.903Z
+  - id: openwiki-source-aff45068e9f0fd7fda322f9c
+    resource: repo://migrations/migrations.go
+generated: { by: "codex", at: "2026-11-20T18:28:51.294Z" }
 ---
 
 # Навигация по Go API
 
-## Что описывает wiki
+## Как читать OpenWiki
 
-Это производная карта Go API backend на `978bc2df36a71c796b95b14315f8e4d9b17a17b9`. Она описывает код, а не проверенное поведение прода. `repo://` в Claims обозначает файл этого backend на `gitHead` из `.last-update.json`. Страницы и Claims не заменяют исходник: перед изменением сверяй актуальный код.
+Начни с `openwiki_search`, затем вызови `openwiki_read` для нужной страницы и разделов, передав ID wiki из результата поиска. При достаточном ответе без противоречий на этом можно остановиться. Актуальность опубликованной wiki обеспечивает процесс обновления и публикации. К исходнику переходи при пробеле, противоречии, ошибке инструмента или для правки. Для простой правки известного файла можно сразу открыть код.
 
-Проверка свежести из корня клона: `bun scripts/openwiki-check.ts --against <полный актуальный SHA backend/main>`. При stale используй wiki как указатель. Checkpoint одной wiki не подтверждает соседние репозитории или выкладку.
+Без MCP открой эту страницу и подходящую Markdown-страницу из карты ниже. Правило остановки то же. Если wiki отсутствует, начни с документации репозитория и исходников. Для вопроса о нескольких репозиториях используй общий workspace и проверяй, к какой wiki относится результат.
+
+`repo://` в Claims обозначает файл backend на `gitHead` из [checkpoint](.last-update.json). Страницы и Claims производны от исходников. Перед правкой сверяй актуальный код. Состояние прода требует отдельной проверки стенда.
 
 ## Куда идти по задаче
 
-| Вопрос | Страница и отправная точка |
+| Вопрос | Страница и путь к реализации |
 | --- | --- |
-| Почему запрос отклонён до обработчика? | [BFF, авторизация и Redis](architecture/auth-sessions.md): transport/http/router.go, security/bff.go |
-| Что происходит при refresh/logout или отказе Redis? | [Жизненный цикл сессии](architecture/auth-sessions.md): user/usecase и adapters/redis |
-| Где лежат блоки и как проверяется владелец? | [Блокноты и ipynb](architecture/notebooks.md): notebook/usecase и adapters |
-| Как меняются профиль, пароль и изображение? | [Профиль и аватары](architecture/profiles-avatars.md): user/usecase/profile.go, avatar.go |
-| Как создаются и удаляются окружения? | [Go runtime](architecture/runtime-environments.md): runtime/usecase, очередь PostgreSQL и адаптеры |
-| Как запускается API, миграции и проверки? | [Запуск и контракт](operations/startup-contract.md): internal/app, config, migrations, Makefile |
-| Кто определяет HTTP-запросы и ответы? | [Apidog и генерация](operations/startup-contract.md), docs/apidog.md |
+| Как проверяются S2S, Bearer и TOTP? | [Доступ к API и Redis-сессии](architecture/auth-sessions.md), `internal/transport/http`, `internal/user/usecase` |
+| Где хранятся ячейки, как меняется ревизия и кто может читать? | [Блокноты, ревизии и доступ](architecture/notebooks.md), `internal/notebook` |
+| Как меняются логин, пароль и аватар? | [Профиль, пароль и аватары](architecture/profiles-avatars.md), `internal/user/usecase` |
+| Как создаётся или удаляется VPS? | [Подготовка окружений](architecture/runtime-environments.md), `internal/runtime` |
+| Как исполняются ячейки и сохраняются результаты? | [Runtime-сессии](architecture/runtime-sessions.md), `internal/runtimesession` |
+| Где конфигурация, контракт и команды проверок? | [Запуск, HTTP-контракт и проверки](operations/startup-contract.md), `internal/config`, `Makefile` |
 
-## Карта слоёв
+## Карта Go API
 
-`cmd/main` читает конфигурацию и запускает `internal/app`. App связывает PostgreSQL, Redis, S3, usecase и HTTP-router. `internal/config` отвечает за окружение и его проверки, `migrations` — за SQL, встроенный в приложение и применяемый при запуске.
+`cmd/main/main.go` читает конфигурацию из `internal/config` и передаёт управление в `internal/app`. Приложение собирает хранилища, HTTP-обработчики и воркеры. SQL из `migrations/` встроен и применяется через goose до запуска HTTP.
 
-HTTP идёт через `internal/transport/http`: общие middleware, S2S, Bearer, ограничения тела, Validator и серверный фасад. Затем `internal/user` или `internal/notebook`: delivery/http переводит транспортные типы и ошибки, usecase выполняет сценарий через порты, domain содержит данные, adapters реализуют работу с внешними системами. Users и notebook metadata хранятся в PostgreSQL, авторитетное состояние сессий — в Redis, файлы блокнотов — в S3 через ipynb-кодек. Аватары используют отдельный S3-бакет и avatar_key профиля в PostgreSQL. Изменения блоков проверяют hash редакции и публикуют новый объект переключением ссылки в БД. Проверку access нельзя свести к подписи JWT: она зависит от состояния сессии.
+`internal/transport/http` задаёт request ID, журнал запросов, S2S, Bearer, ограничения тела и валидацию запроса. Браузерную cookie-сессию ведёт BFF во frontend. В `internal/user` и `internal/notebook` обработчики `delivery/http` вызывают сценарии `usecase` через интерфейсы. `domain` хранит типы и правила, `adapters` реализует взаимодействие с хранилищами и внешними сервисами.
 
-`internal/runtime` содержит EnvironmentService, PostgreSQL-очередь и воркер с адаптерами облака, Ansible и HTTPS-агента. App собирает этот модуль и запускает включённый воркер; HTTP-фасад EnvironmentService пока не использует. Ручная точка входа — `cmd/runtime-smoke`.
-
-Расширяя сценарий, начни с его usecase и портов, затем проверь delivery, adapter и соседние тесты. Для изменения HTTP-контракта первоисточник — Apidog; generated API не служит самостоятельным доказательством и не редактируется вручную.
+PostgreSQL хранит пользователей, блокноты по ячейкам, окружения, runtime-сессии и результаты. Код и документ ipynb описаны в `internal/notebook/adapters/ipynb`. Redis хранит состояние авторизации и лимиты попыток, S3 — аватары. `internal/runtime` управляет подготовкой и удалением VPS, а `internal/runtimesession` связывает обработчики пользовательских сессий с очередью, журналом событий и Go-клиентом агента.
 
 ## Разработка и границы
 
-Команды: `go mod download`, `make doctor`, `make build`, `make up`, `make test`, `make check`, `make docker-build`. Подробности и требования инструментов находятся в AGENTS.md, Makefile и docs/local-development.md. Тесты размещены рядом с логикой в internal; scripts/test.sh включает race и coverage. Локальный Compose — среда разработки.
+В `Makefile` есть `make doctor`, `make up`, `make build`, `make check-fast`, `make check` и `make docker-build`. `make build` собирает `cmd/main`. Тесты находятся рядом с логикой в `internal/`, `make test` запускает `scripts/test.sh` с race и проверкой покрытия. Порядок локального запуска описан в `docs/local-development.md`.
 
-Общепроектную карту ищут в docs; клиент и BFF — frontend; production-выкладка — infra. Внутренности пакетов `@cdd-team/*` ищут в frontend-packages по карте docs. Для межрепозиторного вопроса используй общий локальный OpenWiki workspace и сохраняй ID wiki из результатов поиска. Без MCP читай quickstart соответствующего клона и сверяй его собственный checkpoint.
-
-Будущие функции ищут в модулях docs. Самостоятельный Python runtime-agent не входит в корпус этой wiki; его наличие не является свидетельством интеграции исполнения в Go API. Для утверждений о проде нужна отдельная проверка стенда.
+Исходник контракта, который использует текущая сборка, находится в `spec/openapi.json`. Реализацию операций проверяй в delivery, usecase и роутере. Самостоятельный Python runtime-agent находится за границей корпуса этой wiki. Общепроектную карту и будущие функции ищи в `docs` команды, клиент и BFF — во `frontend`, выкладку — в `infra`.
 
 ## Источники
 
-- [cmd/main/main.go#L12-L29](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/cmd/main/main.go#L12-L29)
-- [internal/app/app.go#L45-L129](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/app.go#L45-L129)
-- [internal/app/app.go#L78-L110](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/app.go#L78-L110)
-- [AGENTS.md#L11-L24](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/AGENTS.md#L11-L24)
-- [Makefile#L16-L20](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/Makefile#L16-L20)
-
-- [internal/app/run.go#L36-L52](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/run.go#L36-L52)
-- [internal/transport/http/router.go#L45-L57](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/transport/http/router.go#L45-L57)
-- [internal/notebook/usecase/editing.go#L121-L170](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/usecase/editing.go#L121-L170)
-- [scripts/test.sh#L7-L19](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/scripts/test.sh#L7-L19)
+- [cmd/main/main.go#L12-L29](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/cmd/main/main.go#L12-L29)
+- [internal/app/app.go#L58-L95](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L58-L95)
+- [internal/app/app.go#L97-L115](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L97-L115)
+- [internal/app/app.go#L129-L147](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L129-L147)
+- [internal/app/app.go#L97-L116](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L97-L116)
+- [internal/notebook/adapters/postgres/notebook.go#L91-L104](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L91-L104)
+- [internal/notebook/adapters/postgres/notebook.go#L146-L155](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L146-L155)
+- [AGENTS.md#L20-L29](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/AGENTS.md#L20-L29)
+- [internal/app/app.go#L129-L152](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L129-L152)
+- [internal/app/run.go#L28-L49](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/run.go#L28-L49)
+- [internal/app/app.go#L82-L96](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L82-L96)
+- [migrations/migrations.go#L15-L35](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/migrations/migrations.go#L15-L35)
+- [Makefile#L58-L79](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/Makefile#L58-L79)
+- [docs/openapi.md#L1-L9](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/docs/openapi.md#L1-L9)
+- [internal/transport/http/router.go#L31-L64](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/transport/http/router.go#L31-L64)
+- [AGENTS.md#L23-L26](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/AGENTS.md#L23-L26)
+- [Makefile#L16-L29](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/Makefile#L16-L29)
+- [Makefile#L31-L56](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/Makefile#L31-L56)
+- [docs/local-development.md#L9-L15](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/docs/local-development.md#L9-L15)
+- [internal/notebook/adapters/ipynb/document.go#L266-L290](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/ipynb/document.go#L266-L290)
+- [openwiki/INSTRUCTIONS.md#L31-L37](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/openwiki/INSTRUCTIONS.md#L31-L37)
+- [openwiki/INSTRUCTIONS.md#L39-L49](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/openwiki/INSTRUCTIONS.md#L39-L49)

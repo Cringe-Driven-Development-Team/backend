@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:21cca9962161047a52c6cb19b3395c5374705c87596efe5b7787ec57dbbad9ae",
+  "claims": [
+    {
+      "id": "claim_22fa29be3bb0499088737bce84034a61",
+      "statement": "Runtime Start проверяет владельца блокнота и ограничивает пользователя одной активной сессией. Повтор request ID возвращает исходную при совпадении параметров.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/store.go#L107-L154",
+          "version": "repo-lines-v1:sha256:94dc2995ef3a87048d95574bb6a6af20243b1489c5f34f4ff014eafe62c03f33:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3ZGRjZTkwNmY2ZjRhYzk2YjkzNTM3YzdlMmY4ZDliYzEwMDc1ZmY0ODczNjE2MmM1MzA0YTNiODQ0ZDY2ZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI2OTkyMGE1NWIyMTEwODcyNDZlZmEzNjhmYzQ4MmEwZDJjYjdjNDk5M2NjYjA2Mzk2ZTUzYTE4NjJmN2E0OWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzZjUxNTkwZTY4MGQyNGI0ZDA2MWUzMDU3ZTcyMjgzZWUwOWNlOTFlMTBiOGZiYTYxZDI5OGFkMzFjMTllNDIifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/domain/models.go#L60-L76",
+          "version": "repo-lines-v1:sha256:8da3edec3bcfb2fb660d0f21b1bfa406a197a5154343b188321bfd0b0d704182:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4NTYzMjc1NzlmNjM0ZWU4M2FmYjM4NzIzZTYyNjU2ZGI3ZTgzY2I4NjkzZjJjMjY1OWYwYWQ5MTIxZmQ4ZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxOWE3MmJjNjUzMDFlOWVhNzZkNTlmNjQzOTc0ZDA4NzcxNzgzYzNiNjAyZTQwOWE2MzI1YmYxMTNhYzAyZWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyZmE5MjU2MWU1ZGYzY2FkMWRmOWE4MTExYzFiZjhmNDkyM2UwOTQwNjk0MDlhZDAzN2ZhNGI5ZTZhMjRlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwZGRjNzA4M2RjOGU4NDk1MWUzZDY3NGZmYjBkZWI0OTY2ZGM0YTFjN2QzNzc1YjM5ZDA1ZTdlZDA3OGE0ZGMifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/session.go#L33-L41",
+          "version": "repo-lines-v1:sha256:bd5c036f2c2a7d0f0e35bac8b83b34f0b609da8bca1e830a74756475c9b24286:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDkxZGIxMjEzZTViZGRjY2E3NzZjMmY3M2NlZDk0ZmIzYmUzMTFhNTc0NzMwZTllNDgyNzU5ZjlhODE3Y2EyOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGNkZjMxNTJkZWU3NGIyZjcxNjY5ZmEyNGU0ZmQyM2Q5YTc2Njk1OTg0MDZkYWU5ZDdmZDc3ZWNlZDVkNWRiMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjFmYzdlNjJmZWM0OTA0ZGFjNTc2YjJiZjNmOGE3MzQ4YmM4MzI3YTM3YmQ0YjcxZjAyN2JhNzQ5OWVkZGVjZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8bcaac7fe5e345d88a1d3cf6b356daeb",
+      "statement": "Воркер сессий сохраняет намерение перед запросом окружения и переходит в READY после проверки идентичности и готовности агента.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/usecase/worker.go#L116-L161",
+          "version": "repo-lines-v1:sha256:2130af5c598712522a17aa00e5faf9fb091f9041cf49da63e6981c6cc02990b3:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkZTIyMGYwOTk2Y2RkZDFiZDFlOGQ4MTdkMDY5YjkyNzQ4ZjAxMmZkMDVjMWY0ZTNmOGY5YmY4ZjU4ZDRkM2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxMTM0OTM0YWM0OWM3ODYxMjc1NzE1OTEzYjFiOTNmZmFhNTJiYWJlYzE3N2MyYWZmOGY2NTBhZTRmMWU4YTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQyMzFkNzE1N2JlNjExM2RlNzM0MjRhNmVhZDkxMTkxMTQ2ZDY0NjdmZGNlNmJhMWEyMzIzOGUwMzg4NWRhZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0MmVlOTVhNGMyOTgxYTg5NWUxMmFjZDEzNTNhMzdhMDI2YWZiM2UzYmM4MTE5MmJiY2VhODNkYzIxMzc0YjgifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/worker.go#L160-L188",
+          "version": "repo-lines-v1:sha256:0cfcf206e5f7425037d59a8306c8f01a05a15c86ce1d4c5fbfba31559c1543c8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3M2UyYmQ1YWRiMjQ5MTQ3OWUzNThiZWM2MGQ0NmYxZDFmOWY3MmZlN2IzMDM1N2IwMDQ2NWI3OTcwODkyZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMTAwNGEzYTdkOTI3N2VmNDhlMzE4NDk4NTBiNmJiMmM4MWUxMDU2YTcxOGNiNGM2MDhkYzk5NmMwMzBkNTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE0MzI4ODA3M2I2ODVkYmQxYjAxMzcwYzBkNTgzMTkzNmExNDY0YzZkYTY4YzIzODI3ZDhjZjA1MjYxZDU1NGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5MWI1ZmM2ZmUzOGFiNjUxYzk5MDVmNDk4NTVmM2RiN2I3NzRjMWI0NmI1NTlkNWVhMjI0MWM0ZTg1YmM1M2EifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5c98bfbf76404911851fdfb262511fa5",
+      "statement": "Одиночное исполнение сохраняет исходник и его версию после проверки SHA-256, а повтор execution ID с совпадающим запросом возвращает прежнюю попытку.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/executions.go#L113-L154",
+          "version": "repo-lines-v1:sha256:9c395b27a5a3d8367f0bf555a2a8b1ace44b810a316772205d266601db31e7e6:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjYjQzYWIwYzQ0YzNhOGI2YmIyNjZlY2IxNTI2Y2U5MjAzNDk0M2E5YjNjNjc5YTMyNzRlMjI3MDU0NmUxNTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjZmNjZDA5MjdlMjBhOTlkNmNlMTFjOTIwY2EyYmQwYzIyYmE2ODQ0MTg5ZjhlZWU5MmY3ZTlhMTZlMDliYmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1ZmE4MTc1Njc2ZDhjMzZiYjMxZmU0MDE2OGY4M2ZjZjBmNTY1Y2ZjZjcyNDMxOGQwZTFjMjkwMmY1ZGJkZDQifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/executions.go#L155-L193",
+          "version": "repo-lines-v1:sha256:53e907b2f221093bd0b28ae55beb30966c2be46eeb17fd48d891c588f9e2ffea:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiZGVmNWU3NmNlOTMxZWVmYTAyZDk4NzdhYWE5NzE2NTEyZDg0OGE2MzNiZTNjMjkwZDk4OTJkNzlhNjJkMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2ZThmOGViMDQwYjE2NmU1MTBhZjkyY2U4ZjQzYjcxMDI0OGM0NGE1M2VhYzU0NWY0NWYyYmM2NDE4NDk5MGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg2ZGNjYWY5Y2MyZTljNzk2YjBhNDBhOWYxOGI3OTg3YTUzMGYwYzA1M2QwMDM1YjM5MjQ3ZTNkOTgzOGY0ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4MDA2MDRiMTZkZTRiMTI5ZmY2YTFkY2NiMDkwNmRlOTJlYzZjZDEwYWQ0YmMwNWUwMjcxYzYwM2Q1ZWJjNWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_90c041f9d63f43fb90e3a5416bbece7d",
+      "statement": "Приём пакета атомарно проверяет порядок ячеек, хеши исходников и вместимость очереди. Повтор сохранённого запроса возвращает прежние ID.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/batch.go#L138-L156",
+          "version": "repo-lines-v1:sha256:2cffc9ac6916845e4c8c652816eff57f41f906526e81fb7f4a3114c7103a85a4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmZmJkYTExNzk2YjE4M2IxMzk3YTU1M2ZlNTlkNGJjZmRmODc1OWIwZDZkMTQ4MjJjMzU0OWFlNzdkZmM4MjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYxNTNiNGU3ODgzYmQ3Y2I1MGEzZjIwOGI1N2Q1Yzg0Nzc5OTE4OWMyY2UyM2ZmZGIxOTI4NmNiOTU5Y2ZiNzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/batch.go#L46-L94",
+          "version": "repo-lines-v1:sha256:e7d70b35970fee38b5b18807664a257291a7f0fc4f87f8a9ef50af594ad91361:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1OGY0OWM5YzQ4YWMwYTM0ZTNkYzRlNDc3ZjNmZGVhMzg1ODExZWY0MDE3ODM5OWU1MjQ3YTEzMjI0YmM5YTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyNjFlYzU2OWM4NjllYWI0ODg5MjA0MDg4MjE4MjEyMDlhYzk5NGNmNmM1YTk3MDYxYjU5N2EzMDA3MTUyMmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNkMzI0MWZmOTU1MGJkNjE1M2I0MDdkY2YyYThiNTMwZTU2NWM1MmE5M2NkNWQ1N2FkNzI5ZjE0OGEzZjY1ODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY1MmZmYzg4YzQ5ZmUzOWQ0ODQzMzRjOTJlZTgxZDk1NzI1YjM1MDQ4MzAwNzkwMWRhMjlhMWNjMjI1YzZjYWQifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/batch.go#L94-L136",
+          "version": "repo-lines-v1:sha256:646384edd446bd0be56c1f3c08889c63ef744504856623c2c3cef45d378b5ff2:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyNjFlYzU2OWM4NjllYWI0ODg5MjA0MDg4MjE4MjEyMDlhYzk5NGNmNmM1YTk3MDYxYjU5N2EzMDA3MTUyMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmZWU1YzEyOTczNjVkODMxYmNjZDJhOTc4MWYyMWVlZTQ2MGIwOWZkNWY4OGVhNmQwOTk0OTgxMjI0NDJmNjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZmZlN2NkOTIzOWM1YWJkOTA3NWJkM2QzYzAzZWQ4MzhkYzRjODJhNWZjMTRjMGI5OTAyOGY3MTFmYzE1NWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjMTliODM3NjZhOTJlZGY0MTExODRhZjA4MzAzMzU5YjM4YTJkNTY4MTU2ZjgzM2FkMzFlNmY3ZTllOTZhNWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c35c7c67c9b24505bc741f491f9b9978",
+      "statement": "Воркер отправляет ожидающую команду с прежним ID, а при заполнении агента оставляет её в очереди backend.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/usecase/worker.go#L354-L388",
+          "version": "repo-lines-v1:sha256:a6b2da63d5c68d1bf23501cd05f3195c2b08e57d522c5c0a75492ec6ed773df7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4YjM1NDg4ODUxMjA5YTRlZjIzYmFlMWQ3OWM5ODkzNzllYjVjZWY3OWVmN2U0MGUyNzM3NmQ2ZDg1MTA4ZWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhODZlYzNjZTIxNzZhODc1ZmFlN2JiZmEzMDY3MDU4MTkzNTliNDU4NjNjZDJkNTMzZjI1NWZkNjhmMDc3NTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MzFiNmUyY2EwN2Q4YmFmMGViNDRlNzQ5ZGJmNDkwYjM5MmUzYTUzNGVmNjEwMjI3NzExNDZjZGY5YWYxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyZWRiOTc0NjIyYzdmMWM3OTBlZDY4YWMwYjY1YjUzOWQ4NWZiYzA4NWZmMTk3NTVmYjhkOWIxMzQyMDRlMDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d450d5c077b44433a536569b1dccece4",
+      "statement": "Инспекция имеет отдельный тип результата, а interrupt, restart и остановка исполнений обращаются к агенту под ограниченным временем операции.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/kernel.go#L14-L49",
+          "version": "repo-lines-v1:sha256:a303d040de91aed151ac119523150713d1ee87f846ccbd7fe29a3e8060b23767:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiMTM3YTU5YWU0NGY5Y2IzYzc4ZTkyNzIzMzcyYTQyYjMyZDQ2OWEwNmVjYzFlYmRlNDJkNDg3N2FlZWNhZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiYzU3MTZlYWFkMjMwMWY5OTAxZDA2ZjMwNmY3MDBiMDU3ZWI1NjNlMGE1MzJkMTlkMTkyOWMxYTg3NmMxM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjNjQxZmQ0YzAxZDhjOWJmNjE4ZDQyZTY3ZmMzNTViY2E3NTA3NDhhYTRhMTQxYjU1NGE4ZThjYzUyNzEyODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwNjU5MGQ2MzY1ZDE0N2IwY2Q2YmNmNDAwMmQ0NjhmNzE0Mjc4ZTk3MzA5MDhlMDExNjMyYTE5OWU2YjE0NTMifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/commands.go#L30-L66",
+          "version": "repo-lines-v1:sha256:88653b5e9523be641495cb4e0f4eeeafbb6c90bf0aebbb8890514edda4a339ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiNTkyOWIyYWFmNzk3MTg3YzA0OGRlZWY2MDBiZGE3ODIzY2YzMDhlYzUxZWI3MWY3YjFkYjU1YTI1ZDU0ZGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjZWEyM2FiYjNhNmM1MTUzZWRjZGIyNDZiNzBiNDE3ODM2OTk2ZWUwYzdjOWRkMWVhMzAwOTg0MzZjNTY0MTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/stop_executions.go#L12-L47",
+          "version": "repo-lines-v1:sha256:b14dbbebed5fb7c2557b30074ff05f1863591a330d7e7a73b4384781752ea158:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwZGNhNTViMGQwYzUyMzU5NWYyMWNhZDdkODRjMTIxNTg1MjU5NDI1NDI5NDkxNTYzNmM5NTg3YTViMWMxOTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlZDYxZWMxOGIzYzYyNTJlZTVjMDJkNGY1YTNmMTRiYzVmMzJhOWQ3MjFhOGUyOGUxYjI0YmI3Yzc1NGZjYzMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI0OGYyNmIyZjNmZWNhYjExYzJhYTUzZDk3YzU4OTUzMjdhMjQwMDJhN2E0NjEzYWFkMDdkODczZGJlM2Q0M2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2480d1437bca4c98b0b682298d2fde16",
+      "statement": "Архив событий, изменения исполнения и курсор агента записываются в одной транзакции, а чтение событий использует публичный курсор владельца без продления активности.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/events.go#L100-L131",
+          "version": "repo-lines-v1:sha256:0b01a552a376f5001b34bcd8513a618428b1a1a1b250906317ca2a32d772a6d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyMmQzMDljNDc4YTk2NTRmNWYzYTJmNzYzNWYwNTI2NDNkYzg4ZGJlNDUwNmMyYWM3MjlmNjAxZmJkNmU3MDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxNzU4OWI2NDcwZjczNDY3YTYzNGMwODBhNDM3Y2Y0MzI2NTZmZjE5OGM3ZjE5YWE4YmU3MGI5ZDcwMWUwZTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxNWMyNWM1NWZkNTFmMzQ3ZjQ0Mjc4NjE3N2I5NjdhYTQ1MGU5NmFhNDkxN2I0NjQ1NDMyOGYyM2NhMDE2ODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUxY2QyYzc4ZDBkODdiMDY1ODY2NTg1NWU3MWZmNWNmMGFkMGYyODM0ZjRiNDc1ODJhY2ZmZDliZTI1Mzk2NDkifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/events.go#L16-L41",
+          "version": "repo-lines-v1:sha256:d33582fb8a38f04b1f2c67429a2e73c1f8ab578ed2fdc3776553d9c3f5d43f24:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwNDE3ZGQzODg3YjliYmIwZWVmMzRmMDQxZmNjOWEwYjQwMTViMjg0YjdkNjFjMjcyMjg2OTc1NjU3NGQxYTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZWZjNDk0MThkMjZkY2YxMjliMjJhNmFhMjExMDhjZWVjMzc2NzdhMzJkMDhlOWQ1ZmVlMzVkZGE2NmJiOWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3ODMxMjA3Y2FiYTE5MGIxNThjM2Q5OGFjY2I4ZGZmZmRkNTJjZTE5ZjJjNzcyMzk2N2VkNTk0ZThkY2MzMjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlZDQ5YzhhZjJlNDBiZjgyNTUyZDFlOTU5MTAyMjYzMmQ2MTM4ZGM4N2NmYTU2YTQ2NGVkNDVlODEzYjRiY2UifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/events.go#L52-L98",
+          "version": "repo-lines-v1:sha256:79143a8e19ff997f1b333343529ac97dc9479deea2de053ab9099b1f02b911b2:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiYmE2ZGRiZjc3MjdhMTU4ZDlmNDM5MDliYjUyZDkyOTBkOGM4YTM1OWE2M2Y2MWFjOTY3NzhhMTljZTgzYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkOTc4Nzc4YzM4ZGQ4NzMxODY5ZmE3Y2Q1MzBjYzE3MzU4NzI0YzgyYWZiMDE0ZDRjYTNmNGFjNmYzMDhlMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0NTdkZTVmYjVkOGI2MTIyMDEwMzEwZDJmODdmMzlmOGZkMGJiMDM4YTNlMmZlNzAyN2IzODE2YzdhYjhjNWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b623683473574b5397de919169babe97",
+      "statement": "Проекция обновляет результат ячейки только для последней попытки с текущей версией исходника, сохраняя ревизию редактирования. Результат и отметка проекции фиксируются вместе.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notebook/adapters/postgres/results.go#L65-L109",
+          "version": "repo-lines-v1:sha256:5dcfb1749c07ace6a8c94571f97a57883b7c7f61312d744c2979439c82b44924:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiZjI0NTk5NWY0YWI4MTBhMzhmNGJhZjg3YTk4OTg2M2RiMTAyNWQxYzc5ZjcwODYxNzU3ZDc0YWFlMWU4NTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3MmY2YzVjY2MyNzRkNTQ4OTE5N2FhMGM3YzdjMzMwNTRiZWNiM2YzM2RiZDQ3NzZkNDEzZTk2MGI5Y2RmMGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFkY2NkYWMyZGM2YmM2MzM4ZjM4NDA2ZDI2MDNhMWMyMjcwNTZkOTE0YzBhMGU1ZTBhYjViMjQ4M2JlZTc4YTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/events.go#L152-L200",
+          "version": "repo-lines-v1:sha256:3e633f9d4534f732244b0081389c354105e5fa8bfbb4580016525191b247dc6a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0ZWM3MDFmYzk2NjIyZjQ0YjU3OWJmNTBiMWJiZDBkNWNmZTE3YjhjNmRhMDk5ZWRiYjhjNzgzZmU1MmM5NTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzYjk1OGMwODM2OTRkNzhmNDE3MmJhZGJmYmY1ZDEzNDRmMzA2MGJlMTUxNDZlYzg5NTdmMmMyMGM0YzBjNGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiZTQ1ZjA3ZmVlNmI0MmM0NjhjZTZhODFiZjNjMGJiNjY0OGVhYzM4YmFkYmZhMGFjYzhjNzhiODAzY2UzY2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3ZGRhYTBlMGJmOWI5NjYyNGM4Y2EzYTBlZWE2MDUyNWQyNjUyNTA2NWU1NWQ3Y2VmZjk3NjlmMTMyMWUwODAifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/events.go#L203-L226",
+          "version": "repo-lines-v1:sha256:ff30f7f80b3af09ada65c4f4c0fceda4b3e68568b7e41c6a172b2903627fd848:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4YTM2YjJiOGM3ZGE5YjBhZTE1YjZlNTdiOTI0Yjg3NTkxZmE2NzlhYmI3NGY2OWYyNmVjZDVjNTFlODhiZmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxNWMyNWM1NWZkNTFmMzQ3ZjQ0Mjc4NjE3N2I5NjdhYTQ1MGU5NmFhNDkxN2I0NjQ1NDMyOGYyM2NhMDE2ODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_082dc6c07d364ab7bfe623dd47a5a925",
+      "statement": "Остановка завершает архивацию и освобождает пользовательский слот до окончания удаления окружения. Недостоверный исход незавершённой команды сохраняется как UNKNOWN.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/adapters/postgres/executions.go#L202-L230",
+          "version": "repo-lines-v1:sha256:0dcb79419a08d65788797cf487303fc40a8515d9582f46d7ed3490efb76f8ccd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0YjczOWE0MTVkNzJlY2EwNzU4ZmNlOTA5MWQ5MDA0ZjU0ZDY0MzJlZDVhY2JiNjM2ZjQ2NTRjYjE4NWJkNDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkYWU4MDJlMWMwYzk5YTZjOTc0YzZhNmMwNzM1ZDc2NTExNzc4YTAzY2I3NzgzMzNkZjNhMjJhZDllYjkwYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNmNDVlNDJhZGJhN2MxZDA3Njg1NDczOGE1MTI5MDkxNTRjY2E0NTliOTFiZWFlYjc0NTBhYWVhMTdiNThiMDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0OGVlMDA1OWY0NGMxY2FlNGJkNGJmNzViNmVhMWUxY2Y3ZGY2NjZlNDRhZjdhMjlkYjYxMzJkODgyZWMxZWYifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/worker.go#L421-L428",
+          "version": "repo-lines-v1:sha256:51b78d4c8d16ea38bc013366af3293c8307439d09a4f6135fe9139772c156a2a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmRjNDZhMWRkNWE4M2MyY2JjODUyNmYyNGZkY2M1ZDEzYmJkYTkwNDliY2FjMmIzNWNkMTMyNDMzNzYzOTg0ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGQ3ZDJkMzYyODcxNjM4YTcxMTEwMTE1MmU5MTFjZmZhMjgwZTQ3ZTA4NGY0NmFkOWIwMDUyYjQzNTI5MjM2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTYzMWI2ZTJjYTA3ZDhiYWYwZWI0NGU3NDlkYmY0OTBiMzkyZTNhNTM0ZWY2MTAyMjc3MTE0NmNkZjlhZjFhMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzgyYTc2ZDIxOTRiNWY3N2VmNzliOGI0YTI2Yjg3OGI1MDk3ZjE5MjYyMjlhNTljYzZhNjM0MTdkZjk2NGJkMCJ9"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/worker.go#L463-L521",
+          "version": "repo-lines-v1:sha256:f83bd82ab743be82556932e6422a4501668431adc1a4b992ef026c61737eac7c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxNzdkNzE1NmE0Y2Q1NzhiOWM1MDZmODNkNzg5Y2U1NzhiODFlZTE2YTc3ODdiNzE2Mzk4ZWM5NzM2ODdlZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkYTFkNzkxNDgwOWUzNDk5ZDQ1NzNlOGJmZTU4MjZhZTA4MmVhMmUyYTE0ZGI3Y2MxNDE3MjU3N2M2YTczNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkZjJiNTdjZTAxMmExMzg3ODg0NTI0ZGJiMzEzZTEwY2I0ZTdjNDNjNjJhZmU3ZDk1YzU1YTZhYjA2NjY4NzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_85a9971f08504e4bbf99ce8c8846b916",
+      "statement": "Workspace допускает ограниченный набор операций и проверяет размер запроса, владельца и READY при каждой передаче. Ответ передаётся потоком с no-store.",
+      "evidence": [
+        {
+          "resource": "repo://internal/runtimesession/delivery/http/files.go#L16-L65",
+          "version": "repo-lines-v1:sha256:520506a1d1de0d79fb70e33cc07a0e9138892f94c84b0e109d4353c871bb433b:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmN2UwYTc0Njk3MzQ4OTgzYzg3Y2EyMjEyNTgzYjIwZWQ3OWRjY2Q5Yzg4OTBiNTNkZGJhMWExZDBlYjE4ZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3YTliNWU5MDE5YzhkYjg3ODNlYzljM2ZlYmIwYTJjOTg2MmY2MWEwNWMzMDhmZTg5NWU0YTliZWQwM2VkYjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlNzc2M2NkMTdiMDQ0MjMwN2U4NjczN2U2OTNjOThjN2U4ODQyOGNhZWRmYjI3OThhNGY0Y2QxYmFkMGUyZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJjOGVlOGZmZmM0Mjk0MmJjMGU5ODEzYWJmM2FiY2QwY2RiODdjNThjMzVhNTUwMDEzMzFhZmJhNzc0OTE3OTQifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/delivery/http/files.go#L66-L107",
+          "version": "repo-lines-v1:sha256:2b877a2ddcff973fc83600a1b1b6328434bec9030bb16086ea1a1a7aa040c629:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMWI0OWRjNzJmNjMyNjNkYzRmODFkZDIxZGYzZWRiZmU2NWU5NjVlN2FmMjhjNDM4OGFmMjc0NThlZTYwY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU4ZjQyMDk1MjA5YTZjOTY0ZWM4ZTI2YjdlZTFhMTc3OTA4ZjRhYzE0ZmUwYTBjZTVkMzg0MGI5MzVhMjU4ZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/runtimesession/usecase/files.go#L15-L35",
+          "version": "repo-lines-v1:sha256:05b4beb27ab2c25c06a837716deb0a05a0dda2af01f01c3adf9fb002d74d5df8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwODFlNWExMzBkZmRhOGFlMjY3MjM2YTcwNmVjMzE1ZTIzZmQ2MjhjODliN2I3MDU5Nzc0YWM2MzdhNDgyMjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzYmY0M2Q5MmQyMThjY2I2N2FkODg4YjU0ZDZjYmI3MTYwNWFmZmZmMWMwZWQwNzlmNjFlMGEzNGVjNTRjNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/transport/http/router.go#L43-L63",
+          "version": "repo-lines-v1:sha256:3d09a318c81ca179460325aab32d1969366c8b93642699da88d65e4ad435a071:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmNjgwNTI0MTIxYjViOWU5YTQ2M2IwNTUzMDI3YzhhMTk4ZmZkODZjMDBjNzMyNzQ3MmQ1ODliOTY1MzE2MGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4NjFmMDYzZjkyYjFjNWEzODVmYjU0NzU2MDcxZDU5NTJhNzE5YWNiZTVhYTBmNmY2YWZmZTUyZjQ2NmY1NjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUyOWJjNzVmODhkOWZiYmNlNTUzMTM2MmJjNTczMGZjOWI3ZWMzNDI0OWM5NDEwZTk4OWUzMDQ3ZjczY2NkNDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQxZWM1YmM0OTM5YmQ4NDdiZTRhNmFkZmM0MGQ2Njg4ZjgxZmEzM2ViYWQ2YzBlNzBjODYxYzU5NjY4ZWZkMDEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.2",
+    "at": "2026-11-20T18:28:51.294Z"
+  }
+}

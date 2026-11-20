@@ -1,62 +1,94 @@
 ---
 type: guide
-title: "Блокноты: редакции, PostgreSQL и S3"
-description: "Владение, проверка редакции по хешу, публикация неизменяемых файлов и сохранение полей ipynb."
-tags: [notebooks, persistence, ipynb]
-sources:
-  - id: openwiki-source-517011d1027a07f39186a00d
-    resource: repo://internal/notebook/adapters/ipynb/ipynb.go
-  - id: openwiki-source-d10720638244b28e3a08518b
-    resource: repo://internal/notebook/adapters/ipynb/rewrite.go
-  - id: openwiki-source-c1af176bb103419425143738
-    resource: repo://internal/notebook/adapters/postgres/notebook.go
-  - id: openwiki-source-7f9be0e2b42665c2af6d9c69
-    resource: repo://internal/notebook/adapters/s3/files.go
-  - id: openwiki-source-b1d926fa00f4ede267bc3709
-    resource: repo://internal/notebook/delivery/http/editing.go
-  - id: openwiki-source-50052b2ca6d0ab325ed24dce
-    resource: repo://internal/notebook/usecase/editing.go
-  - id: openwiki-source-0be68ea43b41f70debccebfc
-    resource: repo://internal/notebook/usecase/notebook.go
-generated: { by: "codex", at: "2026-11-02T21:58:51.903Z" }
+title: "Блокноты: ячейки, ревизии и доступ"
+description: "Хранение в PostgreSQL, проверка ревизии при редактировании, список, режимы чтения и независимые копии."
+tags: [notebooks, persistence, ipynb, sharing]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-02T21:58:51.903Z
+    at: 2026-11-20T18:28:51.294Z
+sources:
+  - id: openwiki-source-2b59619f074aeb893d96a0f9
+    resource: repo://internal/notebook/adapters/ipynb/document.go
+  - id: openwiki-source-517011d1027a07f39186a00d
+    resource: repo://internal/notebook/adapters/ipynb/ipynb.go
+  - id: openwiki-source-d33dbe50e3c0c2adf4ebf2d1
+    resource: repo://internal/notebook/adapters/postgres/access.go
+  - id: openwiki-source-c96f532e1f832ed854414a3f
+    resource: repo://internal/notebook/adapters/postgres/delete.go
+  - id: openwiki-source-18ae44dd0a97a67b3227a5d2
+    resource: repo://internal/notebook/adapters/postgres/editing.go
+  - id: openwiki-source-ab643930eec2d443e83ca4b5
+    resource: repo://internal/notebook/adapters/postgres/list.go
+  - id: openwiki-source-c1af176bb103419425143738
+    resource: repo://internal/notebook/adapters/postgres/notebook.go
+  - id: openwiki-source-eb33162e41e8867fc6790896
+    resource: repo://internal/notebook/adapters/postgres/sharing.go
+  - id: openwiki-source-b1d926fa00f4ede267bc3709
+    resource: repo://internal/notebook/delivery/http/editing.go
+  - id: openwiki-source-e3559343d5d14b0e14440834
+    resource: repo://internal/notebook/domain/sharing.go
+  - id: openwiki-source-d414ea889014eeb39ea9591f
+    resource: repo://internal/notebook/usecase/list.go
+  - id: openwiki-source-0be68ea43b41f70debccebfc
+    resource: repo://internal/notebook/usecase/notebook.go
+  - id: openwiki-source-6c7fe7a1d6a90b854b04a6af
+    resource: repo://internal/transport/http/middleware/notebook_cache.go
+  - id: openwiki-source-55b426b919298d5817843eb0
+    resource: repo://internal/transport/http/router.go
+  - id: openwiki-source-14e8f7fac0b244c1e1c65190
+    resource: repo://migrations/20261117225455_add_notebook_sharing.sql
+generated: { by: "codex", at: "2026-11-20T18:28:51.294Z" }
 ---
 
-# Блокноты: редакции, PostgreSQL и S3
+# Блокноты: ячейки, ревизии и доступ
 
-## Владение и слои
+## Хранение и формат
 
-HTTP delivery получает owner ID из principal. PostgreSQL выбирает строку одновременно по ID и owner ID; чужой блокнот выглядит отсутствующим. Get и Content проверяют владельца до чтения S3; List читает только метаданные. Usecase работает через Metadata, Files и NotebookCodec, которые app связывает с PostgreSQL, S3 и ipynb.Codec. См. [авторизацию](auth-sessions.md) и [HTTP-контракт](../operations/startup-contract.md).
+HTTP-обработчики получают посетителя из контекста и вызывают `NotebookUsecase`. Репозиторий PostgreSQL хранит заголовок документа в `notebooks`, порядок и исходники в `notebook_cells`, результаты и вложения в `notebook_cell_data`. Создание нормализует имя и пишет документ nbformat 4.5 с одной пустой code-ячейкой в одной транзакции.
 
-## Создание и редактирование
+Кодек ipynb принимает `source` строкой или массивом строк. `Parse` читает code и markdown, `Build` собирает новый nbformat 4.5 с пустыми outputs и null execution_count для code. Для полного документа `DecodeDocument` и `EncodeDocument` работают также с метаданными, вложениями, результатами и дополнительными JSON-полями. Перед записью репозиторий нормализует поля и считает размер сериализованного документа.
 
-Create обрезает края имени, отвергает пустое имя, создаёт один code-блок и пишет ipynb по UUID-ключу до metadata.Create. Ошибка записи строки не удаляет уже загруженный объект.
+## Редактирование
 
-Content возвращает блоки и SHA-256 исходных байтов файла. Delivery выдаёт этот hash также как ETag; изменения принимают один непустой сильный If-Match, отвергая wildcard, списки и слабые теги. Несовпадение редакции отображается в 409. AddCell проверяет тип, лимит и индекс, EditCell/MoveCell/RemoveCell находят блок по ID. CreateCell и DeleteCell тоже проходят через общую проверку редакции.
+Content возвращает ячейки и непрозрачную UUID-ревизию в поле `hash` и заголовке `ETag`. Редактирование принимает один сильный `If-Match`. Репозиторий блокирует строку по ID блокнота и владельца, затем сверяет ревизию. Устаревшая ревизия даёт 409. При изменении обновляются затронутые строки и новая ревизия в одной транзакции, а повтор прежнего текста или перемещение на текущую позицию сохраняет прежнюю ревизию. Смена текста создаёт новую версию исходника, у code-ячейки сбрасываются результаты и счётчик исполнения.
 
-changeCells выполняется внутри Metadata.Modify под SELECT FOR UPDATE строки владельца: читает текущий файл, проверяет hash, применяет изменение и вызывает Rewrite. Если блоки не изменились, сохраняются hash, file_key и updated_at. Иначе новый ipynb записывается под новым UUID-ключом; лишь затем SQL UPDATE меняет file_key, cells_count и updated_at и транзакция фиксируется.
+Удаление под блокировкой владельца проверяет активное состояние runtime, незавершённую очистку, аренду и ожидающие проекции. Когда проверки пройдены, завершённая история runtime удаляется вместе с блокнотом в одной транзакции.
 
-Старый объект не изменяется и не удаляется: читатель со старой ссылкой продолжает получать согласованный снимок. Общей транзакции S3/PostgreSQL нет. При откате SQL новая загрузка остаётся без ссылки; при неопределённом результате commit код возвращает ошибку и не удаляет потенциально опубликованный объект. Сам S3 Put заменяет объект при повторном использовании ключа, но путь редактирования выбирает новый ключ.
+## Доступ и список
 
-## Формат и ограничения
+Чтение разрешено владельцу, любому посетителю в режиме `public` и указанным пользователям в режиме `restricted`. Метаданные и ячейки читаются в одном снимке PostgreSQL. Недоступный и отсутствующий блокноты дают 404. Middleware выставляет `no-store` на чтении и настройках доступа, включая ранние ошибки. Правки и управление доступом принадлежат владельцу. Замена списка читателей и режима атомарна. Копирование требует входа, проверяет право после блокировки исходника и записывает отдельный приватный документ на имя запрашивающего пользователя.
 
-Parse принимает code/markdown и source как строку либо массив строк. Build создаёт nbformat 4.5 с пустыми outputs и null execution_count у code-блоков; это создание нового документа. Rewrite сохраняет прочие поля документа и существующих блоков, включая metadata и результаты неизменённых блоков. При изменении source code-блока сбрасываются только его outputs и execution_count; пустые и повторяющиеся ID отвергаются. Это преобразование JSON, без обещания побайтового сохранения форматирования.
+Список читает сводки и счётчики по владельцу, сортирует по `updated_at DESC, id DESC` и поддерживает поиск по имени. Курсор привязан к владельцу и поисковому запросу. Usecase помечает запись, для которой у пользователя есть активная [runtime-сессия](runtime-sessions.md).
 
-S3 использует AWS default config и path-style, Get/Put имеют timeout пять секунд. Get проверяет ContentLength и ограничивает фактически прочитанное тело; Put и usecase также проверяют MaxNotebookBytes. Значения лимитов находятся в `internal/notebook/usecase/contract.go`; значения подключения — в конфигурации. Наличие ipynb-кодека не доказывает исполнение блоков или работу прода.
+Сценарии PostgreSQL проверяют матрицу доступа, отзыв доступа перед копированием и отсутствие частично записанной копии. См. `internal/notebook/adapters/postgres/sharing_integration_test.go`, `clone_concurrency_test.go` и `large_integration_test.go`.
 
-## Проверки
-
-`internal/notebook/usecase/editing_test.go` покрывает конфликт конкурентных писателей, отсутствие изменений, старый снимок и ошибку публикации. `adapters/postgres/notebook_test.go` проверяет commit и отсутствие UPDATE при no-op; `adapters/ipynb/rewrite_test.go` — сохранение полей и сброс outputs только изменённого блока. Input-security тесты проверяют хранение текстовых данных без HTML-экранирования; безопасный вывод остаётся обязанностью клиента.
-
-[Карта Go API](../quickstart.md)
+[Доступ к API](auth-sessions.md) · [Карта Go API](../quickstart.md)
 
 ## Источники
-- [internal/notebook/usecase/notebook.go#L29-L95](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/usecase/notebook.go#L29-L95)
-- [internal/notebook/usecase/editing.go#L13-L170](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/usecase/editing.go#L13-L170)
-- [internal/notebook/adapters/postgres/notebook.go#L25-L111](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/adapters/postgres/notebook.go#L25-L111)
-- [internal/notebook/delivery/http/editing.go#L14-L88](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/delivery/http/editing.go#L14-L88)
-- [internal/notebook/adapters/ipynb/ipynb.go#L33-L93](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/adapters/ipynb/ipynb.go#L33-L93)
-- [internal/notebook/adapters/ipynb/rewrite.go#L11-L73](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/adapters/ipynb/rewrite.go#L11-L73)
-- [internal/notebook/adapters/s3/files.go#L20-L98](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/notebook/adapters/s3/files.go#L20-L98)
+
+- [internal/notebook/usecase/notebook.go#L55-L72](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/usecase/notebook.go#L55-L72)
+- [internal/notebook/adapters/postgres/access.go#L12-L46](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/access.go#L12-L46)
+- [internal/notebook/adapters/postgres/list.go#L14-L66](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/list.go#L14-L66)
+- [internal/notebook/usecase/notebook.go#L24-L52](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/usecase/notebook.go#L24-L52)
+- [internal/notebook/adapters/postgres/notebook.go#L71-L104](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L71-L104)
+- [internal/notebook/adapters/postgres/notebook.go#L146-L155](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L146-L155)
+- [internal/notebook/adapters/postgres/editing.go#L40-L98](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/editing.go#L40-L98)
+- [internal/notebook/adapters/postgres/editing.go#L153-L206](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/editing.go#L153-L206)
+- [internal/notebook/adapters/ipynb/ipynb.go#L34-L108](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/ipynb/ipynb.go#L34-L108)
+- [internal/notebook/adapters/postgres/notebook.go#L137-L143](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L137-L143)
+- [internal/notebook/adapters/postgres/editing.go#L40-L57](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/editing.go#L40-L57)
+- [internal/notebook/adapters/postgres/editing.go#L99-L149](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/editing.go#L99-L149)
+- [internal/notebook/delivery/http/editing.go#L17-L92](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/delivery/http/editing.go#L17-L92)
+- [internal/notebook/adapters/ipynb/document.go#L27-L128](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/ipynb/document.go#L27-L128)
+- [internal/notebook/adapters/ipynb/document.go#L266-L290](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/ipynb/document.go#L266-L290)
+- [internal/notebook/adapters/postgres/notebook.go#L107-L155](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L107-L155)
+- [internal/notebook/domain/sharing.go#L23-L35](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/domain/sharing.go#L23-L35)
+- [internal/notebook/adapters/postgres/sharing.go#L12-L74](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/sharing.go#L12-L74)
+- [internal/notebook/adapters/postgres/access.go#L49-L94](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/access.go#L49-L94)
+- [internal/notebook/adapters/postgres/notebook.go#L91-L104](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/notebook.go#L91-L104)
+- [migrations/20261117225455_add_notebook_sharing.sql#L1-L10](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/migrations/20261117225455_add_notebook_sharing.sql#L1-L10)
+- [internal/notebook/adapters/postgres/list.go#L24-L57](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/list.go#L24-L57)
+- [internal/notebook/usecase/list.go#L10-L52](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/usecase/list.go#L10-L52)
+- [internal/transport/http/middleware/notebook_cache.go#L8-L23](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/transport/http/middleware/notebook_cache.go#L8-L23)
+- [internal/transport/http/router.go#L61-L64](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/transport/http/router.go#L61-L64)
+- [internal/notebook/adapters/postgres/delete.go#L11-L79](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/notebook/adapters/postgres/delete.go#L11-L79)
