@@ -1,11 +1,11 @@
 ---
-type: architecture
-title: "Жизненный цикл runtime-окружений в Go"
-description: "Сервис окружений, очередь PostgreSQL, lease воркера, создание и очистка ресурсов через адаптеры."
-tags: [runtime, worker, postgres, provisioning]
+type: guide
+title: "Подготовка runtime-окружений"
+description: "Подключение Go-адаптеров, очередь подготовки и удаления VPS, тёплый пул и восстановление."
+tags: [runtime, provisioning, worker, persistence]
 verified:
   - by: openwiki/0.7.2
-    at: 2026-11-02T22:04:01.439Z
+    at: 2026-11-20T18:28:51.294Z
 sources:
   - id: openwiki-source-a009d602e55f848ea26930dd
     resource: repo://internal/app/app.go
@@ -17,66 +17,79 @@ sources:
     resource: repo://internal/runtime/adapters/postgres/environments.go
   - id: openwiki-source-f08e86c5293b0d4d83463492
     resource: repo://internal/runtime/adapters/postgres/jobs.go
+  - id: openwiki-source-1449920d53cd166b139c4a16
+    resource: repo://internal/runtime/adapters/postgres/pool.go
+  - id: openwiki-source-6b926fb184beddf2ccbf8041
+    resource: repo://internal/runtime/module.go
   - id: openwiki-source-5caedd671d86311b3df2dd43
     resource: repo://internal/runtime/usecase/create.go
   - id: openwiki-source-600f480336937ddaa0150e0d
     resource: repo://internal/runtime/usecase/delete.go
+  - id: openwiki-source-2e110c4857fbc508dbc6588d
+    resource: repo://internal/runtime/usecase/pool.go
   - id: openwiki-source-7c5b2622482ae158ab24f724
     resource: repo://internal/runtime/usecase/reconcile.go
   - id: openwiki-source-cdaba5d803745f298794e37d
     resource: repo://internal/runtime/usecase/service.go
   - id: openwiki-source-080f23788565faaa3a6f0817
     resource: repo://internal/runtime/usecase/worker.go
-generated: { by: "codex", at: "2026-11-02T22:04:01.439Z" }
+  - id: openwiki-source-c70cc4c1a5f9170884c5d0e1
+    resource: repo://internal/runtimesession/adapters/environment/client.go
+generated: { by: "codex", at: "2026-11-20T18:28:51.294Z" }
 ---
 
-# Жизненный цикл runtime-окружений в Go
+# Подготовка runtime-окружений
 
-## Граница интеграции
+## Подключение к приложению
 
-`internal/app` вызывает runtime.Build и при включённом модуле запускает Worker.Run рядом с HTTP-сервером. EnvironmentService сохранён в application, но не передан HTTP-фасаду: этот SHA не подключает создание окружений к обработчикам блокнотов. `cmd/runtime-smoke` — отдельная ручная точка входа. Самостоятельный Python-сервис и роли infra вне корпуса; описание ниже подтверждает Go-код, а не фактическую настройку VPS или работу облака.
+`internal/app/app.go` собирает модуль runtime, запускаемый вместе с Go API. Воркер [пользовательских runtime-сессий](runtime-sessions.md) запрашивает создание, состояние и удаление окружения через адаптер `internal/runtimesession/adapters/environment/client.go`. Адаптер передаёт состояние и безопасный код причины. Конфигурация выбирает `fake` или `openstack`. В первом случае подставляются тестовые адаптеры, во втором собираются облачный провайдер, Ansible и Go-клиент агента. `cmd/runtime-smoke` служит отдельной ручной точкой входа.
 
-При RUNTIME_ENABLED=false Build возвращает сервис с отключённым RequestCreate и nil-воркер, не создавая облачные адаптеры; Get и RequestDelete по-прежнему обращаются к БД. При включении выбираются fake либо openstack; fake подставляет локальные адаптеры облака, настройки хоста и агента. Конфигурация и необходимые файлы задаются `internal/config/runtime.go` и `internal/runtime/module.go`, без публикации значений секретов и адресов.
+## Запрос и аренда задания
 
-## Запрос и очередь
+`RequestCreate` проверяет SessionID, язык и профиль, затем записывает окружение `QUEUED` с целью `READY` вместе с заданием create. PostgreSQL проверяет лимит под advisory-блокировкой. Повтор с тем же SessionID возвращает найденное окружение при совпадающих языке и профиле. Несовпадение даёт конфликт.
 
-RequestCreate проверяет SessionID, язык и профиль и сохраняет окружение QUEUED с desired_state=READY вместе с заданием create. PostgreSQL использует общую advisory-блокировку при проверке лимита активных окружений. Повтор с тем же SessionID возвращает существующее окружение; другой язык или профиль даёт конфликт. Миграция `migrations/20261030130000_create_runtime.sql` хранит окружения и задания и ограничивает активные задания одним на сессию.
+Очередь выбирает готовое задание через `FOR UPDATE SKIP LOCKED`. Воркер ограничивает число параллельных операций и продлевает аренду. Потеря аренды отменяет текущие шаги, а перевод задания в delete прерывает создание.
 
-Claim выбирает готовое задание без действующего lease через FOR UPDATE SKIP LOCKED. Воркер ограничивает конкурентность и продлевает lease; потеря владельца или отсутствие успешного продления в течение lease отменяет текущие шаги. Перевод задания в delete отменяет создание. Записи состояния проверяют версию окружения и владельца работающего задания; desired_state=DELETED не затирается старым созданием.
+## Подготовка и назначение
 
-## Создание и проверка готовности
+При создании новой VPS окружение проходит `QUEUED → CREATING → CONFIGURING → VERIFYING → READY`. Воркер обеспечивает порт, том и сервер, сохраняет полученные ID и передаёт настройку хоста в Ansible. Ключ хоста и токен хранятся запечатанными. В `VERIFYING` воркер вызывает Assign и ожидает успешный HTTP-ответ с совпадающими сессией, языком и признаком Ready. Общий срок подготовки отсчитывается от создания записи. Временные ошибки возвращают задание в очередь с задержкой, постоянная ошибка или превышение срока на этапе подготовки переводит окружение к очистке.
 
-Последовательность состояний: QUEUED → CREATING → CONFIGURING → VERIFYING → READY. В CREATING обеспечиваются порт, том и сервер. Полученный ID сохраняется даже вместе с ошибкой облака; Ensure вызывается повторно и для известного ID, чтобы завершить ожидание готовности. Ключ хоста и токен сохраняются в запечатанном виде до использования. CONFIGURING вызывает HostConfigurator, VERIFYING опрашивает AgentClient.Health и сверяет HTTP-статус, SessionID, язык и Ready.
-
-Общий срок создания отсчитывается от CreatedAt, отдельные вызовы health также ограничены. Постоянная ошибка облака или истечение срока при создании переводит окружение в CLEANUP_PENDING; после очистки итог — FAILED. Временные ошибки повторяются с backoff.
+При положительном размере тёплого пула воркер отдельно готовит VPS и ждёт, пока агент сообщит о готовности принять назначение. `ClaimPool` передаёт одну готовую VPS нужного образа и версии агента ровно одному окружению в транзакции. Это сразу переводит окружение в `VERIFYING`. При пустом пуле или неудачном назначении воркер переходит к новой VPS в рамках исходного срока.
 
 ## Удаление и восстановление
 
-Удаление пробует Drain/Stop агента, затем удаляет сервер, том и порт. Недоступность агента не блокирует удаление. Ресурсы берутся и из сохранённых ID, и из метаданных облачных ресурсов. Обычное успешное удаление заканчивается DELETED. Постоянная ошибка удаления сохраняет CLEANUP_PENDING и завершает текущее задание; reconcile ставит очистку снова.
+Удаление пытается завершить работу агента, затем очищает сервер, том и порт. Недоступность агента не блокирует очистку. Обычное успешное удаление даёт `DELETED`, очистка после ошибки подготовки — `FAILED`. Периодическая сверка планирует повтор для `CLEANUP_PENDING` и проверяет владельцев облачных ресурсов. Проход по сессиям пропускает ресурсы без SessionID, а ресурсы пула сверяются отдельно по PoolID. Просроченные аренды заданий подхватывает Claim.
 
-Reconcile запускается при старте воркера и периодически: повторяет CLEANUP_PENDING и удаляет ресурсы неизвестных либо завершённых сессий. ListOwned ограничивает выборку меткой окружения, ресурсы без SessionID не удаляются этим проходом. Сам проход имеет timeout; просроченные lease подхватывает Claim.
+Границу с агентом подтверждает Go-клиент с mTLS и без прокси из окружения. Выполнение playbook и выбор файлов настройки видны в Go-адаптерах. Подготовку, потерю аренды, очистку и использование пула покрывают `internal/runtime/usecase/worker_test.go` и `pool_test.go`.
 
-## Адаптеры и проверки
-
-Go-клиент агента использует mTLS с заданным CA, Bearer-токен и отключённый proxy из окружения. Ansible runner создаёт временный каталог операции с правами 0700, файлы inventory/vars/known_hosts с 0600 и включает StrictHostKeyChecking по заранее известному ключу. Он запускает подготовленный playbook; содержимое ролей infra здесь не исследуется.
-
-`internal/runtime/usecase/worker_test.go` проверяет продолжение создания, потерю lease, удаление во время настройки, чужую сессию/язык health, timeout и очистку сирот. `adapters/postgres/*_test.go` проверяют очередь и записи состояния; `module_test.go` — сборку зависимостей. Эти тестовые сценарии не являются свидетельством запуска в облаке.
-
-[Карта Go API](../quickstart.md) · [Запуск и конфигурация](../operations/startup-contract.md)
+[Runtime-сессии](runtime-sessions.md) · [Запуск и конфигурация](../operations/startup-contract.md) · [Карта Go API](../quickstart.md)
 
 ## Источники
-- [internal/app/app.go#L35-L42](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/app.go#L35-L42)
-- [internal/app/app.go#L92-L111](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/app.go#L92-L111)
-- [internal/app/run.go#L36-L52](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/app/run.go#L36-L52)
-- [internal/runtime/module.go#L66-L120](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/module.go#L66-L120)
-- [internal/runtime/usecase/service.go#L40-L82](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/service.go#L40-L82)
-- [internal/runtime/adapters/postgres/environments.go#L35-L67](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/adapters/postgres/environments.go#L35-L67)
-- [internal/runtime/adapters/postgres/environments.go#L86-L126](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/adapters/postgres/environments.go#L86-L126)
-- [internal/runtime/adapters/postgres/jobs.go#L13-L63](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/adapters/postgres/jobs.go#L13-L63)
-- [internal/runtime/usecase/worker.go#L150-L205](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/worker.go#L150-L205)
-- [internal/runtime/usecase/create.go#L14-L123](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/create.go#L14-L123)
-- [internal/runtime/usecase/create.go#L210-L279](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/create.go#L210-L279)
-- [internal/runtime/usecase/delete.go#L19-L123](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/delete.go#L19-L123)
-- [internal/runtime/usecase/reconcile.go#L14-L102](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/usecase/reconcile.go#L14-L102)
-- [internal/runtime/adapters/agent/client.go#L40-L95](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/adapters/agent/client.go#L40-L95)
-- [internal/runtime/adapters/ansible/runner.go#L120-L175](https://github.com/Cringe-Driven-Development-Team/backend/blob/978bc2df36a71c796b95b14315f8e4d9b17a17b9/internal/runtime/adapters/ansible/runner.go#L120-L175)
+
+- [internal/app/app.go#L111-L115](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L111-L115)
+- [internal/app/app.go#L129-L152](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/app.go#L129-L152)
+- [internal/app/run.go#L28-L49](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/app/run.go#L28-L49)
+- [internal/runtimesession/adapters/environment/client.go#L36-L60](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtimesession/adapters/environment/client.go#L36-L60)
+- [internal/runtime/usecase/service.go#L40-L69](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/service.go#L40-L69)
+- [internal/runtime/adapters/postgres/environments.go#L89-L128](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/postgres/environments.go#L89-L128)
+- [internal/runtime/usecase/create.go#L15-L58](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L15-L58)
+- [internal/runtime/usecase/create.go#L225-L248](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L225-L248)
+- [internal/runtime/usecase/create.go#L267-L288](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L267-L288)
+- [internal/runtime/usecase/reconcile.go#L14-L37](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/reconcile.go#L14-L37)
+- [internal/runtime/usecase/reconcile.go#L72-L109](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/reconcile.go#L72-L109)
+- [internal/runtime/usecase/reconcile.go#L111-L143](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/reconcile.go#L111-L143)
+- [internal/runtime/adapters/openstack/provider.go#L431-L451](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/openstack/provider.go#L431-L451)
+- [internal/runtime/usecase/pool.go#L19-L58](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/pool.go#L19-L58)
+- [internal/runtime/usecase/pool.go#L91-L116](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/pool.go#L91-L116)
+- [internal/runtime/adapters/postgres/pool.go#L92-L122](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/postgres/pool.go#L92-L122)
+- [internal/runtime/usecase/create.go#L23-L45](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L23-L45)
+- [internal/runtime/module.go#L90-L115](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/module.go#L90-L115)
+- [internal/runtime/module.go#L125-L142](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/module.go#L125-L142)
+- [internal/runtime/adapters/postgres/jobs.go#L13-L63](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/postgres/jobs.go#L13-L63)
+- [internal/runtime/usecase/worker.go#L150-L205](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/worker.go#L150-L205)
+- [internal/runtime/usecase/delete.go#L19-L123](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/delete.go#L19-L123)
+- [internal/runtime/usecase/create.go#L91-L133](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L91-L133)
+- [internal/runtime/usecase/create.go#L290-L309](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/usecase/create.go#L290-L309)
+- [internal/runtime/adapters/agent/client.go#L44-L66](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/agent/client.go#L44-L66)
+- [internal/runtime/adapters/ansible/runner.go#L150-L165](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/internal/runtime/adapters/ansible/runner.go#L150-L165)
+- [cmd/runtime-smoke/main.go#L23](https://github.com/Cringe-Driven-Development-Team/backend/blob/8dd2f9cf82b2389d723c308c3deb5cc5f1db0b55/cmd/runtime-smoke/main.go#L23)
