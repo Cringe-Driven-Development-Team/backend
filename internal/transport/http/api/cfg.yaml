@@ -52,3 +52,7 @@ output-options:
     - putNotebookSharing
     - cloneNotebook
     - suggestUsers
+    - listCellComments
+    - createCellComment
+    - updateCellComment
+    - deleteCellComment

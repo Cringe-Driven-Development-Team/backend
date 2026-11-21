@@ -128,7 +128,7 @@ func newServer(ctx context.Context, cfg config.Config) (*application, error) {
 		}
 	})
 	sessionStore := sessionpostgres.New(pool)
-	notebookUsecase := notebookusecase.NewNotebookUsecase(notebookRepo, sessionStore, notebookcursor.New([]byte(cfg.JWTSecret)), notebookusecase.WithImportDecoder(ipynb.DecodeImport))
+	notebookUsecase := notebookusecase.NewNotebookUsecase(notebookRepo, sessionStore, notebookcursor.New([]byte(cfg.JWTSecret)), notebookusecase.WithImportDecoder(ipynb.DecodeImport), notebookusecase.WithCommentCursor(notebookcursor.NewCommentCodec([]byte(cfg.JWTSecret))))
 	sessionService := sessionusecase.NewService(sessionStore, nil, runtimeModule.Agent)
 	sessionWorker := sessionusecase.NewWorker(sessionStore, sessionenv.New(runtimeModule.Environments), runtimeModule.Agent, nil)
 	userHandler := userdelivery.NewHandler(userUsecase, userdelivery.WithProfile(avatars, cfg.AvatarsPublicURL))

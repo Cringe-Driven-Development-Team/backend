@@ -39,6 +39,7 @@ type Change struct {
 
 // Repository задаёт операции хранения блокнотов и проверки редакций.
 type Repository interface {
+	CommentsRepository
 	Create(context.Context, domain.Notebook) (domain.Notebook, error)
 	ListPage(context.Context, int64, ListQuery) (ListRows, error)
 	Get(context.Context, int64, int64) (domain.Notebook, error)

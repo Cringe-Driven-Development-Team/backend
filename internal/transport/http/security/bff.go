@@ -82,11 +82,11 @@ func AuthenticateBearer(tokens TokenParser, sessions AccessSessions) func(http.H
 	}
 }
 
-// notebookRead выделяет только два маршрута с optional Bearer.
+// notebookRead выделяет чтение метаданных, содержимого и стены с optional Bearer.
 func notebookRead(r *http.Request) bool {
 	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/api/v1/notebooks/") {
 		return false
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/notebooks/"), "/")
-	return parts[0] != "" && (len(parts) == 1 || (len(parts) == 2 && parts[1] == "content"))
+	parts := strings.Split(strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/notebooks/"), "/")
+	return parts[0] != "" && (len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") || (len(parts) == 5 && parts[1] == "content" && parts[2] == "cells" && parts[3] != "" && parts[4] == "comments"))
 }

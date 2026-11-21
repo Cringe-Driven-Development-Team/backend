@@ -19,7 +19,7 @@ func (s notebookReadSessions) ValidateAccess(_ context.Context, _ userusecase.Se
 }
 
 func TestNotebookReadRejectsSuppliedInvalidAuthorization(t *testing.T) {
-	for _, path := range []string{"/api/v1/notebooks/42", "/api/v1/notebooks/42/content"} {
+	for _, path := range []string{"/api/v1/notebooks/42", "/api/v1/notebooks/42/content", "/api/v1/notebooks/42/content/cells/cell-1/comments"} {
 		for _, tc := range []struct {
 			name                     string
 			headers                  []string
@@ -57,6 +57,24 @@ func TestNotebookReadRejectsSuppliedInvalidAuthorization(t *testing.T) {
 					t.Fatalf("status=%d want=%d", rec.Code, tc.status)
 				}
 			})
+		}
+	}
+}
+
+func TestCellCommentsRouteMatching(t *testing.T) {
+	for _, tc := range []struct {
+		method, path string
+		want         bool
+	}{
+		{"GET", "/api/v1/notebooks/42/content/cells/cell/comments", true},
+		{"POST", "/api/v1/notebooks/42/content/cells/cell/comments", false},
+		{"GET", "/api/v1/notebooks/42/content/cells/cell/comments/1", false},
+		{"GET", "/api/v1/notebooks/42/content/cells/cell/comments/", false},
+		{"GET", "/api/v1/notebooks/42/content/cells/cell/comments-other", false},
+		{"GET", "/api/v1/notebooks/42/content/cells//comments", false},
+	} {
+		if got := notebookRead(httptest.NewRequest(tc.method, tc.path, nil)); got != tc.want {
+			t.Fatalf("%s %s: %v", tc.method, tc.path, got)
 		}
 	}
 }
