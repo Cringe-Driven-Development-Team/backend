@@ -13,13 +13,23 @@ const readableCondition = `(owner_id=$2 OR sharing_mode='public' OR (sharing_mod
 const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM notebooks WHERE id=$1 AND ` + readableCondition
 const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM notebooks WHERE id=$1 FOR UPDATE`
 
-func (r *NotebookRepository) CheckRead(ctx context.Context, id, userID int64) error {
+// readQuerier позволяет проверять доступ через пул или уже открытую транзакцию.
+type readQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// checkRead использует единую политику доступа, не открывая отдельную транзакцию.
+func checkRead(ctx context.Context, q readQuerier, id, userID int64) error {
 	var found int64
-	err := r.db.QueryRow(ctx, `SELECT id FROM notebooks WHERE id=$1 AND `+readableCondition, id, userID).Scan(&found)
+	err := q.QueryRow(ctx, `SELECT id FROM notebooks WHERE id=$1 AND `+readableCondition, id, userID).Scan(&found)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return usecase.ErrNotebookNotFound
 	}
 	return err
+}
+
+func (r *NotebookRepository) CheckRead(ctx context.Context, id, userID int64) error {
+	return checkRead(ctx, r.db, id, userID)
 }
 
 func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64) (domain.Notebook, error) {

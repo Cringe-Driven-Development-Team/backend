@@ -100,6 +100,35 @@ func (mr *MockRepositoryMockRecorder) Create(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRepository)(nil).Create), arg0, arg1)
 }
 
+// CreateComment mocks base method.
+func (m *MockRepository) CreateComment(ctx context.Context, notebookID int64, cellID string, visitorID int64, text string) (CommentRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateComment", ctx, notebookID, cellID, visitorID, text)
+	ret0, _ := ret[0].(CommentRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateComment indicates an expected call of CreateComment.
+func (mr *MockRepositoryMockRecorder) CreateComment(ctx, notebookID, cellID, visitorID, text any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateComment", reflect.TypeOf((*MockRepository)(nil).CreateComment), ctx, notebookID, cellID, visitorID, text)
+}
+
+// DeleteComment mocks base method.
+func (m *MockRepository) DeleteComment(ctx context.Context, notebookID int64, cellID string, visitorID, commentID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteComment", ctx, notebookID, cellID, visitorID, commentID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteComment indicates an expected call of DeleteComment.
+func (mr *MockRepositoryMockRecorder) DeleteComment(ctx, notebookID, cellID, visitorID, commentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteComment", reflect.TypeOf((*MockRepository)(nil).DeleteComment), ctx, notebookID, cellID, visitorID, commentID)
+}
+
 // DeleteNotebook mocks base method.
 func (m *MockRepository) DeleteNotebook(arg0 context.Context, arg1, arg2 int64) error {
 	m.ctrl.T.Helper()
@@ -159,6 +188,21 @@ func (mr *MockRepositoryMockRecorder) GetSharing(ctx, id, ownerID any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSharing", reflect.TypeOf((*MockRepository)(nil).GetSharing), ctx, id, ownerID)
 }
 
+// ListComments mocks base method.
+func (m *MockRepository) ListComments(ctx context.Context, notebookID int64, cellID string, visitorID int64, query CommentQuery) (CommentRows, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListComments", ctx, notebookID, cellID, visitorID, query)
+	ret0, _ := ret[0].(CommentRows)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListComments indicates an expected call of ListComments.
+func (mr *MockRepositoryMockRecorder) ListComments(ctx, notebookID, cellID, visitorID, query any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListComments", reflect.TypeOf((*MockRepository)(nil).ListComments), ctx, notebookID, cellID, visitorID, query)
+}
+
 // ListPage mocks base method.
 func (m *MockRepository) ListPage(arg0 context.Context, arg1 int64, arg2 ListQuery) (ListRows, error) {
 	m.ctrl.T.Helper()
@@ -202,6 +246,21 @@ func (m *MockRepository) Rename(arg0 context.Context, arg1, arg2 int64, arg3 str
 func (mr *MockRepositoryMockRecorder) Rename(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockRepository)(nil).Rename), arg0, arg1, arg2, arg3)
+}
+
+// UpdateComment mocks base method.
+func (m *MockRepository) UpdateComment(ctx context.Context, notebookID int64, cellID string, visitorID, commentID int64, text string) (CommentRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateComment", ctx, notebookID, cellID, visitorID, commentID, text)
+	ret0, _ := ret[0].(CommentRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateComment indicates an expected call of UpdateComment.
+func (mr *MockRepositoryMockRecorder) UpdateComment(ctx, notebookID, cellID, visitorID, commentID, text any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComment", reflect.TypeOf((*MockRepository)(nil).UpdateComment), ctx, notebookID, cellID, visitorID, commentID, text)
 }
 
 // MockActiveSessions is a mock of ActiveSessions interface.

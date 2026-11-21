@@ -131,6 +131,21 @@ func (mr *MockUsecaseMockRecorder) CreateCell(ctx, id, ownerID, hash, kind, inde
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCell", reflect.TypeOf((*MockUsecase)(nil).CreateCell), ctx, id, ownerID, hash, kind, index)
 }
 
+// CreateComment mocks base method.
+func (m *MockUsecase) CreateComment(ctx context.Context, notebookID int64, cellID string, visitorID int64, text string) (domain.Comment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateComment", ctx, notebookID, cellID, visitorID, text)
+	ret0, _ := ret[0].(domain.Comment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateComment indicates an expected call of CreateComment.
+func (mr *MockUsecaseMockRecorder) CreateComment(ctx, notebookID, cellID, visitorID, text any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateComment", reflect.TypeOf((*MockUsecase)(nil).CreateComment), ctx, notebookID, cellID, visitorID, text)
+}
+
 // DeleteCell mocks base method.
 func (m *MockUsecase) DeleteCell(ctx context.Context, id, ownerID int64, hash string, index int) error {
 	m.ctrl.T.Helper()
@@ -143,6 +158,20 @@ func (m *MockUsecase) DeleteCell(ctx context.Context, id, ownerID int64, hash st
 func (mr *MockUsecaseMockRecorder) DeleteCell(ctx, id, ownerID, hash, index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCell", reflect.TypeOf((*MockUsecase)(nil).DeleteCell), ctx, id, ownerID, hash, index)
+}
+
+// DeleteComment mocks base method.
+func (m *MockUsecase) DeleteComment(ctx context.Context, notebookID int64, cellID string, visitorID, commentID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteComment", ctx, notebookID, cellID, visitorID, commentID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteComment indicates an expected call of DeleteComment.
+func (mr *MockUsecaseMockRecorder) DeleteComment(ctx, notebookID, cellID, visitorID, commentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteComment", reflect.TypeOf((*MockUsecase)(nil).DeleteComment), ctx, notebookID, cellID, visitorID, commentID)
 }
 
 // DeleteNotebook mocks base method.
@@ -235,6 +264,21 @@ func (mr *MockUsecaseMockRecorder) List(ctx, ownerID, input any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockUsecase)(nil).List), ctx, ownerID, input)
 }
 
+// ListComments mocks base method.
+func (m *MockUsecase) ListComments(ctx context.Context, notebookID int64, cellID string, visitorID int64, input usecase.CommentListInput) (usecase.CommentPage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListComments", ctx, notebookID, cellID, visitorID, input)
+	ret0, _ := ret[0].(usecase.CommentPage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListComments indicates an expected call of ListComments.
+func (mr *MockUsecaseMockRecorder) ListComments(ctx, notebookID, cellID, visitorID, input any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListComments", reflect.TypeOf((*MockUsecase)(nil).ListComments), ctx, notebookID, cellID, visitorID, input)
+}
+
 // MoveCell mocks base method.
 func (m *MockUsecase) MoveCell(ctx context.Context, id, ownerID int64, hash, cellID string, index int) (string, error) {
 	m.ctrl.T.Helper()
@@ -293,4 +337,19 @@ func (m *MockUsecase) Rename(ctx context.Context, id, ownerID int64, name string
 func (mr *MockUsecaseMockRecorder) Rename(ctx, id, ownerID, name any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockUsecase)(nil).Rename), ctx, id, ownerID, name)
+}
+
+// UpdateComment mocks base method.
+func (m *MockUsecase) UpdateComment(ctx context.Context, notebookID int64, cellID string, visitorID, commentID int64, text string) (domain.Comment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateComment", ctx, notebookID, cellID, visitorID, commentID, text)
+	ret0, _ := ret[0].(domain.Comment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateComment indicates an expected call of UpdateComment.
+func (mr *MockUsecaseMockRecorder) UpdateComment(ctx, notebookID, cellID, visitorID, commentID, text any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComment", reflect.TypeOf((*MockUsecase)(nil).UpdateComment), ctx, notebookID, cellID, visitorID, commentID, text)
 }

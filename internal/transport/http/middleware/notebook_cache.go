@@ -10,6 +10,9 @@ import (
 func NotebookCachePolicy(prefix string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if commentRoute(r, prefix) {
+				w.Header().Set("Cache-Control", "no-store")
+			}
 			if strings.HasPrefix(r.URL.Path, prefix+"/notebooks/") {
 				parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix+"/notebooks/"), "/")
 				read := r.Method == http.MethodGet && (len(parts) == 1 || (len(parts) == 2 && (parts[1] == "content" || parts[1] == "sharing")))

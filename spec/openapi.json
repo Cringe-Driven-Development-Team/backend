@@ -5916,6 +5916,998 @@
           }
         ]
       }
+    },
+    "/notebooks/{id}/content/cells/{cell_id}/comments": {
+      "get": {
+        "operationId": "listCellComments",
+        "summary": "Страница комментариев ячейки",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Плоская стена, порядок created_at DESC, id DESC. Keyset-пагинация по более старым сообщениям, редактирование не меняет место. Для неизменной стены обход без дублей; новые сообщения получают повтором первой страницы. Аноним может читать public без Bearer, но переданный неверный Bearer всегда даёт 401.",
+        "tags": [
+          "notebooks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID блокнота.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "cell_id",
+            "in": "path",
+            "required": true,
+            "description": "Стабильный ID ячейки.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            },
+            "example": "cell-1"
+          },
+          {
+            "name": "X-BFF-Key",
+            "in": "header",
+            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
+            "required": true,
+            "example": "<bff-key>",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Число сообщений: по умолчанию 20, от 1 до 100. Пустое значение запрещено.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 20
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Непрозрачный подписанный курсор этой стены. Пустой или повреждённый курсор запрещён; удаление границы его не ломает.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "example": "opaque-signed-cursor"
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Невалидное тело, ID, limit или cursor.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "Невалидное тело, ID, limit или cursor."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "unauthorized",
+                  "message": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Внутренняя ошибка без раскрытия данных.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "internal",
+                  "message": "Внутренняя ошибка без раскрытия данных."
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Страница стены, в том числе пустая.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": 1,
+                      "notebook_id": 1,
+                      "cell_id": "cell-1",
+                      "author": {
+                        "id": 2,
+                        "login": "reader"
+                      },
+                      "text": "Комментарий\nк ячейке",
+                      "created_at": "2026-11-22T12:00:00.123456Z",
+                      "updated_at": "2026-11-22T12:00:00.123456Z",
+                      "can_edit": true,
+                      "can_delete": true
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createCellComment",
+        "summary": "Создать комментарий ячейки",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Владелец, адресный читатель и любой авторизованный посетитель public могут писать. Сервер задаёт автора, привязку и даты; updated_at=created_at.",
+        "tags": [
+          "notebooks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID блокнота.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "cell_id",
+            "in": "path",
+            "required": true,
+            "description": "Стабильный ID ячейки.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            },
+            "example": "cell-1"
+          },
+          {
+            "name": "X-BFF-Key",
+            "in": "header",
+            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
+            "required": true,
+            "example": "<bff-key>",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Невалидное тело, ID, limit или cursor.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "Невалидное тело, ID, limit или cursor."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "unauthorized",
+                  "message": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Внутренняя ошибка без раскрытия данных.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "internal",
+                  "message": "Внутренняя ошибка без раскрытия данных."
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Тело превышает общий предел 512 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "request body too large"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Актуальный комментарий.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                },
+                "example": {
+                  "id": 1,
+                  "notebook_id": 1,
+                  "cell_id": "cell-1",
+                  "author": {
+                    "id": 2,
+                    "login": "reader"
+                  },
+                  "text": "Комментарий\nк ячейке",
+                  "created_at": "2026-11-22T12:00:00.123456Z",
+                  "updated_at": "2026-11-22T12:00:00.123456Z",
+                  "can_edit": true,
+                  "can_delete": true
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentTextInput"
+              },
+              "example": {
+                "text": "Комментарий\nк ячейке"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notebooks/{id}/content/cells/{cell_id}/comments/{comment_id}": {
+      "patch": {
+        "operationId": "updateCellComment",
+        "summary": "Изменить собственный комментарий",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Только автор с текущим доступом, даже владелец не меняет чужой текст. Атомарная запись; каждый успешный PATCH увеличивает updated_at минимум на микросекунду, включая прежний текст. created_at и привязка неизменны.",
+        "tags": [
+          "notebooks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID блокнота.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "cell_id",
+            "in": "path",
+            "required": true,
+            "description": "Стабильный ID ячейки.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            },
+            "example": "cell-1"
+          },
+          {
+            "name": "X-BFF-Key",
+            "in": "header",
+            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
+            "required": true,
+            "example": "<bff-key>",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "description": "ID комментария в выбранной стене.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Невалидное тело, ID, limit или cursor.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "Невалидное тело, ID, limit или cursor."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "unauthorized",
+                  "message": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Внутренняя ошибка без раскрытия данных.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "internal",
+                  "message": "Внутренняя ошибка без раскрытия данных."
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Тело превышает общий предел 512 KiB.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "request body too large"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Актуальный комментарий.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                },
+                "example": {
+                  "id": 1,
+                  "notebook_id": 1,
+                  "cell_id": "cell-1",
+                  "author": {
+                    "id": 2,
+                    "login": "reader"
+                  },
+                  "text": "Комментарий\nк ячейке",
+                  "created_at": "2026-11-22T12:00:00.123456Z",
+                  "updated_at": "2026-11-22T12:00:00.123456Z",
+                  "can_edit": true,
+                  "can_delete": true
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentTextInput"
+              },
+              "example": {
+                "text": "Комментарий\nк ячейке"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCellComment",
+        "summary": "Удалить комментарий автора или владельцем блокнота",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Автор с текущим доступом или владелец блокнота. Физическое удаление; повтор возвращает 404.",
+        "tags": [
+          "notebooks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID блокнота.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "cell_id",
+            "in": "path",
+            "required": true,
+            "description": "Стабильный ID ячейки.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            },
+            "example": "cell-1"
+          },
+          {
+            "name": "X-BFF-Key",
+            "in": "header",
+            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
+            "required": true,
+            "example": "<bff-key>",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "description": "ID комментария в выбранной стене.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Невалидное тело, ID, limit или cursor.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "Невалидное тело, ID, limit или cursor."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "unauthorized",
+                  "message": "Нет действующей сессии или переданный Bearer неверен, истёк либо отозван."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "not_found",
+                  "message": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Внутренняя ошибка без раскрытия данных.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentError"
+                },
+                "example": {
+                  "code": "internal",
+                  "message": "Внутренняя ошибка без раскрытия данных."
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Комментарий удалён; тело отсутствует.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Запрет кэширования данных и разрешений, включая ошибки.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                },
+                "example": "no-store"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
     }
   },
   "webhooks": {},
@@ -7405,6 +8397,143 @@
             "example": true
           }
         }
+      },
+      "CommentAuthor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "login": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "login"
+        ],
+        "additionalProperties": false
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "notebook_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "cell_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "author": {
+            "$ref": "#/components/schemas/CommentAuthor"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, точность до микросекунд. При создании равна updated_at."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC. Каждый PATCH строго увеличивает дату минимум на микросекунду, даже с прежним текстом."
+          },
+          "can_edit": {
+            "type": "boolean"
+          },
+          "can_delete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "notebook_id",
+          "cell_id",
+          "author",
+          "text",
+          "created_at",
+          "updated_at",
+          "can_edit",
+          "can_delete"
+        ],
+        "additionalProperties": false
+      },
+      "CommentPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор более старых сообщений; null означает конец."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "CommentTextInput": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000,
+            "description": "Обычный Unicode-текст: после trim 1–5000 code points. NUL и некорректный UTF-8 запрещены. Внутренние пробелы и переносы сохраняются; HTML выводится с экранированием."
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "CommentError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "validation_error",
+              "unauthorized",
+              "s2s_forbidden",
+              "not_found",
+              "forbidden",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
       }
     },
     "responses": {
