@@ -86,7 +86,13 @@ func TestUserUsecaseLogin(t *testing.T) {
 					expectSession(ctx, f, verified)
 				}
 			}
-			u, _, err := f.uc.Login(ctx, tc.login, "password123")
+			if errors.Is(tc.storeErr, ErrUserNotFound) {
+				f.passwords.EXPECT().CompareDummy("password123").Return(nil).After(lookup)
+			}
+			u, session, err := f.uc.Login(ctx, tc.login, "password123")
+			if tc.want != nil && session != (Session{}) {
+				t.Fatal("выдана сессия при отказе во входе")
+			}
 			if !errors.Is(err, tc.want) || (tc.want == nil && u != want) {
 				t.Fatalf("user=%v error=%v", u, err)
 			}

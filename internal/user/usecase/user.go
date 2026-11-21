@@ -83,6 +83,9 @@ func (uc *UserUsecase) Login(ctx context.Context, login, password string, userCo
 		if limitErr := uc.allow(ctx, unknownLoginKey(login), 10); limitErr != nil {
 			return domain.User{}, Session{}, limitErr
 		}
+		if compareErr := uc.passwords.CompareDummy(password); compareErr != nil {
+			return domain.User{}, Session{}, observability.WithCode(fmt.Errorf("compare password: %w", compareErr), "password_compare_failed")
+		}
 		return domain.User{}, Session{}, ErrInvalidCredentials
 	}
 	if err != nil {
