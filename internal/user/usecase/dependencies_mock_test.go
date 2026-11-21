@@ -341,6 +341,20 @@ func (mr *MockPasswordHasherMockRecorder) Compare(hash, password any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Compare", reflect.TypeOf((*MockPasswordHasher)(nil).Compare), hash, password)
 }
 
+// CompareDummy mocks base method.
+func (m *MockPasswordHasher) CompareDummy(password string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompareDummy", password)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompareDummy indicates an expected call of CompareDummy.
+func (mr *MockPasswordHasherMockRecorder) CompareDummy(password any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompareDummy", reflect.TypeOf((*MockPasswordHasher)(nil).CompareDummy), password)
+}
+
 // Hash mocks base method.
 func (m *MockPasswordHasher) Hash(password string) (string, error) {
 	m.ctrl.T.Helper()

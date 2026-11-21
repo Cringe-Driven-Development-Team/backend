@@ -131,6 +131,10 @@ func (flowPasswords) Hash(p string) (string, error) {
 	h, e := bcrypt.GenerateFromPassword([]byte(p), bcrypt.MinCost)
 	return string(h), e
 }
+
+// CompareDummy имитирует успешное выполнение фиктивной проверки.
+func (flowPasswords) CompareDummy(string) error { return nil }
+
 func (flowPasswords) Compare(h, p string) (bool, error) {
 	return bcrypt.CompareHashAndPassword([]byte(h), []byte(p)) == nil, nil
 }

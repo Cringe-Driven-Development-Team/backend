@@ -27,3 +27,12 @@ func (PasswordHasher) Compare(hash, password string) (bool, error) {
 	}
 	return true, nil
 }
+
+// dummyPasswordHash подготовлен заранее с bcrypt.DefaultCost.
+const dummyPasswordHash = "$2b$10$qYgGgENE.BMkjYHSrPdJgOlnlTguEdemdfKCzVfkTrbcgNQ4szYVO"
+
+// CompareDummy проверяет пароль по фиктивному хешу и возвращает только ошибку проверки.
+func (h PasswordHasher) CompareDummy(password string) error {
+	_, err := h.Compare(dummyPasswordHash, password)
+	return err
+}

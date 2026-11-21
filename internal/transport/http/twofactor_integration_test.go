@@ -119,6 +119,13 @@ func TestTwoFactorHTTPPostgresRedis(t *testing.T) {
 		}
 		return w
 	}
+	unknown := expect("/auth/login", map[string]string{"login": "nobody", "password": "wrongpassword"}, false, http.StatusBadRequest)
+	wrong := expect("/auth/login", map[string]string{"login": "alice", "password": "wrongpassword"}, false, http.StatusBadRequest)
+	if unknown.Body.String() != wrong.Body.String() ||
+		len(unknown.Result().Cookies()) != 0 || len(wrong.Result().Cookies()) != 0 ||
+		strings.Contains(unknown.Body.String(), "access_token") || strings.Contains(unknown.Body.String(), "refresh_token") {
+		t.Fatal("отказы во входе должны совпадать и не выдавать сессию")
+	}
 	for _, path := range []string{"/auth/enable2fa", "/auth/confirm2fa", "/auth/disable2fa"} {
 		expect(path, nil, false, 401)
 	}

@@ -25,6 +25,8 @@ type PasswordHasher interface {
 	Hash(password string) (string, error)
 	// Compare отличает несовпадение (false, nil) от сбоя проверки.
 	Compare(hash, password string) (matched bool, err error)
+	// CompareDummy выполняет проверку пароля для неизвестного логина и возвращает ошибку при сбое.
+	CompareDummy(password string) error
 }
 
 // RefreshTokens выпускает случайный refresh-токен и его хеш для хранилища.

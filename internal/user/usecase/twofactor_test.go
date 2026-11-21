@@ -36,6 +36,17 @@ func TestTwoFactorLimiterFailsClosed(t *testing.T) {
 	}
 }
 
+// TestUnknownLoginLimiterDeniesDummyCheck проверяет отказ до проверки пароля.
+func TestUnknownLoginLimiterDeniesDummyCheck(t *testing.T) {
+	f := newUserFixture(t)
+	f.uc.limiter = denyAttempts{err: ErrRateLimited}
+	ctx := t.Context()
+	f.users.EXPECT().UserByLogin(ctx, "nobody").Return(domain.User{}, "", ErrUserNotFound)
+	if _, session, err := f.uc.Login(ctx, "nobody", "password123"); !errors.Is(err, ErrRateLimited) || session != (Session{}) {
+		t.Fatalf("session issued=%t, err=%v", session != (Session{}), err)
+	}
+}
+
 func (s *testTwoFactor) NewSecret() (string, error) { s.next++; return string(rune('A' + s.next)), nil }
 func (*testTwoFactor) Setup(secret, _ string) (TwoFactorSetup, error) {
 	return TwoFactorSetup{Secret: secret, QRCode: "qr:" + secret}, nil

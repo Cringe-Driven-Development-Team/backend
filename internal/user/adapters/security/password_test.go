@@ -31,3 +31,14 @@ func TestPasswordHasherCompare(t *testing.T) {
 		})
 	}
 }
+
+// TestDummyPasswordHashCost проверяет стоимость фиктивной bcrypt-проверки.
+func TestDummyPasswordHashCost(t *testing.T) {
+	cost, err := bcrypt.Cost([]byte(dummyPasswordHash))
+	if err != nil || cost != bcrypt.DefaultCost {
+		t.Fatalf("dummy bcrypt cost=%d, err=%v, want cost=%d", cost, err, bcrypt.DefaultCost)
+	}
+	if err := (PasswordHasher{}).CompareDummy("password123"); err != nil {
+		t.Fatal(err)
+	}
+}
