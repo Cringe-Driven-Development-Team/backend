@@ -104,7 +104,7 @@ AGENT_BIN := $(AGENT_VENV)/bin
 
 agent-setup:
 	$(AGENT_PYTHON) -m venv $(AGENT_VENV)
-	cd runtime-agent && $(AGENT_BIN)/python -m pip install -r requirements-dev.txt
+	cd runtime-agent && $(AGENT_BIN)/python -m pip install -r requirements-dev.txt -e .
 
 agent-lint:
 	cd runtime-agent && $(AGENT_BIN)/ruff check src tests images

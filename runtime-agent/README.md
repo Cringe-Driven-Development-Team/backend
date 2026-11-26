@@ -163,7 +163,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
       | tar -C /tmp/agent -xf -
     python -m venv --system-site-packages /tmp/testenv
     cd /tmp/agent
-    /tmp/testenv/bin/pip install --no-cache-dir -r requirements-dev.txt &&
+    /tmp/testenv/bin/pip install --no-cache-dir -r requirements-dev.txt -e . &&
       RUN_DOCKER_TESTS=1 /tmp/testenv/bin/python -m pytest -q -m docker
   '
 ```
