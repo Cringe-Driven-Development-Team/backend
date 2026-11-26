@@ -37,13 +37,13 @@ func TestPrivateFilesS3(t *testing.T) {
 	}
 
 	suffix := make([]byte, 12)
-	if _, err := rand.Read(suffix); err != nil {
-		t.Fatal(err)
+	if _, randomErr := rand.Read(suffix); randomErr != nil {
+		t.Fatal(randomErr)
 	}
 	key := "smoke/private-files/" + hex.EncodeToString(suffix) + ".txt"
 	want := []byte("Cellestial private S3 storage check\n")
-	if err := files.Put(ctx, key, bytes.NewReader(want)); err != nil {
-		t.Fatalf("write: %v", err)
+	if putErr := files.Put(ctx, key, bytes.NewReader(want)); putErr != nil {
+		t.Fatalf("write: %v", putErr)
 	}
 	t.Logf("uploaded %s", key)
 

@@ -101,6 +101,18 @@ jobs:
         run: go build ./...
       - name: Test
         run: make test
+      - name: Check private files in SeaweedFS
+        env:
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: devkey
+          AWS_SECRET_ACCESS_KEY: devsecret
+          S3_PRIVATE_FILES_BUCKET: cellestial-private-files-local
+          S3_PRIVATE_FILES_SMOKE: '1'
+        run: |
+          docker compose up -d s3 s3-init
+          docker compose wait s3-init
+          AWS_ENDPOINT_URL_S3=http://127.0.0.1:8333 \
+            go test ./internal/storage/s3client -run '^TestPrivateFilesS3$' -count=1 -v
 
   runtime-agent:
     name: runtime-agent
