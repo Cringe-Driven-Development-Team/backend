@@ -11,15 +11,15 @@ import (
 )
 
 const (
-	claimSelectSQL = `SELECT id, session_id, kind, attempt FROM runtime_jobs
+	claimSelectSQL = `SELECT id, session_id, kind, attempt, COALESCE(correlation_id, '') FROM environments.runtime_jobs
 		WHERE status IN ('queued','running') AND next_run_at <= now() AND (lease_until IS NULL OR lease_until < now())
 		ORDER BY next_run_at FOR UPDATE SKIP LOCKED LIMIT 1`
-	claimUpdateSQL = `UPDATE runtime_jobs SET status = 'running', lease_owner = $2,
+	claimUpdateSQL = `UPDATE environments.runtime_jobs SET status = 'running', lease_owner = $2,
 		lease_until = now() + make_interval(secs => $3), attempt = attempt + 1 WHERE id = $1`
-	renewSQL = `UPDATE runtime_jobs SET lease_until = now() + make_interval(secs => $3)
+	renewSQL = `UPDATE environments.runtime_jobs SET lease_until = now() + make_interval(secs => $3)
 		WHERE id = $1 AND lease_owner = $2 AND status = 'running' RETURNING kind`
-	completeSQL = `UPDATE runtime_jobs SET status = 'done' WHERE id = $1 AND lease_owner = $2 AND status = 'running' AND kind = $3`
-	retrySQL    = `UPDATE runtime_jobs SET status = 'queued', next_run_at = $3, lease_owner = NULL, lease_until = NULL
+	completeSQL = `UPDATE environments.runtime_jobs SET status = 'done' WHERE id = $1 AND lease_owner = $2 AND status = 'running' AND kind = $3`
+	retrySQL    = `UPDATE environments.runtime_jobs SET status = 'queued', next_run_at = $3, lease_owner = NULL, lease_until = NULL
 		WHERE id = $1 AND lease_owner = $2 AND status = 'running'`
 )
 
@@ -32,7 +32,7 @@ func (r *Repository) Claim(ctx context.Context, owner string, lease time.Duratio
 	defer func() { _ = tx.Rollback(ctx) }()
 	var j usecase.Job
 	var kind string
-	err = tx.QueryRow(ctx, claimSelectSQL).Scan(&j.ID, &j.SessionID, &kind, &j.Attempt)
+	err = tx.QueryRow(ctx, claimSelectSQL).Scan(&j.ID, &j.SessionID, &kind, &j.Attempt, &j.CorrelationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return usecase.Job{}, false, nil
 	}

@@ -14,7 +14,7 @@ import (
 func TestNotebookListSearch(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'other','hash')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
 	names := []string{"My Notebook", "NOTE", "Заметка", "100%", "under_score", `back\slash`, `a%_\b`, "two  spaces"}
@@ -28,7 +28,7 @@ func TestNotebookListSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Fix the timestamp explicitly: search assertions must not depend on wall-clock movement.
-	if _, err := pool.Exec(ctx, `UPDATE notebooks SET updated_at=$1`, time.Date(2026, 11, 13, 0, 0, 0, 123456000, time.UTC)); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.notebooks SET updated_at=$1`, time.Date(2026, 11, 13, 0, 0, 0, 123456000, time.UTC)); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -65,10 +65,10 @@ func TestNotebookListPagination(t *testing.T) {
 		}
 	}
 	stamp := time.Date(2026, 11, 13, 1, 0, 0, 123456000, time.UTC)
-	if _, err := pool.Exec(ctx, `UPDATE notebooks SET updated_at=$1`, stamp); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.notebooks SET updated_at=$1`, stamp); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE notebooks SET updated_at=$1 WHERE id=1`, stamp.Add(time.Microsecond)); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.notebooks SET updated_at=$1 WHERE id=1`, stamp.Add(time.Microsecond)); err != nil {
 		t.Fatal(err)
 	}
 	for _, limit := range []int{1, 2, 24, 26, 100} {
@@ -106,7 +106,7 @@ func TestNotebookListPagination(t *testing.T) {
 			}
 		})
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM notebooks WHERE id=26`); err != nil {
+	if _, err := pool.Exec(ctx, `DELETE FROM workspace.notebooks WHERE id=26`); err != nil {
 		t.Fatal(err)
 	}
 	got, err := repo.ListPage(ctx, 1, usecase.ListQuery{Limit: 1, After: &usecase.ListPosition{UpdatedAt: stamp, ID: 26}})

@@ -52,15 +52,24 @@ func (t *AccessToken) IssueAccess(c usecase.SessionClaims) (string, time.Time, e
 
 // Parse проверяет подпись, срок жизни и обязательные данные JWT.
 func (t *AccessToken) Parse(token string) (usecase.SessionClaims, error) {
+	session, err := t.ParseAccess(token)
+	return session.SessionClaims, err
+}
+
+// ParseAccess дополнительно возвращает срок токена для межсервисной проверки сессии.
+func (t *AccessToken) ParseAccess(token string) (usecase.ValidatedSession, error) {
 	var c accessClaims
 	_, err := jwt.ParseWithClaims(token, &c, func(*jwt.Token) (any, error) { return t.secret, nil }, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 	if err != nil {
-		return usecase.SessionClaims{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+		return usecase.ValidatedSession{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 	id, idErr := strconv.ParseInt(c.Subject, 10, 64)
 	version, versionErr := strconv.ParseUint(c.Version, 10, 64)
 	if idErr != nil || id <= 0 || strconv.FormatInt(id, 10) != c.Subject || strings.TrimSpace(c.SessionID) == "" || versionErr != nil || version == 0 || strconv.FormatUint(version, 10) != c.Version {
-		return usecase.SessionClaims{}, ErrInvalidToken
+		return usecase.ValidatedSession{}, ErrInvalidToken
 	}
-	return usecase.SessionClaims{UserID: id, SessionID: c.SessionID, Version: usecase.SessionVersion(version)}, nil
+	return usecase.ValidatedSession{
+		SessionClaims: usecase.SessionClaims{UserID: id, SessionID: c.SessionID, Version: usecase.SessionVersion(version)},
+		ExpiresAt:     c.ExpiresAt.Time,
+	}, nil
 }

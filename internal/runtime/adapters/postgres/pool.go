@@ -13,31 +13,31 @@ import (
 
 const (
 	poolLockSQL  = `SELECT pg_advisory_xact_lock(hashtext('runtime_pool'))`
-	poolCountSQL = `SELECT count(*) FROM runtime_pool
+	poolCountSQL = `SELECT count(*) FROM environments.runtime_pool
 		WHERE state IN ('PREPARING','READY') AND image_id = $1 AND agent_version = $2`
-	poolInsertSQL = `INSERT INTO runtime_pool (id, state, image_id, agent_version) VALUES ($1, 'PREPARING', $2, $3)
+	poolInsertSQL = `INSERT INTO environments.runtime_pool (id, state, image_id, agent_version) VALUES ($1, 'PREPARING', $2, $3)
 		RETURNING created_at, updated_at`
-	poolSaveSQL = `UPDATE runtime_pool SET state = $2, server_id = NULLIF($3, ''), volume_id = NULLIF($4, ''),
+	poolSaveSQL = `UPDATE environments.runtime_pool SET state = $2, server_id = NULLIF($3, ''), volume_id = NULLIF($4, ''),
 		port_id = NULLIF($5, ''), private_ip = NULLIF($6, ''), host_private_key_sealed = $7, host_public_key = NULLIF($8, ''),
 		updated_at = now()
 		WHERE id = $1 AND state = 'PREPARING'`
 	poolColumns = `id, state, COALESCE(server_id, ''), COALESCE(volume_id, ''), COALESCE(port_id, ''),
 		COALESCE(private_ip, ''), host_private_key_sealed, COALESCE(host_public_key, ''), image_id, agent_version,
 		COALESCE(session_id, '00000000-0000-0000-0000-000000000000'), COALESCE(last_error, ''), created_at, updated_at`
-	poolListSQL      = `SELECT ` + poolColumns + ` FROM runtime_pool ORDER BY created_at, id`
-	poolPickReadySQL = `SELECT ` + poolColumns + ` FROM runtime_pool
+	poolListSQL      = `SELECT ` + poolColumns + ` FROM environments.runtime_pool ORDER BY created_at, id`
+	poolPickReadySQL = `SELECT ` + poolColumns + ` FROM environments.runtime_pool
 		WHERE state = 'READY' AND image_id = $1 AND agent_version = $2
 		ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`
-	poolClaimSQL   = `UPDATE runtime_pool SET state = 'CLAIMED', session_id = $2, updated_at = now() WHERE id = $1`
-	envFromPoolSQL = `UPDATE runtime_environments e SET state = 'VERIFYING', pool_id = $3, server_id = $4,
+	poolClaimSQL   = `UPDATE environments.runtime_pool SET state = 'CLAIMED', session_id = $2, updated_at = now() WHERE id = $1`
+	envFromPoolSQL = `UPDATE environments.runtime_environments e SET state = 'VERIFYING', pool_id = $3, server_id = $4,
 		volume_id = $5, port_id = $6, private_ip = $7, host_private_key_sealed = $8, host_public_key = $9,
 		version = e.version + 1, updated_at = now()
 		WHERE e.session_id = $1 AND e.version = $2 AND e.state = 'QUEUED' AND EXISTS (
-			SELECT 1 FROM runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $10)
+			SELECT 1 FROM environments.runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $10)
 		RETURNING e.version, e.updated_at`
-	poolDeletingSQL = `UPDATE runtime_pool SET state = 'DELETING', last_error = $4, updated_at = now()
+	poolDeletingSQL = `UPDATE environments.runtime_pool SET state = 'DELETING', last_error = $4, updated_at = now()
 		WHERE id = $1 AND state = $2 AND (state <> 'CLAIMED' OR session_id = $3)`
-	poolDeleteSQL = `DELETE FROM runtime_pool WHERE id = $1 AND state = 'DELETING'`
+	poolDeleteSQL = `DELETE FROM environments.runtime_pool WHERE id = $1 AND state = 'DELETING'`
 )
 
 // scanPool декодирует запись подготовленного окружения пула.

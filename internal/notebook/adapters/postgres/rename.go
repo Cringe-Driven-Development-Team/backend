@@ -13,12 +13,16 @@ func (r *NotebookRepository) Rename(ctx context.Context, id, ownerID int64, name
 		return domain.Notebook{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActor(ctx, tx, ownerID); err != nil {
+		return domain.Notebook{}, err
+	}
+
 	n, err := scanNotebook(tx.QueryRow(ctx, selectNotebook+` FOR UPDATE`, id, ownerID))
 	if err != nil {
 		return domain.Notebook{}, err
 	}
 	if n.Name != name {
-		err = tx.QueryRow(ctx, `UPDATE notebooks SET name=$3,updated_at=clock_timestamp() WHERE id=$1 AND owner_id=$2 RETURNING updated_at`, id, ownerID, name).Scan(&n.UpdatedAt)
+		err = tx.QueryRow(ctx, `UPDATE workspace.notebooks SET name=$3,updated_at=clock_timestamp() WHERE id=$1 AND owner_id=$2 RETURNING updated_at`, id, ownerID, name).Scan(&n.UpdatedAt)
 		if err != nil {
 			return domain.Notebook{}, err
 		}

@@ -50,7 +50,7 @@ func (r *jobRun) deleteStep(env domain.Environment) (bool, error) {
 	if _, err := r.save(env, final); err != nil {
 		return false, err
 	}
-	r.w.log.Info("environment cleaned up", "session_id", env.SessionID, "state", final)
+	r.w.log.InfoContext(r.leaseCtx, "environment cleaned up", "session_id", env.SessionID, "state", final)
 	return r.finish()
 }
 
@@ -63,7 +63,7 @@ func (r *jobRun) drain(env domain.Environment) {
 	ctx, cancel := context.WithTimeout(r.leaseCtx, r.w.s.DrainTimeout)
 	defer cancel()
 	s, err := r.w.repo.LoadSecrets(ctx, r.job.SessionID)
-	if err != nil || len(s.Token) == 0 {
+	if err != nil || (r.w.s.AgentGRPC == nil && len(s.Token) == 0) {
 		return
 	}
 	ep, err := r.agentEndpoint(env, s)
@@ -71,11 +71,11 @@ func (r *jobRun) drain(env domain.Environment) {
 		return
 	}
 	if err := r.w.agent.Drain(ctx, ep); err != nil {
-		r.w.log.Info("agent drain skipped", "session_id", env.SessionID, "error", err)
+		r.w.log.InfoContext(r.leaseCtx, "agent drain skipped", "session_id", env.SessionID, "error_code", runtimeErrorCode(err))
 		return
 	}
 	if err := r.w.agent.Stop(ctx, ep); err != nil {
-		r.w.log.Info("agent stop failed", "session_id", env.SessionID, "error", err)
+		r.w.log.InfoContext(r.leaseCtx, "agent stop failed", "session_id", env.SessionID, "error_code", runtimeErrorCode(err))
 	}
 }
 
@@ -146,7 +146,7 @@ func (r *jobRun) deleteFailed(cause error) (bool, error) {
 		return true, fmt.Errorf("get environment: %w", err)
 	}
 	env.CleanupResult = "cleanup failed: " + cause.Error()
-	r.w.log.Error("cleanup failed", "session_id", env.SessionID, "error", cause)
+	r.w.log.ErrorContext(r.leaseCtx, "cleanup failed", "session_id", env.SessionID, "error_code", runtimeErrorCode(cause))
 	if _, err := r.save(env, domain.StateCleanupPending); err != nil {
 		if errors.Is(err, ErrStale) {
 			return false, nil

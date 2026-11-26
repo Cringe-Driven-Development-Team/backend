@@ -1,0 +1,24 @@
+{
+  "protoc": "libprotoc 31.1",
+  "go_generators": [
+    {
+      "Path": "google.golang.org/protobuf",
+      "Version": "v1.36.12",
+      "Sum": "h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=",
+      "GoModSum": "h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco="
+    },
+    {
+      "Path": "google.golang.org/grpc/cmd/protoc-gen-go-grpc",
+      "Version": "v1.6.1",
+      "Sum": "h1:/WILD1UcXj/ujCxgoL/DvRgt2CP3txG8+FwkUbb9110=",
+      "GoModSum": "h1:YNKnb2OAApgYn2oYY47Rn7alMr1zWjb2U8Q0aoGWiNc="
+    }
+  ],
+  "python": {
+    "grpcio-tools": "1.78.0",
+    "grpcio": "1.78.0",
+    "protobuf": "6.33.6"
+  },
+  "python_lock_sha256": "69f75d420dc2651505c46e2125d17aca9659b9749c53e58ddec800565200af64",
+  "lock_generator": "uv 0.13.5"
+}

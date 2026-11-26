@@ -40,8 +40,8 @@ func (r *commentRepo) DeleteComment(context.Context, int64, string, int64, int64
 
 func TestCommentUsecaseList(t *testing.T) {
 	stamp := time.Date(2026, 11, 22, 12, 0, 0, 123456000, time.UTC)
-	repo := &commentRepo{rows: usecase.CommentRows{OwnerID: 1, Items: []domain.Comment{{ID: 3, CreatedAt: stamp, Author: domain.CommentAuthor{ID: 2}}, {ID: 2, CreatedAt: stamp, Author: domain.CommentAuthor{ID: 3}}, {ID: 1, CreatedAt: stamp}}}}
-	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithCommentCursor(cursor.NewCommentCodec([]byte("key"))))
+	repo := &commentRepo{rows: usecase.CommentRows{OwnerID: 1, Items: []domain.Comment{{ID: 3, CreatedAt: stamp, Author: domain.CommentAuthor{ID: 2}}, {ID: 2, CreatedAt: stamp, Author: domain.CommentAuthor{ID: 3}}, {ID: 1, CreatedAt: stamp, Author: domain.CommentAuthor{ID: 4}}}}}
+	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(&directoryFake{}), usecase.WithCommentCursor(cursor.NewCommentCodec([]byte("key"))))
 	page, err := uc.ListComments(t.Context(), 7, "cell", 2, usecase.CommentListInput{Limit: ptr(2)})
 	if err != nil || len(page.Items) != 2 || page.NextCursor == nil || !page.Items[0].CanEdit || page.Items[1].CanDelete {
 		t.Fatalf("page %+v %v", page, err)
@@ -72,7 +72,7 @@ func TestCommentUsecaseList(t *testing.T) {
 
 func TestCommentUsecaseWrites(t *testing.T) {
 	repo := &commentRepo{}
-	uc := usecase.NewNotebookUsecase(repo, nil, nil)
+	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(&directoryFake{}))
 	c, err := uc.CreateComment(t.Context(), 1, "cell", 2, "  hello\n world  ")
 	if err != nil || repo.text != "hello\n world" || !c.CanEdit || !c.CanDelete {
 		t.Fatal(c, err)
@@ -101,7 +101,7 @@ func TestCommentUsecasePermissions(t *testing.T) {
 		edit, delete bool
 	}{{1, false, true}, {2, true, true}, {3, false, false}, {0, false, false}} {
 		repo := &commentRepo{rows: usecase.CommentRows{OwnerID: 1, Items: []domain.Comment{{ID: 1, Author: domain.CommentAuthor{ID: 2}}}}}
-		uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithCommentCursor(cursor.NewCommentCodec([]byte("key"))))
+		uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(&directoryFake{}), usecase.WithCommentCursor(cursor.NewCommentCodec([]byte("key"))))
 		page, err := uc.ListComments(t.Context(), 1, "cell", tc.visitor, usecase.CommentListInput{Limit: ptr(1)})
 		if err != nil || len(page.Items) != 1 || page.NextCursor != nil || page.Items[0].CanEdit != tc.edit || page.Items[0].CanDelete != tc.delete {
 			t.Fatalf("visitor %d: %+v %v", tc.visitor, page, err)

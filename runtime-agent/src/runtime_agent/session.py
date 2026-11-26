@@ -12,7 +12,7 @@ from . import inspection
 from .journal import encode
 from .jupyter import Jupyter
 from .models import AgentError
-from .observability import session_task
+from .observability import request_id, session_task
 
 log = logging.getLogger(__name__)
 
@@ -213,6 +213,9 @@ class Session:
         while True:
             command = await self.queue.get()
             self.pending = command
+            correlation_token = request_id.set(
+                self.journal.execution_request_id(self.id, command["execution_id"])
+            )
             execution_id = command["execution_id"]
             failure = None
             try:
@@ -291,6 +294,7 @@ class Session:
                 self.queue.task_done()
                 self.touch()
                 self.agent.notify()
+                request_id.reset(correlation_token)
             if failure:
                 await self.finish("FAILED", failure)
                 return

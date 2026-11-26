@@ -27,10 +27,10 @@ func (r *jobRun) claimPool(env domain.Environment) (bool, error) {
 		return false, fmt.Errorf("claim pool vps: %w", err)
 	}
 	if !ok {
-		r.w.log.Info("pool is empty, creating a new vps", "session_id", env.SessionID)
+		r.w.log.InfoContext(r.leaseCtx, "pool is empty, creating a new vps", "session_id", env.SessionID)
 		return false, nil
 	}
-	r.w.log.Info("pool vps claimed", "session_id", env.SessionID, "pool_id", got.PoolID)
+	r.w.log.InfoContext(r.leaseCtx, "pool vps claimed", "session_id", env.SessionID, "pool_id", got.PoolID)
 	r.w.kickPool()
 	return true, nil
 }
@@ -39,7 +39,7 @@ func (r *jobRun) claimPool(env domain.Environment) (bool, error) {
 // возвращается в CREATING и создаёт новую VPS в пределах прежнего StartupTimeout.
 func (r *jobRun) leavePool(env domain.Environment, cause error) error {
 	vps := domain.PoolVPS{ID: env.PoolID, Resources: env.Resources}
-	r.w.log.Warn("pool vps rejected, creating a new vps", "session_id", env.SessionID, "pool_id", vps.ID, "error", cause)
+	r.w.log.WarnContext(r.leaseCtx, "pool vps rejected, creating a new vps", "session_id", env.SessionID, "pool_id", vps.ID, "error_code", runtimeErrorCode(cause))
 	marked, err := r.w.pool.MarkPoolDeleting(r.leaseCtx, vps.ID, domain.PoolClaimed, env.SessionID, "assign failed: "+cause.Error())
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (w *Worker) replenish(ctx context.Context, wg *sync.WaitGroup) {
 	added, err := w.pool.ReservePool(ctx, w.s.PoolSize, w.s.ImageID, w.s.AgentVersion)
 	if err != nil {
 		if ctx.Err() == nil {
-			w.log.Error("reserve pool vps", "error", err)
+			w.log.Error("reserve pool vps", "error_code", runtimeErrorCode(err))
 		}
 		return
 	}
@@ -122,7 +122,7 @@ func (w *Worker) preparePool(ctx context.Context, vps domain.PoolVPS) {
 	if err == nil {
 		vps.State = domain.PoolReady
 		if err = w.pool.SavePreparing(ctx, vps); err == nil {
-			w.log.Info("pool vps ready", "pool_id", vps.ID, "private_ip", vps.Resources.PrivateIP)
+			w.log.Info("pool vps ready", "pool_id", vps.ID)
 			w.poolMu.Lock()
 			w.poolFailures, w.poolRetryAt = 0, time.Time{}
 			w.poolMu.Unlock()
@@ -135,7 +135,7 @@ func (w *Worker) preparePool(ctx context.Context, vps domain.PoolVPS) {
 	defer mcancel()
 	marked, merr := w.pool.MarkPoolDeleting(mctx, vps.ID, domain.PoolPreparing, uuid.Nil, "preparation failed: "+err.Error())
 	if merr != nil {
-		w.log.Error("mark pool vps deleting", "pool_id", vps.ID, "error", merr)
+		w.log.Error("mark pool vps deleting", "pool_id", vps.ID, "error_code", runtimeErrorCode(merr))
 	}
 	if ctx.Err() != nil || !marked {
 		return
@@ -145,7 +145,7 @@ func (w *Worker) preparePool(ctx context.Context, vps domain.PoolVPS) {
 	delay := backoff(w.poolFailures)
 	w.poolRetryAt = w.clock.Now().Add(delay)
 	w.poolMu.Unlock()
-	w.log.Warn("pool vps preparation failed", "pool_id", vps.ID, "error", err, "retry_in", delay)
+	w.log.Warn("pool vps preparation failed", "pool_id", vps.ID, "error_code", runtimeErrorCode(err), "retry_in", delay)
 	dctx, dcancel := context.WithTimeout(ctx, w.s.DeleteTimeout)
 	defer dcancel()
 	w.deletePoolVPS(dctx, vps, "preparation failed")
@@ -200,12 +200,15 @@ func (w *Worker) preparePoolSteps(ctx context.Context, vps *domain.PoolVPS) erro
 	if err = w.prepareHost(ctx, vps.ID, vps.Resources.PrivateIP, pub); err != nil {
 		return err
 	}
-	return w.waitWaiting(ctx, vps.Resources.PrivateIP)
+	return w.waitWaiting(ctx, vps.ID, vps.Resources.PrivateIP)
 }
 
 // waitWaiting опрашивает /health агента без токена, пока он не ответит WAITING с готовым kernel.
-func (w *Worker) waitWaiting(ctx context.Context, ip string) error {
+func (w *Worker) waitWaiting(ctx context.Context, hostID uuid.UUID, ip string) error {
 	ep := AgentEndpoint{BaseURL: agentURL(ip)}
+	if w.s.AgentGRPC != nil {
+		ep = AgentEndpoint{Target: AgentTarget{HostID: hostID, PrivateIP: ip}}
+	}
 	for {
 		hctx, cancel := context.WithTimeout(ctx, w.healthTimeout)
 		h, status, err := w.agent.Health(hctx, ep)
@@ -223,11 +226,11 @@ func (w *Worker) waitWaiting(ctx context.Context, ip string) error {
 // Ошибка остаётся в логе: строка в DELETING, reconcile повторит.
 func (w *Worker) deletePoolVPS(ctx context.Context, vps domain.PoolVPS, reason string) {
 	if err := w.deletePoolResources(ctx, vps); err != nil {
-		w.log.Warn("pool vps cleanup failed", "pool_id", vps.ID, "reason", reason, "error", err)
+		w.log.Warn("pool vps cleanup failed", "pool_id", vps.ID, "reason", reason, "error_code", runtimeErrorCode(err))
 		return
 	}
 	if err := w.pool.DeletePool(ctx, vps.ID); err != nil {
-		w.log.Warn("delete pool row", "pool_id", vps.ID, "error", err)
+		w.log.Warn("delete pool row", "pool_id", vps.ID, "error_code", runtimeErrorCode(err))
 		return
 	}
 	w.log.Info("pool vps deleted", "pool_id", vps.ID, "reason", reason)

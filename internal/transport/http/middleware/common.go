@@ -19,26 +19,11 @@ type requestMetaKey struct{}
 // requestMeta хранит шаблон маршрута для сводки запроса.
 type requestMeta struct{ route string }
 
-// validRequestID разрешает ограниченный набор символов для корреляции логов.
-func validRequestID(id string) bool {
-	if len(id) == 0 || len(id) > 64 {
-		return false
-	}
-	for i := 0; i < len(id); i++ {
-		c := id[i]
-		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 // RequestID принимает безопасный X-Request-ID или создаёт новый и передаёт его в next.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := r.Header.Get("X-Request-ID")
-		if !validRequestID(reqID) {
+		if len(r.Header.Values("X-Request-ID")) != 1 || !observability.ValidRequestID(reqID) {
 			reqID = uuid.New().String()
 		}
 		w.Header().Set("X-Request-ID", reqID)
@@ -50,6 +35,14 @@ func RequestID(next http.Handler) http.Handler {
 
 // Logging записывает метод, шаблон маршрута, статус и длительность вызова next.
 func Logging(next http.Handler) http.Handler {
+	return Observe(next, nil)
+}
+
+// HTTPObserver получает только метод, известный шаблон маршрута, статус и длительность.
+type HTTPObserver func(method, route string, status int, duration time.Duration)
+
+// Observe добавляет наблюдение за тем же итогом запроса, который попадает в лог.
+func Observe(next http.Handler, observe HTTPObserver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		meta := &requestMeta{route: "unmatched"}
@@ -60,11 +53,15 @@ func Logging(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		duration := time.Since(start)
+		if observe != nil {
+			observe(r.Method, meta.route, status, duration)
+		}
 		slog.InfoContext(ctx, "http.request",
 			slog.String("method", r.Method),
 			slog.String("route", meta.route),
 			slog.Int("status", status),
-			slog.Duration("duration", time.Since(start)),
+			slog.Duration("duration", duration),
 		)
 	})
 }

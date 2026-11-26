@@ -148,6 +148,19 @@ func (s *Secrets) NewHostKey() ([]byte, string, error) {
 
 // IssueServerCert выпускает серверный сертификат на IP, подписанный CA.
 func (s *Secrets) IssueServerCert(ip string) ([]byte, []byte, error) {
+	return s.issueServerCert(ip, nil)
+}
+
+// IssueAgentCertificate подписывает выделенный для конкретной VPS DNS SAN.
+func (s *Secrets) IssueAgentCertificate(ip, dnsName string) ([]byte, []byte, error) {
+	if dnsName == "" {
+		return nil, nil, errors.New("pki: missing agent identity")
+	}
+	return s.issueServerCert(ip, []string{dnsName})
+}
+
+// issueServerCert выпускает транспортную пару с указанными DNS SAN.
+func (s *Secrets) issueServerCert(ip string, dnsNames []string) ([]byte, []byte, error) {
 	addr := net.ParseIP(ip)
 	if addr == nil {
 		return nil, nil, fmt.Errorf("pki: invalid ip %q", ip)
@@ -165,6 +178,7 @@ func (s *Secrets) IssueServerCert(ip string) ([]byte, []byte, error) {
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: ip},
 		IPAddresses:  []net.IP{addr},
+		DNSNames:     dnsNames,
 		NotBefore:    now.Add(-time.Minute),
 		NotAfter:     now.Add(certTTL),
 		KeyUsage:     x509.KeyUsageDigitalSignature,

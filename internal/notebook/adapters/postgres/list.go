@@ -28,7 +28,7 @@ func (r *NotebookRepository) ListPage(ctx context.Context, ownerID int64, q usec
 		args = append(args, "%"+pattern+"%")
 		filter = `name ILIKE $2 ESCAPE E'\\'`
 	}
-	if err = tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE `+filter+`) FROM notebooks WHERE owner_id=$1`, args...).Scan(&result.TotalCount, &result.MatchedCount); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE `+filter+`) FROM workspace.notebooks WHERE owner_id=$1`, args...).Scan(&result.TotalCount, &result.MatchedCount); err != nil {
 		return result, err
 	}
 	// Reserve stable parameter numbers for the optional search and position.
@@ -43,7 +43,7 @@ func (r *NotebookRepository) ListPage(ctx context.Context, ownerID int64, q usec
 		pageArgs = append(pageArgs, q.After.UpdatedAt, q.After.ID)
 	}
 	pageArgs = append(pageArgs, q.Limit+1)
-	query := `SELECT id,name,cells_count,preview_code,updated_at FROM notebooks WHERE ` + where + ` ORDER BY updated_at DESC,id DESC LIMIT $` + strconv.Itoa(len(pageArgs))
+	query := `SELECT id,name,cells_count,preview_code,updated_at FROM workspace.notebooks WHERE ` + where + ` ORDER BY updated_at DESC,id DESC LIMIT $` + strconv.Itoa(len(pageArgs))
 	rows, err := tx.Query(ctx, query, pageArgs...)
 	if err != nil {
 		return result, err

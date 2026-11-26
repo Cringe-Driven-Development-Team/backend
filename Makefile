@@ -1,6 +1,7 @@
 .PHONY: doctor check-fast check up health logs down lint lint-fix test build run docker-build generate contract-tools contract-lint contract-check migrate-new migrate-status migrate-down
 
 BIN_DIR := ./bin
+GO ?= go
 LINT_BIN := $(BIN_DIR)/golangci-lint
 LINT_VER := v2.13.2
 
@@ -133,6 +134,15 @@ agent-network-check:
 generate-mocks:
 	bash scripts/generate-mocks.sh
 
+.PHONY: identity-proto identity-grpc-test
+identity-proto:
+	GO="$(GO)" bash scripts/generate-identity-proto.sh
+
+# Отдельный одноразовый Redis обязателен: транспортная приёмка не допускает skip.
+identity-grpc-test:
+	@test -n "$(REDIS_TEST_ADDR)" || (echo 'set REDIS_TEST_ADDR=host:port for disposable Redis'; exit 1)
+	$(GO) test -race -count=1 ./internal/app/identity ./internal/user/usecase ./internal/user/adapters/security ./internal/user/delivery/grpc
+
 # Выделенный настоящий Redis; явный адрес делает ошибки фатальными, тесты не пропускаются.
 .PHONY: redis-test
 redis-test:
@@ -142,3 +152,66 @@ redis-test:
 .PHONY: release-check
 release-check:
 	python3 -m unittest discover -s scripts/release/tests -v
+
+.PHONY: identity-http identity-http-check identity-proto-check identity-build identity-test
+identity-http:
+	GO="$(GO)" python3 scripts/generate-identity-http.py
+
+identity-http-check: $(REDOCLY)
+	GO="$(GO)" python3 scripts/generate-identity-http.py --check
+	$(REDOCLY) lint spec/identity/openapi.json --config spec/redocly.yaml
+
+.PHONY: workspace-http workspace-http-check contract-generate-services contract-check-services
+workspace-http:
+	GO="$(GO)" python3 scripts/generate-identity-http.py --service workspace
+
+workspace-http-check: $(REDOCLY)
+	GO="$(GO)" python3 scripts/generate-identity-http.py --service workspace --check
+	$(REDOCLY) lint spec/workspace/openapi.json --config spec/redocly.yaml
+
+contract-generate-services: identity-http workspace-http
+
+contract-check-services: identity-http-check workspace-http-check
+	$(GO) test ./internal/contracttests -run TestHTTP -count=1
+
+identity-proto-check:
+	@temporary="$$(mktemp -d)"; trap 'rm -rf "$$temporary"' EXIT; \
+	PROTO_OUTPUT_DIR="$$temporary" GO="$(GO)" bash scripts/generate-identity-proto.sh && \
+	diff -ru gen/cellestial/identity "$$temporary/gen/cellestial/identity"
+
+identity-build:
+	$(GO) build -o bin/identity ./cmd/identity
+	$(GO) build -o bin/identity-migrate ./cmd/identity-migrate
+
+# Оба адреса должны указывать на одноразовые тестовые зависимости.
+identity-test: identity-build
+	@test -n "$(REDIS_TEST_ADDR)" -a -n "$(IDENTITY_TEST_DATABASE_URL)" || (echo 'set disposable REDIS_TEST_ADDR and IDENTITY_TEST_DATABASE_URL'; exit 1)
+	IDENTITY_TEST_BINARY="$(CURDIR)/bin/identity" $(GO) test -race -count=1 ./internal/app/identity ./internal/transport/rpc ./internal/user/... ./migrations/identity
+
+.PHONY: proto-generate proto-check
+proto-generate:
+	GO="$(GO)" bash scripts/generate-proto.sh
+
+proto-check:
+	GO="$(GO)" bash scripts/check-proto.sh
+	$(GO) test ./internal/contracttests -run TestProto -count=1
+
+.PHONY: build-services services-test services-check migration-test
+build-services:
+	@mkdir -p $(BIN_DIR)
+	@for service in identity workspace environments migrate identity-admin; do \
+		$(GO) build -o "$(BIN_DIR)/$$service" "./cmd/$$service" || exit; \
+	done
+
+migration-test:
+	@test -n "$(SERVICE_TEST_DATABASE_URL)" || (echo 'set disposable SERVICE_TEST_DATABASE_URL'; exit 1)
+	$(GO) test -race -count=1 ./internal/migration
+
+services-test: build-services
+	@test -n "$(SERVICE_TEST_DATABASE_URL)" -a -n "$(REDIS_TEST_ADDR)" || \
+		(echo 'set disposable SERVICE_TEST_DATABASE_URL and REDIS_TEST_ADDR'; exit 1)
+	MICROSERVICES_BIN_DIR="$(abspath $(BIN_DIR))" MICROSERVICES_AGENT_PYTHON="$(abspath $(AGENT_BIN))/python" \
+		$(GO) test -race -count=1 ./internal/user/delivery/grpc -run '^TestMicroservicesProcesses$$'
+
+services-check: build-services contract-check-services proto-check
+	$(GO) test -race ./internal/app/identity ./internal/app/workspace ./internal/app/environments ./internal/lifecycle ./internal/transport/... ./internal/runtimesession/... ./internal/runtime/...

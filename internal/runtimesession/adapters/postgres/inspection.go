@@ -24,14 +24,14 @@ func (s *Store) AdmitInspection(ctx context.Context, owner int64, sid uuid.UUID,
 		return out, err
 	}
 	var nb int64
-	err = tx.QueryRow(ctx, "SELECT n.id FROM notebooks n JOIN runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
+	err = tx.QueryRow(ctx, "SELECT n.id FROM workspace.notebooks n JOIN workspace.runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, D.ErrNotFound
 	}
 	if err != nil {
 		return out, err
 	}
-	prior, err := readExecution(tx.QueryRow(ctx, "SELECT data FROM runtime_executions WHERE session_id=$1 AND id=$2", sid, id))
+	prior, err := readExecution(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_executions WHERE session_id=$1 AND id=$2", sid, id))
 	if err == nil {
 		if prior.Kind != "inspect" {
 			return out, D.ErrConflict
@@ -41,7 +41,7 @@ func (s *Store) AdmitInspection(ctx context.Context, owner int64, sid uuid.UUID,
 	if !errors.Is(err, D.ErrNotFound) {
 		return out, err
 	}
-	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM runtime_sessions WHERE id=$1 FOR UPDATE", sid))
+	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_sessions WHERE id=$1 FOR UPDATE", sid))
 	if err != nil {
 		return out, err
 	}
@@ -49,7 +49,7 @@ func (s *Store) AdmitInspection(ctx context.Context, owner int64, sid uuid.UUID,
 		return out, D.ErrConflict
 	}
 	var count int
-	err = tx.QueryRow(ctx, `SELECT count(*) FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
 	if err != nil {
 		return out, err
 	}
@@ -57,16 +57,16 @@ func (s *Store) AdmitInspection(ctx context.Context, owner int64, sid uuid.UUID,
 		return out, D.ErrQueueFull
 	}
 	var attempt int64
-	err = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM runtime_executions WHERE notebook_id=$1 AND cell_id=''", nb).Scan(&attempt)
+	err = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM workspace.runtime_executions WHERE notebook_id=$1 AND cell_id=''", nb).Scan(&attempt)
 	if err != nil {
 		return out, err
 	}
-	out = D.Execution{Kind: "inspect", ID: id, SessionID: sid, OwnerID: owner, NotebookID: nb, TimeoutSeconds: 5, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "none"}
+	out = D.Execution{CorrelationID: newExecutionCorrelation(ctx), Kind: "inspect", ID: id, SessionID: sid, OwnerID: owner, NotebookID: nb, TimeoutSeconds: 5, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "none"}
 	raw, err := encodeExecution(out)
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,'',$4,$5)", sid, id, nb, attempt, raw)
+	_, err = tx.Exec(ctx, "INSERT INTO workspace.runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,'',$4,$5)", sid, id, nb, attempt, raw)
 	if err != nil {
 		return out, translate(err)
 	}
@@ -76,7 +76,7 @@ func (s *Store) AdmitInspection(ctx context.Context, owner int64, sid uuid.UUID,
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
+	_, err = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
 	if err != nil {
 		return out, err
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
@@ -27,7 +28,14 @@ func workerMocks(t *testing.T) (*MockStore, *MockEnvironments, *MockSessionAgent
 func TestCreateReplyLostReusesSessionID(t *testing.T) {
 	s, e, a, l := workerMocks(t)
 	ctx := context.Background()
-	e.EXPECT().Get(gomock.Any(), l.Session.ID).Return(D.Environment{}, D.ErrNotFound)
+	l.Session.CorrelationID = "start-http"
+	l.Session.RequestID = "start-idempotency"
+	e.EXPECT().Get(gomock.Any(), l.Session.ID).DoAndReturn(func(ctx context.Context, _ uuid.UUID) (D.Environment, error) {
+		if observability.RequestID(ctx) != l.Session.CorrelationID {
+			t.Fatalf("worker correlation = %q", observability.RequestID(ctx))
+		}
+		return D.Environment{}, D.ErrNotFound
+	})
 	s.EXPECT().Checkpoint(gomock.Any(), l, gomock.Any()).DoAndReturn(func(_ context.Context, _ D.Lease, v D.Session) error {
 		if !v.CreateSent || !v.CreateUnknown {
 			t.Fatal("missing durable intent")

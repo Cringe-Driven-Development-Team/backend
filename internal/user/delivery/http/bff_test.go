@@ -2,10 +2,12 @@ package delivery
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
@@ -54,7 +56,9 @@ func TestBFFAuthContract(t *testing.T) {
 			req.Header.Set("Authorization", tc.bearer)
 			req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie-refresh"})
 			rec := httptest.NewRecorder()
+			before := time.Now()
 			handler.ServeHTTP(rec, req)
+			after := time.Now()
 			if rec.Code != tc.status {
 				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.status, rec.Body)
 			}
@@ -73,7 +77,12 @@ func TestBFFAuthContract(t *testing.T) {
 						t.Fatal("missing user")
 					}
 				}
-				if err != nil || pair.AccessToken != sess.AccessToken || pair.RefreshToken != sess.RefreshToken || pair.AccessExpiresIn < 899 || pair.AccessExpiresIn > 900 || pair.RefreshExpiresIn < 3599 || pair.RefreshExpiresIn > 3600 {
+				validTTL := func(ttl int64, expires time.Time) bool {
+					return ttl >= int64(math.Ceil(expires.Sub(after).Seconds())) &&
+						ttl <= int64(math.Ceil(expires.Sub(before).Seconds()))
+				}
+				if err != nil || pair.AccessToken != sess.AccessToken || pair.RefreshToken != sess.RefreshToken ||
+					!validTTL(pair.AccessExpiresIn, sess.AccessExpiresAt) || !validTTL(pair.RefreshExpiresIn, sess.ExpiresAt) {
 					t.Fatalf("invalid token response: %s", rec.Body)
 				}
 			}

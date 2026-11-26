@@ -1,0 +1,18 @@
+syntax = "proto3";
+package cellestial.workspace.v1;
+option go_package = "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/workspace/v1;workspacev1";
+
+// UserCleanup разрешён только Identity; физическое удаление ждёт подтверждённой очистки ресурсов.
+service UserCleanup {
+  rpc BeginUserCleanup(BeginUserCleanupRequest) returns (Cleanup);
+  rpc GetUserCleanup(GetUserCleanupRequest) returns (Cleanup);
+}
+message BeginUserCleanupRequest { int64 user_id = 1; string operation_id = 2; }
+message GetUserCleanupRequest { string operation_id = 1; }
+message Cleanup {
+  string operation_id = 1;
+  int64 user_id = 2;
+  string stage = 3;
+  bool done = 4;
+  string error_code = 5;
+}

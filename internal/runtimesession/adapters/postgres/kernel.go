@@ -5,6 +5,7 @@ import (
 	"time"
 
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/storage/workspaceguard"
 	"github.com/google/uuid"
 )
 
@@ -16,7 +17,10 @@ func (s *Store) Control(ctx context.Context, owner int64, sid uuid.UUID, idle bo
 		return "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM runtime_sessions WHERE id=$1 AND owner_id=$2 FOR UPDATE", sid, owner))
+	if _, guardErr := workspaceguard.Actor(ctx, tx, owner); guardErr != nil {
+		return "", guardErr
+	}
+	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_sessions WHERE id=$1 AND owner_id=$2 FOR UPDATE", sid, owner))
 	if err != nil {
 		return "", err
 	}
@@ -25,7 +29,7 @@ func (s *Store) Control(ctx context.Context, owner int64, sid uuid.UUID, idle bo
 	}
 	if idle {
 		var count int
-		err = tx.QueryRow(ctx, `SELECT count(*) FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
+		err = tx.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
 		if err != nil {
 			return "", err
 		}
@@ -46,7 +50,7 @@ func (s *Store) Control(ctx context.Context, owner int64, sid uuid.UUID, idle bo
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
+	_, err = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
 	if err != nil {
 		return "", err
 	}

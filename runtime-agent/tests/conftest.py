@@ -152,3 +152,9 @@ async def new_session(agent):
 
 def command(eid="run-1", code="print(42)", timeout=300.0):
     return {"execution_id": eid, "kind": "execute", "code": code, "timeout_seconds": timeout}
+
+
+@pytest.fixture
+def rpc_timeouts():
+    """Переопределяйте только бюджеты production RPCSettings для транспортных тестов."""
+    return {}

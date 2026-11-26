@@ -1,12 +1,10 @@
 package httptransport
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,54 +13,19 @@ import (
 	notebookdb "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/postgres"
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
 	notebookusecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestNotebookSharingHTTPPostgres(t *testing.T) {
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("TEST_POSTGRES_DSN is not set")
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schemaName := "sharing_http_" + uuid.NewString()
-	schema := pgx.Identifier{schemaName}.Sanitize()
-	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_, dropErr := admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE")
-		if dropErr != nil {
-			t.Error(dropErr)
-		}
-		admin.Close()
-	})
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schemaName
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err = migrations.Up(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash'),(2,'reader','hash'),(3,'other','hash')`); err != nil {
+	ctx := t.Context()
+	pool := pgtest.NewDatabase(t, "TEST_POSTGRES_DSN")
+	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash'),(2,'reader','hash'),(3,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
 	repo := notebookdb.NewNotebookRepository(pool)
-	uc := notebookusecase.NewNotebookUsecase(repo, notebookusecase.NoActiveSessions{}, notebookcursor.New([]byte("sharing-http-cursor")))
+	uc := notebookusecase.NewNotebookUsecase(repo, notebookusecase.NoActiveSessions{}, notebookcursor.New([]byte("sharing-http-cursor")),
+		notebookusecase.WithUsers(pgtest.UsersFixture{DB: pool}))
 	n, err := uc.Create(ctx, 1, "Original")
 	if err != nil {
 		t.Fatal(err)

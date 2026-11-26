@@ -74,7 +74,7 @@ func TestLargeNotebookAccountingAndAutosave(t *testing.T) {
 	}
 	var revision string
 	var bytes int64
-	if err = pool.QueryRow(ctx, `SELECT revision,size_bytes FROM notebooks WHERE id=$1`, n.ID).Scan(&revision, &bytes); err != nil || revision != n.Revision || bytes != n.SizeBytes {
+	if err = pool.QueryRow(ctx, `SELECT revision,size_bytes FROM workspace.notebooks WHERE id=$1`, n.ID).Scan(&revision, &bytes); err != nil || revision != n.Revision || bytes != n.SizeBytes {
 		t.Fatal("overflow changed notebook")
 	}
 	src, err := repo.ExecutionSource(ctx, n.ID, 1, "edit")
@@ -88,7 +88,7 @@ func TestLargeNotebookAccountingAndAutosave(t *testing.T) {
 	// Изменения фиксированной ширины держат полный документ ровно на границе,
 	// сохраняя и тяжёлую строку outputs, и строку вложения.
 	var heavyRowsBefore, heavyRowsAfter string
-	const physicalRows = `SELECT string_agg(cell_id||':'||xmin::text||':'||ctid::text,',' ORDER BY cell_id) FROM notebook_cell_data WHERE notebook_id=$1 AND cell_id IN ('heavy','attached')`
+	const physicalRows = `SELECT string_agg(cell_id||':'||xmin::text||':'||ctid::text,',' ORDER BY cell_id) FROM workspace.notebook_cell_data WHERE notebook_id=$1 AND cell_id IN ('heavy','attached')`
 	if err = pool.QueryRow(ctx, physicalRows, n.ID).Scan(&heavyRowsBefore); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestLargeNotebookAccountingAndAutosave(t *testing.T) {
 	}
 	t.Logf("unchanged heavy data xmin/ctid: %s", heavyRowsAfter)
 	var physicalBytes int64
-	if err = pool.QueryRow(ctx, `SELECT sum(COALESCE(pg_column_size(outputs),0)+COALESCE(pg_column_size(attachments),0)) FROM notebook_cell_data WHERE notebook_id=$1`, n.ID).Scan(&physicalBytes); err != nil {
+	if err = pool.QueryRow(ctx, `SELECT sum(COALESCE(pg_column_size(outputs),0)+COALESCE(pg_column_size(attachments),0)) FROM workspace.notebook_cell_data WHERE notebook_id=$1`, n.ID).Scan(&physicalBytes); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("physical JSONB outputs/attachments bytes=%d", physicalBytes)

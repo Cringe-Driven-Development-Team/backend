@@ -73,3 +73,8 @@ func ValidLanguage(l string) bool { return l == "python" }
 // IsPoolVPS сообщает, что окружение описывает VPS пула без сессии (SessionID = PoolID): облачный
 // адаптер помечает её ресурсы pool_id, а не session_id.
 func (e Environment) IsPoolVPS() bool { return e.PoolID != uuid.Nil && e.PoolID == e.SessionID }
+
+// CleanupConfirmed требует терминального состояния, подтверждения очистки и отсутствия ресурсов.
+func (e Environment) CleanupConfirmed() bool {
+	return e.State.Finished() && e.CleanupResult == "all session resources deleted" && e.Resources == (Resources{})
+}

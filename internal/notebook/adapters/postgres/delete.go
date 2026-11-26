@@ -15,8 +15,12 @@ func (r *NotebookRepository) DeleteNotebook(ctx context.Context, id, ownerID int
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActor(ctx, tx, ownerID); err != nil {
+		return err
+	}
+
 	var notebookID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM notebooks WHERE id=$1 AND owner_id=$2 FOR UPDATE`, id, ownerID).Scan(&notebookID)
+	err = tx.QueryRow(ctx, `SELECT id FROM workspace.notebooks WHERE id=$1 AND owner_id=$2 FOR UPDATE`, id, ownerID).Scan(&notebookID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return usecase.ErrNotebookNotFound
 	}
@@ -30,7 +34,8 @@ func (r *NotebookRepository) DeleteNotebook(ctx context.Context, id, ownerID int
   OR COALESCE((data->'public'->>'cleanup_pending')::boolean,false)
   OR COALESCE((data->>'CreateUnknown')::boolean,false)
   OR lease_until>now()
-  FROM runtime_sessions WHERE notebook_id=$1 ORDER BY id FOR UPDATE`, id)
+  OR EXISTS(SELECT 1 FROM workspace.user_guards g WHERE g.active_session_id=runtime_sessions.id)
+  FROM workspace.runtime_sessions WHERE notebook_id=$1 ORDER BY id FOR UPDATE`, id)
 	if err != nil {
 		return err
 	}
@@ -52,9 +57,9 @@ func (r *NotebookRepository) DeleteNotebook(ctx context.Context, id, ownerID int
 		return usecase.ErrNotebookInUse
 	}
 	err = tx.QueryRow(ctx, `SELECT EXISTS (
-  SELECT 1 FROM runtime_executions e WHERE e.notebook_id=$1 AND (
+  SELECT 1 FROM workspace.runtime_executions e WHERE e.notebook_id=$1 AND (
    COALESCE(e.data->'Public'->>'state','') NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')
-   OR EXISTS (SELECT 1 FROM runtime_projections p WHERE p.session_id=e.session_id AND p.execution_id=e.id)
+   OR EXISTS (SELECT 1 FROM workspace.runtime_projections p WHERE p.session_id=e.session_id AND p.execution_id=e.id)
   ))`, id).Scan(&busy)
 	if err != nil {
 		return err
@@ -64,16 +69,16 @@ func (r *NotebookRepository) DeleteNotebook(ctx context.Context, id, ownerID int
 	}
 	// FK runtime намеренно без каскада; удаляется только полностью завершённая история.
 	for _, query := range []string{
-		`DELETE FROM runtime_batches WHERE session_id IN (SELECT id FROM runtime_sessions WHERE notebook_id=$1)`,
-		`DELETE FROM runtime_events WHERE session_id IN (SELECT id FROM runtime_sessions WHERE notebook_id=$1)`,
-		`DELETE FROM runtime_executions WHERE notebook_id=$1`,
-		`DELETE FROM runtime_sessions WHERE notebook_id=$1`,
+		`DELETE FROM workspace.runtime_batches WHERE session_id IN (SELECT id FROM workspace.runtime_sessions WHERE notebook_id=$1)`,
+		`DELETE FROM workspace.runtime_events WHERE session_id IN (SELECT id FROM workspace.runtime_sessions WHERE notebook_id=$1)`,
+		`DELETE FROM workspace.runtime_executions WHERE notebook_id=$1`,
+		`DELETE FROM workspace.runtime_sessions WHERE notebook_id=$1`,
 	} {
 		if _, err = tx.Exec(ctx, query, id); err != nil {
 			return err
 		}
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM notebooks WHERE id=$1 AND owner_id=$2`, id, ownerID); err != nil {
+	if _, err = tx.Exec(ctx, `DELETE FROM workspace.notebooks WHERE id=$1 AND owner_id=$2`, id, ownerID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

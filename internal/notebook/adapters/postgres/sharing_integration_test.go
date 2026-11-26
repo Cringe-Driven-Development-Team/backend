@@ -11,15 +11,16 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 )
 
 func TestSharingReadMatrixAndAtomicReplacement(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'Reader','hash'),(3,'Other','hash')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'Reader','hash'),(3,'Other','hash')`); err != nil {
 		t.Fatal(err)
 	}
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	n, err := uc.Create(ctx, 1, "matrix")
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +92,7 @@ func TestSharingReadMatrixAndAtomicReplacement(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("partial replacement: %+v %v", after, err)
 	}
-	if _, err = pool.Exec(ctx, `UPDATE users SET login='Renamed' WHERE id=2`); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE identity.users SET login='Renamed' WHERE id=2`); err != nil {
 		t.Fatal(err)
 	}
 	after, err = uc.GetSharing(ctx, n.ID, 1)
@@ -112,7 +113,7 @@ func TestSharingReadMatrixAndAtomicReplacement(t *testing.T) {
 func TestCloneCompleteIndependentDocument(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
 		t.Fatal(err)
 	}
 	count := int64(9)
@@ -124,7 +125,7 @@ func TestCloneCompleteIndependentDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	if _, err = uc.PutSharing(ctx, src.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
 		t.Fatal(err)
 	}
@@ -186,13 +187,13 @@ func TestCloneCompleteIndependentDocument(t *testing.T) {
 func TestSharingMigrationPreservesExistingNotebook(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := t.Context()
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	before, err := uc.Create(ctx, 1, "existing")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Восстанавливаем структуру непосредственно до новой миграции.
-	if _, err = pool.Exec(ctx, `DROP TABLE notebook_readers; ALTER TABLE notebooks DROP COLUMN sharing_mode`); err != nil {
+	if _, err = pool.Exec(ctx, `DROP TABLE workspace.notebook_readers; ALTER TABLE workspace.notebooks DROP COLUMN sharing_mode`); err != nil {
 		t.Fatal(err)
 	}
 	sql, err := os.ReadFile("../../../../migrations/20261117225455_add_notebook_sharing.sql")
@@ -216,7 +217,7 @@ func TestCloneEmptyNotebook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	clone, err := uc.Clone(ctx, src.ID, 1, "empty copy")
 	if err != nil || len(clone.Cells) != 0 {
 		t.Fatal(clone, err)

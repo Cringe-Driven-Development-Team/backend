@@ -29,17 +29,19 @@ func TestRenameNotebookTransactionFailures(t *testing.T) {
 			if phase == "begin" {
 				begin.WillReturnError(failure)
 			} else {
+				mock.ExpectExec(`INSERT INTO workspace.user_guards`).WithArgs(int64(1)).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				mock.ExpectQuery(`SELECT deleting,active_session_id FROM workspace.user_guards`).WithArgs(int64(1)).WillReturnRows(pgxmock.NewRows([]string{"deleting", "active_session_id"}).AddRow(false, nil))
 				lock := mock.ExpectQuery(regexp.QuoteMeta(selectNotebook+` FOR UPDATE`)).WithArgs(int64(1), int64(1))
 				if phase == "lock" {
 					lock.WillReturnError(failure)
 				} else {
 					lock.WillReturnRows(pgxmock.NewRows([]string{"id", "owner_id", "name", "revision", "cells_count", "preview_code", "size_bytes", "created_at", "updated_at", "sharing_mode"}).AddRow(int64(1), int64(1), "old", &revision, 0, "", int64(40), time.Now(), time.Now(), "private"))
-					update := mock.ExpectQuery("UPDATE notebooks SET name=").WithArgs(int64(1), int64(1), "new")
+					update := mock.ExpectQuery("UPDATE workspace.notebooks SET name=").WithArgs(int64(1), int64(1), "new")
 					if phase == "update" {
 						update.WillReturnError(failure)
 					} else {
 						update.WillReturnRows(pgxmock.NewRows([]string{"updated_at"}).AddRow(time.Now()))
-						header := mock.ExpectQuery("SELECT nbformat,nbformat_minor,metadata,extra FROM notebooks").WithArgs(int64(1))
+						header := mock.ExpectQuery("SELECT nbformat,nbformat_minor,metadata,extra FROM workspace.notebooks").WithArgs(int64(1))
 						if phase == "header" {
 							header.WillReturnError(failure)
 						} else {

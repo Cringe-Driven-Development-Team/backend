@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agent"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agentrpc"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/ansible"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/fake"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/openstack"
@@ -68,8 +70,14 @@ type parts struct {
 
 // worker создаёт воркер с заданными владельцем и lease.
 func (p parts) worker(owner string, lease time.Duration) *usecase.Worker {
+	return p.workerWithAgent(owner, lease, p.ag, nil)
+}
+
+// workerWithAgent использует заданный транспорт provisioning, сохраняя cloud и хранилище.
+func (p parts) workerWithAgent(owner string, lease time.Duration, agent usecase.AgentClient, grpcSettings *usecase.AgentGRPCSettings) *usecase.Worker {
 	cfg := p.cfg
-	return usecase.NewWorker(p.repo, p.repo, p.repo, p.cloud, p.host, p.ag, p.sec, systemClock{}, usecase.WorkerSettings{
+	return usecase.NewWorker(p.repo, p.repo, p.repo, p.cloud, p.host, agent, p.sec, systemClock{}, usecase.WorkerSettings{
+		AgentGRPC:   grpcSettings,
 		Owner:       owner,
 		Concurrency: cfg.MaxConcurrentOps, Lease: lease, PollInterval: workerPoll,
 		ReconcileInterval: cfg.ReconcileInterval, StartupTimeout: cfg.StartupTimeout,
@@ -82,9 +90,41 @@ func (p parts) worker(owner string, lease time.Duration) *usecase.Worker {
 
 // newService собирает прикладной сервис управления окружениями.
 func newService(repo *postgres.Repository, cfg config.RuntimeConfig) *usecase.Service {
-	return usecase.NewService(repo, usecase.Settings{
-		MaxActive: cfg.MaxActive, AgentVersion: cfg.AgentVersion, Profiles: map[string]bool{"default": true},
-	})
+	return usecase.NewService(repo, serviceSettings(cfg))
+}
+
+// serviceSettings возвращает разрешённые профили и лимит окружений.
+func serviceSettings(cfg config.RuntimeConfig) usecase.Settings {
+	return usecase.Settings{MaxActive: cfg.MaxActive, AgentVersion: cfg.AgentVersion, Profiles: map[string]bool{"default": true}}
+}
+
+// Independent содержит компоненты Environments от схемы БД до provisioning worker.
+type Independent struct {
+	Control *usecase.IntentService
+	Targets usecase.AgentTargets
+	Worker  *usecase.Worker
+}
+
+// BuildIndependent сохраняет исходный provisioning, переводя команды хоста на gRPC.
+func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool, dialer *agentrpc.Dialer) (Independent, error) {
+	if cfg.Provider == "fake" {
+		p, err := assemble(ctx, cfg, pool)
+		if err != nil {
+			return Independent{}, err
+		}
+		return Independent{Control: usecase.NewIntentService(p.repo, newService(p.repo, cfg), serviceSettings(cfg)), Targets: p.repo, Worker: p.worker(ownerName(), workerLease)}, nil
+	}
+	if cfg.Provider != "openstack" {
+		return Independent{}, errors.New("runtime: invalid provider")
+	}
+	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true)
+	if err != nil {
+		return Independent{}, err
+	}
+	p := parts{cfg: cfg, repo: postgres.NewRepository(pool), cloud: adapters.cloud, host: adapters.host, sec: adapters.secrets}
+	transport := &usecase.AgentGRPCSettings{IssueCertificate: adapters.secrets.IssueAgentCertificate, JobFence: p.repo.AgentJobFence}
+	worker := p.workerWithAgent(ownerName(), workerLease, agentrpc.NewProvisioning(dialer), transport)
+	return Independent{Control: usecase.NewIntentService(p.repo, newService(p.repo, cfg), serviceSettings(cfg)), Targets: p.repo, Worker: worker}, nil
 }
 
 // assemble создаёт адаптеры по cfg.Provider.
@@ -103,7 +143,7 @@ func assemble(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool)
 		c, h, a := fake.New(fakeCloudDelay)
 		p.cloud, p.host, p.ag, p.exec = c, h, a, a
 	case "openstack":
-		osa, err := buildOpenStack(ctx, cfg, clock)
+		osa, err := buildOpenStack(ctx, cfg, clock, false)
 		if err != nil {
 			return parts{}, err
 		}
@@ -175,7 +215,7 @@ type openStackAdapters struct {
 }
 
 // buildOpenStack связывает провайдера, конфигуратор, mTLS-клиент и секреты.
-func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock) (openStackAdapters, error) {
+func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock, grpcAgent bool) (openStackAdapters, error) {
 	read := func(path string) ([]byte, error) {
 		b, err := os.ReadFile(path)
 		if err != nil {
@@ -191,25 +231,34 @@ func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase
 	if err != nil {
 		return openStackAdapters{}, err
 	}
-	clientCert, err := read(cfg.TLSClientCertFile)
-	if err != nil {
-		return openStackAdapters{}, err
-	}
-	clientKey, err := read(cfg.TLSClientKeyFile)
-	if err != nil {
-		return openStackAdapters{}, err
-	}
 	sec, err := pki.New(cfg.SecretsKey, caCert, caKey, clock)
 	if err != nil {
 		return openStackAdapters{}, fmt.Errorf("runtime: secrets: %w", err)
 	}
-	ag, err := agent.New(caCert, clientCert, clientKey)
-	if err != nil {
-		return openStackAdapters{}, fmt.Errorf("runtime: agent client: %w", err)
+	var ag *agent.Client
+	if !grpcAgent {
+		clientCert, certErr := read(cfg.TLSClientCertFile)
+		if certErr != nil {
+			return openStackAdapters{}, certErr
+		}
+		clientKey, keyErr := read(cfg.TLSClientKeyFile)
+		if keyErr != nil {
+			return openStackAdapters{}, keyErr
+		}
+		ag, err = agent.New(caCert, clientCert, clientKey)
+		if err != nil {
+			return openStackAdapters{}, fmt.Errorf("runtime: agent client: %w", err)
+		}
 	}
 	art, playbook, err := artifacts(cfg.TLSCACertFile)
 	if err != nil {
 		return openStackAdapters{}, err
+	}
+	if grpcAgent {
+		art.AgentService = filepath.Join(filepath.Dir(art.AgentService), "cellestial-agent-grpc.service")
+		if _, err = os.Stat(art.AgentService); err != nil {
+			return openStackAdapters{}, errors.New("runtime: missing gRPC agent systemd unit")
+		}
 	}
 	host, err := ansible.New(cfg.WorkDir, playbook, cfg.SSHPrivateKeyFile, cfg.SSHUser, "ansible-playbook", art)
 	if err != nil {

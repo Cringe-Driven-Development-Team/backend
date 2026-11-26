@@ -60,3 +60,19 @@ func TestRecoveredPanicDoesNotLeakValue(t *testing.T) {
 		t.Fatalf("unsafe panic handling: status=%d log=%s", w.Code, log)
 	}
 }
+
+// TestDuplicateRequestID заменяет неоднозначный correlation так же, как gRPC.
+func TestDuplicateRequestID(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Add("X-Request-ID", "first")
+	r.Header.Add("X-Request-ID", "second")
+	w := httptest.NewRecorder()
+	RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := observability.RequestID(r.Context()); id == "first" || id == "second" || id == "" {
+			t.Error("duplicate correlation accepted")
+		}
+	})).ServeHTTP(w, r)
+	if w.Header().Get("X-Request-ID") == "first" {
+		t.Error("duplicate correlation returned")
+	}
+}

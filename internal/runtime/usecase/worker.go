@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 )
 
@@ -24,6 +25,8 @@ type WorkerSettings struct {
 	PoolSize int
 	// ImageID и AgentVersion — текущие образ VPS и версия агента; VPS пула с другими удаляются.
 	ImageID, AgentVersion string
+	// AgentGRPC содержит функции нового транспорта для provisioning и cleanup.
+	AgentGRPC *AgentGRPCSettings
 }
 
 const (
@@ -145,7 +148,7 @@ func (w *Worker) claimAvailable(ctx context.Context, sem chan struct{}, wg *sync
 		if err != nil || !ok {
 			<-sem
 			if err != nil && ctx.Err() == nil {
-				w.log.Error("claim job", "error", err)
+				w.log.Error("claim job", "error_code", runtimeErrorCode(err))
 			}
 			return
 		}
@@ -154,7 +157,7 @@ func (w *Worker) claimAvailable(ctx context.Context, sem chan struct{}, wg *sync
 			defer wg.Done()
 			defer func() { <-sem }()
 			if err := w.process(ctx, job); err != nil && ctx.Err() == nil {
-				w.log.Warn("job stopped", "job_id", job.ID, "session_id", job.SessionID, "error", err)
+				w.log.Warn("job stopped", "job_id", job.ID, "session_id", job.SessionID, "error_code", runtimeErrorCode(err))
 			}
 		}()
 	}
@@ -175,7 +178,11 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 // process выполняет задание под lease: фоновое продление отменяет шаги при потере lease
 // (leaseCtx) и шаги создания при переводе задания в delete (createCtx).
 func (w *Worker) process(ctx context.Context, job Job) error {
-	leaseCtx, cancelLease := context.WithCancelCause(ctx)
+	id := job.CorrelationID
+	if !observability.ValidRequestID(id) {
+		id = job.SessionID.String()
+	}
+	leaseCtx, cancelLease := context.WithCancelCause(observability.WithRequestID(ctx, id))
 	defer cancelLease(nil)
 	createCtx, cancelCreate := context.WithCancelCause(leaseCtx)
 	defer cancelCreate(nil)
@@ -223,11 +230,11 @@ func (w *Worker) keepLease(ctx context.Context, stop <-chan struct{}, job Job,
 				return
 			}
 			if w.clock.Now().Sub(lastOK) >= w.s.Lease {
-				w.log.Error("lease not renewed for a whole lease period", "job_id", job.ID, "error", err)
+				w.log.Error("lease not renewed for a whole lease period", "job_id", job.ID, "error_code", runtimeErrorCode(err))
 				cancelLease(fmt.Errorf("%w: renew failing: %w", ErrLeaseLost, err))
 				return
 			}
-			w.log.Warn("renew lease", "job_id", job.ID, "error", err)
+			w.log.Warn("renew lease", "job_id", job.ID, "error_code", runtimeErrorCode(err))
 		default:
 			lastOK = w.clock.Now()
 			if kind == JobDelete && job.Kind == JobCreate {
@@ -380,8 +387,8 @@ func (r *jobRun) retry(cause error) error {
 	if err := r.w.q.Retry(r.leaseCtx, r.job, r.w.s.Owner, at); err != nil {
 		return fmt.Errorf("retry job: %w", err)
 	}
-	r.w.log.Info("job retry scheduled", "job_id", r.job.ID, "session_id", r.job.SessionID,
-		"kind", r.job.Kind, "attempt", r.job.Attempt, "next_run_at", at, "cause", cause)
+	r.w.log.InfoContext(r.leaseCtx, "job retry scheduled", "job_id", r.job.ID, "session_id", r.job.SessionID,
+		"kind", r.job.Kind, "attempt", r.job.Attempt, "next_run_at", at, "error_code", runtimeErrorCode(cause))
 	return nil
 }
 
@@ -392,4 +399,22 @@ func backoff(attempt int) time.Duration {
 		d *= 2
 	}
 	return min(d, backoffMax)
+}
+
+// runtimeErrorCode ограничивает технические логи безопасными категориями, без ответов SDK и stdout.
+func runtimeErrorCode(err error) string {
+	switch {
+	case errors.Is(err, ErrCloudPermanent):
+		return "cloud_permanent"
+	case errors.Is(err, ErrCloudTransient):
+		return "cloud_transient"
+	case errors.Is(err, ErrLeaseLost), errors.Is(err, ErrStale):
+		return "stale_lease"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	default:
+		return observability.ErrorCode(err)
+	}
 }
