@@ -18,7 +18,7 @@ import (
 func TestRenameNotebookTransactionFailures(t *testing.T) {
 	failure := errors.New("injected database error")
 	revision := "revision"
-	for _, phase := range []string{"begin", "lock", "update", "header", "cells", "commit"} {
+	for _, phase := range []string{"begin", "lock", "update", "header", "cells", "comments", "commit"} {
 		t.Run(phase, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
 			if err != nil {
@@ -51,7 +51,13 @@ func TestRenameNotebookTransactionFailures(t *testing.T) {
 								cells.WillReturnError(failure)
 							} else {
 								cells.WillReturnRows(pgxmock.NewRows([]string{"cell_id", "kind", "source", "source_version", "metadata", "extra", "outputs", "execution_count", "has_execution_count", "attachments", "output_truncated", "has_runtime_metadata"}))
-								mock.ExpectCommit().WillReturnError(failure)
+								comments := mock.ExpectQuery(`SELECT cell_id,count\(\*\) FROM workspace\.cell_comments`).WithArgs(int64(1))
+								if phase == "comments" {
+									comments.WillReturnError(failure)
+								} else {
+									comments.WillReturnRows(pgxmock.NewRows([]string{"cell_id", "count"}))
+									mock.ExpectCommit().WillReturnError(failure)
+								}
 							}
 						}
 					}

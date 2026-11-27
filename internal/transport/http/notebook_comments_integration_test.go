@@ -3,7 +3,9 @@ package httptransport
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +36,7 @@ func newCommentsHTTPFixture(t *testing.T) commentsHTTPFixture {
 	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash'),(2,'reader','hash'),(3,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
-	uc := notebookusecase.NewNotebookUsecase(notebookdb.NewNotebookRepository(pool), notebookusecase.NoActiveSessions{}, nil, notebookusecase.WithUsers(pgtest.UsersFixture{DB: pool}), notebookusecase.WithCommentCursor(notebookcursor.NewCommentCodec([]byte("comments-key"))))
+	uc := notebookusecase.NewNotebookUsecase(notebookdb.NewNotebookRepository(pool), notebookusecase.NoActiveSessions{}, notebookcursor.New([]byte("notebook-list-key")), notebookusecase.WithUsers(pgtest.UsersFixture{DB: pool}), notebookusecase.WithCommentCursor(notebookcursor.NewCommentCodec([]byte("comments-key"))))
 	n, err := uc.Create(ctx, 1, "comments")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +68,8 @@ func newCommentsHTTPFixture(t *testing.T) commentsHTTPFixture {
 		if rec.Code != status {
 			t.Fatalf("%s %s visitor=%d: %d want %d: %s", method, path, visitor, rec.Code, status, rec.Body)
 		}
-		if rec.Header().Get("Cache-Control") != "no-store" {
+		hasCachePolicy := strings.Contains(path, "/comments") || method == "GET" && strings.HasPrefix(path, "/notebooks/")
+		if hasCachePolicy && rec.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("no-store missing")
 		}
 		return rec
@@ -297,4 +300,106 @@ func TestCellCommentsCursorTraversalHTTP(t *testing.T) {
 		f.request("GET", f.wall+q, "", 1, 400)
 	}
 	f.request("GET", otherWall, "", 1, 200)
+}
+
+func TestNotebookCommentCountsHTTP(t *testing.T) {
+	f := newCommentsHTTPFixture(t)
+	ctx := t.Context()
+	n := f.notebook
+	notebookURL := fmt.Sprintf("/notebooks/%d", n.ID)
+	firstCell := n.Cells[0].ID
+	second, err := f.uc.AddCell(ctx, n.ID, 1, n.Revision, domain.CellKindMarkdown, "second", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondWall := notebookURL + "/content/cells/" + second.Cell.ID + "/comments"
+	other, err := f.uc.Create(ctx, 1, "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Одинаковое время проверяет сохранение порядка по ID при пагинации.
+	if _, err = f.pool.Exec(ctx, `UPDATE notebooks SET updated_at='2026-11-27T12:00:00Z'`); err != nil {
+		t.Fatal(err)
+	}
+	otherWall := fmt.Sprintf("/notebooks/%d/content/cells/%s/comments", other.ID, other.Cells[0].ID)
+
+	type counts struct {
+		Total *int           `json:"comments_count"`
+		Cells map[string]int `json:"cell_comments_count"`
+	}
+	checkNotebook := func(rec *httptest.ResponseRecorder, want int, cells map[string]int) {
+		t.Helper()
+		var got counts
+		if decodeErr := json.Unmarshal(rec.Body.Bytes(), &got); decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if got.Total == nil || *got.Total != want || got.Cells == nil || !maps.Equal(got.Cells, cells) {
+			t.Fatalf("want comments_count=%d cell_comments_count=%v, got %s", want, cells, rec.Body)
+		}
+	}
+	type page struct {
+		Items []struct {
+			ID int64 `json:"id"`
+			counts
+		} `json:"items"`
+		NextCursor *string `json:"next_cursor"`
+	}
+	checkPage := func(path string, id int64, want int) *string {
+		t.Helper()
+		rec := f.request("GET", path, "", 1, 200)
+		var got page
+		if decodeErr := json.Unmarshal(rec.Body.Bytes(), &got); decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if len(got.Items) != 1 || got.Items[0].ID != id || got.Items[0].Total == nil || *got.Items[0].Total != want {
+			t.Fatalf("want notebook %d with %d comments, got %s", id, want, rec.Body)
+		}
+		return got.NextCursor
+	}
+	checkBoth := func(want, otherCount int, cells map[string]int) {
+		t.Helper()
+		checkNotebook(f.request("GET", notebookURL, "", 1, 200), want, cells)
+		cursor := checkPage("/notebooks?limit=1", other.ID, otherCount)
+		if cursor == nil {
+			t.Fatal("missing continuation")
+		}
+		if checkPage("/notebooks?limit=1&cursor="+url.QueryEscape(*cursor), n.ID, want) != nil {
+			t.Fatal("unexpected continuation after the second page")
+		}
+	}
+	post := func(wall string) string {
+		t.Helper()
+		comment := decodeComment(t, f.request("POST", wall, `{"text":"comment"}`, 1, 201))
+		return fmt.Sprintf("%s/%d", wall, comment.Id)
+	}
+
+	checkBoth(0, 0, nil)
+	post(otherWall)
+	post(f.wall)
+	post(f.wall)
+	one := post(secondWall)
+	two := post(secondWall)
+	f.request("GET", f.wall+"?limit=1", "", 1, 200)
+	bothCells := map[string]int{firstCell: 2, second.Cell.ID: 2}
+	checkBoth(4, 1, bothCells)
+	added := post(f.wall)
+	checkBoth(5, 1, map[string]int{firstCell: 3, second.Cell.ID: 2})
+	f.request("PATCH", added, `{"text":"edited"}`, 1, 200)
+	checkBoth(5, 1, map[string]int{firstCell: 3, second.Cell.ID: 2})
+	f.request("DELETE", added, "", 1, 204)
+	checkBoth(4, 1, bothCells)
+	f.request("DELETE", one, "", 1, 204)
+	f.request("DELETE", two, "", 1, 204)
+	oneCell := map[string]int{firstCell: 2}
+	checkBoth(2, 1, oneCell)
+
+	f.request("GET", notebookURL, "", 2, 404)
+	if _, err = f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
+		t.Fatal(err)
+	}
+	checkNotebook(f.request("GET", notebookURL, "", 2, 200), 2, oneCell)
+	renamed := f.request("PATCH", notebookURL, `{"name":"renamed"}`, 1, 200)
+	checkNotebook(renamed, 2, oneCell)
+	clone := f.request("POST", notebookURL+"/clone", `{"name":"clone"}`, 1, 201)
+	checkNotebook(clone, 0, nil)
 }

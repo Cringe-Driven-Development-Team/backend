@@ -173,18 +173,18 @@ func (mr *MockRepositoryMockRecorder) Get(arg0, arg1, arg2 any) *gomock.Call {
 }
 
 // GetReadable mocks base method.
-func (m *MockRepository) GetReadable(ctx context.Context, id, userID int64) (domain.Notebook, error) {
+func (m *MockRepository) GetReadable(ctx context.Context, id, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReadable", ctx, id, userID)
+	ret := m.ctrl.Call(m, "GetReadable", ctx, id, userID, includeCommentCounts)
 	ret0, _ := ret[0].(domain.Notebook)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReadable indicates an expected call of GetReadable.
-func (mr *MockRepositoryMockRecorder) GetReadable(ctx, id, userID any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetReadable(ctx, id, userID, includeCommentCounts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReadable", reflect.TypeOf((*MockRepository)(nil).GetReadable), ctx, id, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReadable", reflect.TypeOf((*MockRepository)(nil).GetReadable), ctx, id, userID, includeCommentCounts)
 }
 
 // GetSharing mocks base method.

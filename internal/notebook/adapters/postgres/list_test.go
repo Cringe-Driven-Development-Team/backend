@@ -38,11 +38,11 @@ func TestNotebookListTransaction(t *testing.T) {
 						case "query":
 							page.WillReturnError(failure)
 						case "scan":
-							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated"}).AddRow("not-an-int", "name", 1, "", time.Now()))
+							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated", "comments"}).AddRow("not-an-int", "name", 1, "", time.Now(), int64(0)))
 						case "rows":
-							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated"}).AddRow(int64(3), "name", 1, "", time.Now()).RowError(0, failure))
+							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated", "comments"}).AddRow(int64(3), "name", 1, "", time.Now(), int64(0)).RowError(0, failure))
 						default:
-							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated"}))
+							page.WillReturnRows(pgxmock.NewRows([]string{"id", "name", "cells", "preview", "updated", "comments"}))
 						}
 						switch stage {
 						case "success":

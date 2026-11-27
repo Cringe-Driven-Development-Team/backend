@@ -42,6 +42,7 @@ func (h *Handler) ListNotebooks(ctx context.Context, req api.ListNotebooksReques
 			HasActiveSession: n.HasActiveSession,
 			Name:             n.Name,
 			CellsCount:       n.CellsCount,
+			CommentsCount:    n.CommentsCount,
 			UpdatedAt:        n.UpdatedAt,
 		})
 	}
@@ -126,13 +127,19 @@ func toAPINotebook(n domain.Notebook) api.Notebook {
 	for _, c := range n.Cells {
 		cells = append(cells, toAPICell(c))
 	}
+	cellCommentsCount := n.CellCommentsCount
+	if cellCommentsCount == nil {
+		cellCommentsCount = map[string]int64{}
+	}
 	return api.Notebook{
-		Access:    api.NotebookAccess{IsOwner: n.Access.IsOwner, CanEdit: n.Access.CanEdit, CanManageSharing: n.Access.CanManageSharing, CanClone: n.Access.CanClone},
-		Id:        n.ID,
-		Name:      n.Name,
-		Cells:     cells,
-		CreatedAt: n.CreatedAt,
-		UpdatedAt: n.UpdatedAt,
+		CommentsCount:     n.CommentsCount,
+		CellCommentsCount: cellCommentsCount,
+		Access:            api.NotebookAccess{IsOwner: n.Access.IsOwner, CanEdit: n.Access.CanEdit, CanManageSharing: n.Access.CanManageSharing, CanClone: n.Access.CanClone},
+		Id:                n.ID,
+		Name:              n.Name,
+		Cells:             cells,
+		CreatedAt:         n.CreatedAt,
+		UpdatedAt:         n.UpdatedAt,
 	}
 }
 
