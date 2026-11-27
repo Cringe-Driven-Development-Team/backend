@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 type responseWriter struct {
 	http.ResponseWriter
 	status int
+	failed bool
 }
 
 // newResponseWriter оборачивает HTTP writer для учёта статуса.
@@ -20,6 +22,8 @@ func newResponseWriter(w http.ResponseWriter) *responseWriter {
 
 // Unwrap возвращает исходный HTTP writer для контроллера ответа.
 func (w *responseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *responseWriter) responseStarted() bool { return w.status != 0 }
 
 // WriteHeader запоминает первый HTTP-статус и передаёт его клиенту.
 func (w *responseWriter) WriteHeader(status int) {
@@ -39,7 +43,11 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(p)
+	n, err := w.ResponseWriter.Write(p)
+	if err != nil {
+		w.failed = true
+	}
+	return n, err
 }
 
 // flushingWriter сохраняет доступ к flush исходного HTTP writer.
@@ -64,6 +72,7 @@ func (w *flushingWriter) Flush() {
 // FlushError отправляет накопленный ответ и сообщает ошибку транспорта.
 func (w *flushingWriter) FlushError() error {
 	if err := http.NewResponseController(w.ResponseWriter).Flush(); err != nil {
+		w.failed = !errors.Is(err, http.ErrNotSupported) || w.failed
 		return err
 	}
 	if w.status == 0 {
@@ -93,8 +102,15 @@ func (w *responseWriter) ReadFrom(r io.Reader) (int64, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
+	var n int64
+	var err error
 	if readerFrom, ok := w.ResponseWriter.(io.ReaderFrom); ok {
-		return readerFrom.ReadFrom(r)
+		n, err = readerFrom.ReadFrom(r)
+	} else {
+		n, err = io.Copy(struct{ io.Writer }{w.ResponseWriter}, r)
 	}
-	return io.Copy(struct{ io.Writer }{w.ResponseWriter}, r)
+	if err != nil {
+		w.failed = true
+	}
+	return n, err
 }

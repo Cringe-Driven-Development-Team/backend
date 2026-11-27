@@ -70,10 +70,11 @@ DNS SAN сервисов имеют вид `identity.internal.cellestial.ru`,
 раскладка TLS-файлов, настройка сети и переключение production относятся
 к [infra#163](https://github.com/Cringe-Driven-Development-Team/infra/issues/163).
 
-У каждого процесса на admin listener доступны `/livez`, `/readyz` и
-`/metrics`. Проверка готовности Workspace включает оба gRPC сервиса.
-Сбой индивидуального VPS не снимает готовность Environments целиком.
-Публикация scrape targets и дашбордов относится к #119 и infra.
+На admin listener каждого процесса доступны `/livez` и `/readyz`. Go-сервисы
+отдают там же `/metrics`, а runtime-agent публикует метрики на отдельном
+HTTPS-входе с собственным CA. Проверка готовности Workspace включает оба
+gRPC сервиса. Сбой индивидуального VPS не снимает готовность Environments
+целиком. Параметры подключения описаны в [контракте мониторинга](monitoring.md).
 При запуске на одном хосте назначьте процессам разные адреса listeners
 и укажите их в переменных адресов зависимостей. Тестовый стенд сам
 назначает свободные локальные порты и выпускает тестовые сертификаты.
@@ -119,3 +120,18 @@ status <operation_uuid>` возвращает этап. Нужен отдель�
 обычный набор переменных TLS. Identity отзывает сессии, Workspace закрывает
 новые записи и дожидается очистки VPS. После удаления ссылок в Workspace
 Identity удаляет аватар и профиль.
+
+### Подготовка HTTPS-входа метрик на runtime-VPS
+
+Environments с OpenStack включает подготовку входа, когда заданы обе переменные
+`RUNTIME_MONITORING_SCRAPER_IP` и `RUNTIME_MONITORING_CLIENT_CA_FILE`. Первая
+содержит приватный IPv4 VPS4, вторая указывает на смонтированный в Environments
+публичный `client-ca.pem` центра, выдавшего клиентский сертификат Prometheus.
+Приватный ключ Prometheus остаётся у scraper.
+
+При подготовке новой VPS, в том числе для warm pool, Environments выпускает
+отдельную серверную пару через действующий runtime CA с расширением
+`ServerAuth` и DNS SAN `runtime-metrics.internal.cellestial.ru`. Backend
+передаёт параметры в `runtime_monitoring` для Ansible. Роль infra настраивает
+HTTPS на приватном порту `9443` и доступ с VPS4. Уже подготовленные машины
+получают настройку при повторной подготовке или замене. [Контракт мониторинга](monitoring.md)

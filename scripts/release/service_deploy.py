@@ -290,11 +290,13 @@ def run_playbook(state):
         directory = Path(directory)
         report = directory / 'observed.json'
         settings = directory / 'extra-vars.json'
+        clean_start = state.get('clean_start', False)
         save(settings, {
             'microservices_selected_services': state['selected_services'],
             'microservices_before': state['before'], 'microservices_desired': state['desired'],
             'microservices_result_path': str(report), 'microservices_action': state['action'],
-            'microservices_first_cutover': state['first_cutover'],
+            'microservices_first_cutover': state['first_cutover'] and not clean_start,
+            'microservices_clean_start': clean_start,
             'deploy_key_path': os.environ['DEPLOY_KEY_PATH'], 'jump_known_hosts': os.environ['JUMP_KNOWN_HOSTS'],
         })
         known_hosts = os.environ['JUMP_KNOWN_HOSTS']
@@ -328,6 +330,8 @@ def summary(state):
              f'- Записанный результат: {state.get("terminal_status") or "не подтверждён"}', '',
              '| Сервис | До | Запрошено | Наблюдалось | Образ / readiness / smoke |',
              '| --- | --- | --- | --- | --- |']
+    if state.get('clean_start'):
+        lines.insert(3, '- Первый запуск на отдельной пустой БД')
     for name in SERVICES:
         refs = [md(state[key].get(name, {}).get('image_ref') or 'неизвестно') for key in ('before', 'desired', 'observed')]
         labels = ' / '.join(state['checks'].get(name, {}).get(check, 'не запрошено') for check in CHECKS)
@@ -346,10 +350,15 @@ def execute(command, path):
     run_id, attempt = (int(os.environ[key]) for key in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
     if command == 'init':
         selected = parse_selection(os.environ.get('RELEASE_SERVICES', 'all'))
+        action = os.environ['RELEASE_ACTION']
+        transfer = os.environ.get('RELEASE_FIRST_CUTOVER') == 'true'
+        clean_start = os.environ.get('RELEASE_CLEAN_START') == 'true'
+        if clean_start and (transfer or action != 'deploy' or set(selected) != set(SERVICES)):
+            raise ReleaseError('Clean start requires all services, deploy, and first_cutover disabled')
         save(path, {
-            'action': os.environ['RELEASE_ACTION'], 'run_id': run_id, 'run_attempt': attempt,
+            'action': action, 'run_id': run_id, 'run_attempt': attempt,
             'requested_sha': os.environ.get('RELEASE_TARGET_SHA', ''), 'requested_tag': os.environ.get('RELEASE_TAG', ''),
-            'selected_services': selected, 'first_cutover': os.environ.get('RELEASE_FIRST_CUTOVER') == 'true',
+            'selected_services': selected, 'first_cutover': transfer or clean_start, 'clean_start': clean_start,
             'before': {}, 'desired': {}, 'observed': {},
             'checks': {name: dict.fromkeys(CHECKS, 'unknown') for name in selected},
             'ansible_rc': None, 'error_stage': None, 'deployment_id': None,

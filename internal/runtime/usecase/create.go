@@ -214,9 +214,18 @@ func (r *jobRun) configure(ctx context.Context, env domain.Environment) error {
 // prepareHost запускает prepare.yml на VPS: агент стартует в режиме ожидания, данных сессии нет.
 func (w *Worker) prepareHost(ctx context.Context, name uuid.UUID, ip, hostPublicKey string) error {
 	var certPEM, keyPEM []byte
+	var monitoring *HostMonitoring
 	var err error
 	if transport := w.s.AgentGRPC; transport != nil {
 		certPEM, keyPEM, err = transport.IssueCertificate(ip, AgentDNS(name))
+		if err == nil && transport.MonitoringScraperIP != "" {
+			monitorCert, monitorKey, issueErr := transport.IssueCertificate(ip, "runtime-metrics.internal.cellestial.ru")
+			if issueErr != nil {
+				return fmt.Errorf("issue monitoring server cert: %w", issueErr)
+			}
+			monitoring = &HostMonitoring{ScraperIP: transport.MonitoringScraperIP,
+				ServerCertPEM: monitorCert, ServerKeyPEM: monitorKey, ClientCAPEM: transport.MonitoringClientCA}
+		}
 	} else {
 		certPEM, keyPEM, err = w.sec.IssueServerCert(ip)
 	}
@@ -226,7 +235,7 @@ func (w *Worker) prepareHost(ctx context.Context, name uuid.UUID, ip, hostPublic
 	ctx, cancel := context.WithTimeout(ctx, w.s.AnsibleTimeout)
 	defer cancel()
 	err = w.host.Configure(ctx, HostConfig{
-		Name: name, PrivateIP: ip, HostPublicKey: hostPublicKey, ServerCertPEM: certPEM, ServerKeyPEM: keyPEM,
+		Name: name, PrivateIP: ip, HostPublicKey: hostPublicKey, ServerCertPEM: certPEM, ServerKeyPEM: keyPEM, Monitoring: monitoring,
 		PythonImage: w.s.PythonImage, KernelDNS: w.s.KernelDNS, BlockedPublicIPs: w.s.BlockedPublicIPs,
 	})
 	if err != nil {

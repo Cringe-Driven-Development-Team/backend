@@ -1,6 +1,7 @@
 """Загружайте отдельную конфигурацию mTLS и lifecycle gRPC-входа."""
 
 import os
+import ssl
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,10 @@ class RPCSettings:
     ca_file: Path
     address: str = "0.0.0.0:9090"
     admin_address: str = "0.0.0.0:9091"
+    metrics_address: str | None = None
+    metrics_cert_file: Path | None = None
+    metrics_key_file: Path | None = None
+    metrics_ca_file: Path | None = None
     version: str = "local"
     unary_seconds: float = 5
     stream_seconds: float = 7200
@@ -25,6 +30,24 @@ class RPCSettings:
     def __post_init__(self):
         """Отвергните неограниченные/неположительные бюджеты до открытия listeners."""
         import math
+
+        monitoring = (
+            self.metrics_address,
+            self.metrics_cert_file,
+            self.metrics_key_file,
+            self.metrics_ca_file,
+        )
+        if any(monitoring) and not all(monitoring):
+            raise ValueError("Incomplete metrics TLS configuration")
+        if self.metrics_ca_file:
+            control_ca = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            control_ca.load_verify_locations(cafile=self.ca_file)
+            monitoring_ca = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            monitoring_ca.load_verify_locations(cafile=self.metrics_ca_file)
+            if set(control_ca.get_ca_certs(binary_form=True)).intersection(
+                monitoring_ca.get_ca_certs(binary_form=True)
+            ):
+                raise ValueError("Metrics requires a separate client CA")
 
         for name in ("unary_seconds", "stream_seconds", "idle_seconds", "shutdown_seconds"):
             value = getattr(self, name)
@@ -59,9 +82,19 @@ class RPCSettings:
             **files,
             address=os.environ.get("GRPC_ADDR", "0.0.0.0:9090"),
             admin_address=os.environ.get("ADMIN_ADDR", "0.0.0.0:9091"),
+            metrics_address=os.environ.get("METRICS_ADDR") or None,
+            metrics_cert_file=_path_from_env("METRICS_TLS_CERT_FILE"),
+            metrics_key_file=_path_from_env("METRICS_TLS_KEY_FILE"),
+            metrics_ca_file=_path_from_env("METRICS_TLS_CA_FILE"),
             version=os.environ.get("VERSION", "local"),
             unary_seconds=float(os.environ.get("RPC_TIMEOUT", "5")),
             stream_seconds=float(os.environ.get("STREAM_TIMEOUT", "7200")),
             idle_seconds=float(os.environ.get("STREAM_IDLE_TIMEOUT", "60")),
             shutdown_seconds=float(os.environ.get("SHUTDOWN_TIMEOUT", "30")),
         )
+
+
+def _path_from_env(name):
+    """Прочитайте путь к настроенному TLS-артефакту."""
+    value = os.environ.get(name)
+    return Path(value) if value else None
