@@ -14,7 +14,7 @@ import (
 )
 
 // NewIdentityRouter обслуживает только Identity OpenAPI и проверяет S2S до тела запроса.
-func NewIdentityRouter(h *Handler, tokens security.TokenParser, sessions security.AccessSessions, bffKey string) (http.Handler, error) {
+func NewIdentityRouter(h *Handler, tokens security.TokenParser, sessions security.AccessSessions, bffKey string, observe ...func(http.Handler, func(*http.Request) string) http.Handler) (http.Handler, error) {
 	if strings.TrimSpace(bffKey) == "" {
 		return nil, errors.New("BFF_API_KEY is required")
 	}
@@ -39,5 +39,11 @@ func NewIdentityRouter(h *Handler, tokens security.TokenParser, sessions securit
 		r.ServeHTTP(w, rq)
 	})
 	handler := security.S2S(bffKey, "/api/v1")(security.AuthenticateBearer(tokens, sessions)(middleware.AvatarUpload("/api/v1")(bounded)))
-	return middleware.RequestID(middleware.Logging(middleware.Recover(handler))), nil
+	handler = middleware.Recover(handler)
+	if len(observe) > 0 {
+		handler = observe[0](handler, func(req *http.Request) string { return middleware.RegisteredRoute(r, req) })
+	} else {
+		handler = middleware.Logging(handler)
+	}
+	return middleware.RequestID(handler), nil
 }

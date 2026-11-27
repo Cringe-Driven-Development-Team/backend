@@ -17,7 +17,10 @@ import (
 type requestMetaKey struct{}
 
 // requestMeta хранит шаблон маршрута для сводки запроса.
-type requestMeta struct{ route string }
+type requestMeta struct {
+	route          string
+	responseFailed bool
+}
 
 // RequestID принимает безопасный X-Request-ID или создаёт новый и передаёт его в next.
 func RequestID(next http.Handler) http.Handler {
@@ -43,6 +46,11 @@ type HTTPObserver func(method, route string, status int, duration time.Duration)
 
 // Observe добавляет наблюдение за тем же итогом запроса, который попадает в лог.
 func Observe(next http.Handler, observe HTTPObserver) http.Handler {
+	return ObserveHTTP(next, observe, nil, nil)
+}
+
+// ObserveHTTP измеряет итог запроса, восстанавливая шаблон при раннем отказе.
+func ObserveHTTP(next http.Handler, observe HTTPObserver, metrics *HTTPMetrics, route func(*http.Request) string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		meta := &requestMeta{route: "unmatched"}
@@ -53,12 +61,17 @@ func Observe(next http.Handler, observe HTTPObserver) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		if meta.route == "unmatched" && route != nil {
+			meta.route = route(r)
+		}
+		method := observability.HTTPMethod(r.Method)
 		duration := time.Since(start)
+		metrics.observe(method, meta.route, status, duration, meta.responseFailed || writer.failed)
 		if observe != nil {
-			observe(r.Method, meta.route, status, duration)
+			observe(method, meta.route, status, duration)
 		}
 		slog.InfoContext(ctx, "http.request",
-			slog.String("method", r.Method),
+			slog.String("method", method),
 			slog.String("route", meta.route),
 			slog.Int("status", status),
 			slog.Duration("duration", duration),
@@ -85,6 +98,11 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				if writer, ok := w.(interface{ responseStarted() bool }); ok && writer.responseStarted() {
+					MarkResponseFailure(r)
+					slog.ErrorContext(r.Context(), "http.response.failed", slog.String("error_code", "panic"))
+					return
+				}
 				httperr.Internal(w, r, fmt.Errorf("panic: %v", rec))
 			}
 		}()

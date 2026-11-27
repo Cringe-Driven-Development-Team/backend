@@ -113,6 +113,13 @@ type HostConfig struct {
 	ServerCertPEM, ServerKeyPEM []byte
 	PythonImage, KernelDNS      string
 	BlockedPublicIPs            []string
+	Monitoring                  *HostMonitoring
+}
+
+// HostMonitoring содержит адрес scraper и TLS-материалы HTTPS-входа метрик.
+type HostMonitoring struct {
+	ScraperIP                                string
+	ServerCertPEM, ServerKeyPEM, ClientCAPEM []byte
 }
 
 // HostConfigurator готовит VPS и запускает агента в режиме ожидания (Ansible).

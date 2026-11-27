@@ -19,6 +19,7 @@ Backend проекта «Colab» (Cellestial) команды «Cringe Driven Dev
   - [Локальная разработка](docs/local-development.md)
   - [Контракт API (OpenAPI)](docs/openapi.md)
   - [Окружения и исполнение Python](docs/runtime-sessions.md)
+  - [Метрики backend для Prometheus](docs/monitoring.md)
   - [CI и выкатка](docs/release.md)
   - [Архитектура проекта](https://docs.cellestial.ru/documentation/architecture/)
 - 🛠 Разработка
