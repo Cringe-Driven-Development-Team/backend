@@ -48,6 +48,44 @@ func serviceDatabase(t *testing.T) (*pgxpool.Pool, string) {
 	return pool, parsed.String()
 }
 
+func TestUpUsesProvisionedSchemaWithoutDatabaseCreatePrivilege(t *testing.T) {
+	admin, dsn := serviceDatabase(t)
+	ctx := t.Context()
+	role := fmt.Sprintf("migration_owner_%d", time.Now().UnixNano())
+	quoted := pgx.Identifier{role}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE ROLE "+quoted+" LOGIN PASSWORD 'test-only-role'"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.Background(), "DROP OWNED BY "+quoted)
+		_, _ = admin.Exec(context.Background(), "DROP ROLE "+quoted)
+	})
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA identity AUTHORIZATION "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	target, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.User = url.UserPassword(role, "test-only-role")
+	pool, err := pgxpool.New(ctx, target.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var canCreate bool
+	if err = pool.QueryRow(ctx, "SELECT has_database_privilege(current_database(), 'CREATE')").Scan(&canCreate); err != nil || canCreate {
+		t.Fatalf("unexpected database CREATE privilege: %v, %v", canCreate, err)
+	}
+	if err = Up(ctx, pool, Identity); err != nil {
+		t.Fatal(err)
+	}
+	state, err := Status(ctx, pool, Identity)
+	if err != nil || state.Pending {
+		t.Fatalf("identity state: %+v, %v", state, err)
+	}
+}
+
 // TestFreshSchemasAndPrivileges проверяет независимые histories, локальные FK и реальные app-роли.
 func TestFreshSchemasAndPrivileges(t *testing.T) {
 	pool, dsn := serviceDatabase(t)

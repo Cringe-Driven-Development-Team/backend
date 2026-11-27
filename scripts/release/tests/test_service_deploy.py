@@ -1,13 +1,16 @@
 import json
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from service_deploy import (
     ReleaseError, SERVICES, check_compatibility, check_inventory, confirmed_inventory,
-    manifest_versions, parse_selection, report_snapshot, result_outcome, same_inventory,
+    execute, manifest_versions, parse_selection, report_snapshot, result_outcome, same_inventory,
 )
 from service_artifacts import validate_manifest
 
@@ -45,6 +48,21 @@ class ServiceDeployment(unittest.TestCase):
         self.desired['identity']['migration_version'] = 1
         with self.assertRaises(ReleaseError):
             check_compatibility(self.before, self.desired, ['identity'], first=False)
+
+    def test_clean_start_uses_initial_inventory_and_rejects_incompatible_inputs(self):
+        env = {'GITHUB_RUN_ID': '1', 'GITHUB_RUN_ATTEMPT': '1', 'RELEASE_ACTION': 'deploy',
+               'RELEASE_SERVICES': 'all', 'RELEASE_CLEAN_START': 'true'}
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / 'state.json'
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(execute('init', path), 0)
+                state = json.loads(path.read_text())
+                self.assertTrue(state['first_cutover'])
+                self.assertTrue(state['clean_start'])
+            for invalid in ({'RELEASE_FIRST_CUTOVER': 'true'}, {'RELEASE_SERVICES': 'identity'},
+                            {'RELEASE_ACTION': 'rollback'}):
+                with patch.dict(os.environ, {**env, **invalid}, clear=True), self.assertRaises(ReleaseError):
+                    execute('init', path)
 
     def test_success_requires_full_observed_inventory_and_completed_checks(self):
         self.assertEqual(result_outcome(['identity'], self.desired, self.desired, self.checks, 0), 'success')

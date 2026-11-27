@@ -15,6 +15,10 @@ on:
         description: 'Первичное переключение с монолита с проверенной резервной копией'
         default: false
         type: boolean
+      clean_start:
+        description: 'Первый запуск на отдельной пустой БД с проверенной копией монолита'
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       action:
@@ -55,6 +59,7 @@ jobs:
       RELEASE_TARGET_SHA: ${{ inputs.target_sha }}
       RELEASE_SERVICES: ${{ inputs.services || 'all' }}
       RELEASE_FIRST_CUTOVER: ${{ inputs.first_cutover && 'true' || 'false' }}
+      RELEASE_CLEAN_START: ${{ inputs.clean_start && 'true' || 'false' }}
       PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
       ANSIBLE_HOST_KEY_CHECKING: "True"
       ANSIBLE_SSH_ARGS: -C -o ControlMaster=auto -o ControlPersist=60s -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
@@ -89,7 +94,7 @@ jobs:
       - name: Validate monolith operation inputs
         if: steps.source.outputs.kind == 'monolith'
         run: |
-          [[ "$RELEASE_SERVICES" == all && "$RELEASE_FIRST_CUTOVER" == false ]]
+          [[ "$RELEASE_SERVICES" == all && "$RELEASE_FIRST_CUTOVER" == false && "$RELEASE_CLEAN_START" == false ]]
       - name: Initialize operation report
         id: init
         run: python3 scripts/release/release.py init
