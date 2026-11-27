@@ -31,8 +31,8 @@ func TestBatchUsersExplicitMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	byID = &identityv1.UsersResponse{}
-	if err := proto.Unmarshal(wire, byID); err != nil {
-		t.Fatal(err)
+	if decodeErr := proto.Unmarshal(wire, byID); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	if byID.Results[0].GetUser().GetAvatarUrl() != "https://cdn.example.com/avatars/42.png" || byID.Results[0].GetUser().GetId() != 42 || !byID.Results[1].GetNotFound() || byID.Results[1].RequestedId != 99 || byID.Results[2].GetUser().GetId() != 42 {
 		t.Fatal("incorrect ID outcomes")
