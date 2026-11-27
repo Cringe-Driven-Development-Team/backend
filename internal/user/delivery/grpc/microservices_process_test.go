@@ -188,24 +188,24 @@ func TestMicroservicesProcesses(t *testing.T) {
 	assignAgent(ctx, t, pki, agentRPC, session, agent)
 
 	serverID := uuid.New()
-	if _, err := db.Exec(ctx, `INSERT INTO environments.runtime_pool(id,state,server_id,image_id,agent_version) VALUES($1,'READY',$2,'test','test')`, uuid.New(), serverID.String()); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(ctx, `INSERT INTO environments.runtime_pool(id,state,server_id,image_id,agent_version) VALUES($1,'READY',$2,'test','test')`, uuid.New(), serverID.String()); execErr != nil {
+		t.Fatal(execErr)
 	}
 	inventory := "http://" + envAdmin + "/metrics"
 	checkScrape(ctx, t, http.DefaultClient, inventory, "cellestial_runtime_inventory_available 1",
 		fmt.Sprintf(`cellestial_runtime_target_info{server_id="%s",state="warm"} 1`, serverID))
 
 	seedRuntime(ctx, t, db, session, profile.ID, notebook.ID)
-	if _, err := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); execErr != nil {
+		t.Fatal(execErr)
 	}
 	checkScrape(ctx, t, http.DefaultClient, inventory,
 		fmt.Sprintf(`cellestial_runtime_target_info{server_id="%s",state="active"} 1`, serverID))
-	if _, err := db.Exec(ctx, `UPDATE environments.runtime_pool SET state='CLAIMED', session_id=$1 WHERE server_id=$2`, session, serverID.String()); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_pool SET state='CLAIMED', session_id=$1 WHERE server_id=$2`, session, serverID.String()); execErr != nil {
+		t.Fatal(execErr)
 	}
-	if _, err := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=NULL WHERE session_id=$1`, session); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=NULL WHERE session_id=$1`, session); execErr != nil {
+		t.Fatal(execErr)
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, inventory, nil)
 	scrape, err := http.DefaultClient.Do(req)
@@ -219,8 +219,8 @@ func TestMicroservicesProcesses(t *testing.T) {
 		bytes.Contains(data, []byte(serverID.String())) {
 		t.Fatalf("deleted VPS is still expected or inventory failed: %v", readErr)
 	}
-	if _, err := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); execErr != nil {
+		t.Fatal(execErr)
 	}
 
 	sid := "/runtime-sessions/" + session.String()
