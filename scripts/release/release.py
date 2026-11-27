@@ -346,9 +346,12 @@ def source_guard(action):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=('init', 'prepare', 'begin', 'switch', 'health', 'finalize', 'report'))
+    parser.add_argument('command', choices=('init', 'prepare', 'begin', 'switch', 'health', 'observation', 'finalize', 'report'))
     args = parser.parse_args(argv)
     path = Path(os.environ['RELEASE_STATE_FILE'])
+    if os.environ.get('RELEASE_MODE') == 'services':
+        from service_deploy import execute
+        return execute(args.command, path)
     api = None
     if args.command == 'init':
         save(path, initial_state(os.environ['RELEASE_ACTION'], os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT']))

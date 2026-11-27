@@ -12,7 +12,12 @@ proto_include=$("$proto_python" -c 'from pathlib import Path; import grpc_tools;
 output_dir=${PROTO_OUTPUT_DIR:-.}
 python_dir="$output_dir/runtime-agent/src/runtime_agent/generated"
 mkdir -p "$output_dir" "$python_dir"
-mapfile -t sources < <(rg --files proto -g '*.proto' | LC_ALL=C sort)
+find proto -type f -name '*.proto' -print0 | LC_ALL=C sort -z > "$tool_dir/sources"
+mapfile -d '' -t sources < "$tool_dir/sources"
+if (( ${#sources[@]} == 0 )); then
+    echo 'No .proto files found under proto/' >&2
+    exit 1
+fi
 module=github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development
 "$proto_python" -m grpc_tools.protoc -I proto -I "$proto_include" \
     --plugin="protoc-gen-go=$tool_dir/protoc-gen-go" \

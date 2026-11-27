@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 import sys
@@ -12,7 +13,110 @@ from test_release import r, FakeGitHub, A, D
 
 ROOT = Path(__file__).resolve().parents[3]
 
+
+def workflow_block(source, heading):
+    """Выделяет job или step по отступу заголовка."""
+    lines = source.splitlines()
+    start = lines.index(heading) + 1
+    indent = len(heading) - len(heading.lstrip())
+    end = next(
+        (index for index in range(start, len(lines))
+         if lines[index].strip() and not lines[index].startswith(' ' * (indent + 1))),
+        len(lines),
+    )
+    return textwrap.dedent('\n'.join(lines[start:end]))
+
+
 class Workflow(unittest.TestCase):
+    def test_backend_release_path_uses_checked_out_source_on_trusted_push(self):
+        ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        docker = workflow_block(ci, '  docker:')
+        guard_name = '  - name: Check source for monolith release'
+        gate = "steps.source.outputs.kind == 'monolith'"
+        release_steps = [
+            'Reuse published release or draft checkpoint', 'Login to GHCR',
+            'Verify public package and anonymous digest access', 'Publish verified immutable Release',
+        ]
+        with self.subTest('production steps use the same gate'):
+            for step in release_steps:
+                self.assertIn(f'if: {gate}', workflow_block(docker, f'  - name: {step}').splitlines())
+            export = workflow_block(docker, '  - name: Export deployment image reference')
+            self.assertIn(f"if: {gate} && steps.preflight.outputs.build != 'false'", export.splitlines())
+            build = workflow_block(docker, '  - name: Build and publish')
+            self.assertIn("if: steps.source.outputs.kind != 'services' && steps.preflight.outputs.build != 'false'", build.splitlines())
+            self.assertIn(f'  push: ${{{{ {gate} }}}}', build.splitlines())
+            metadata = workflow_block(docker, '  - name: Image metadata')
+            self.assertIn(f'type=raw,value=main,enable=${{{{ {gate} }}}}', metadata)
+            self.assertIn('  source_kind: ${{ steps.source.outputs.kind }}', docker.splitlines())
+            self.assertIn('  release_tag: ${{ steps.preflight.outputs.release_tag }}', docker.splitlines())
+            dispatch = workflow_block(ci, '  dispatch-cd:')
+            self.assertIn('needs: docker', dispatch.splitlines())
+            self.assertIn("if: needs.docker.outputs.source_kind == 'monolith' "
+                          "&& needs.docker.outputs.release_tag != '' && vars.PRODUCTION_ENABLED == 'true'",
+                          dispatch.splitlines())
+
+        with self.subTest('check builds and independent jobs'):
+            self.assertNotRegex(docker, r'(?m)^if:')
+            course = workflow_block(ci, '  course-sync:')
+            self.assertIn('needs: [lint, test, docker, service-checks]', course.splitlines())
+            self.assertNotIn('monolith_release', course)
+            kernel = workflow_block(ci, '  kernel-images:')
+            self.assertIn("push: ${{ env.PUBLISH == 'true' }}", kernel)
+            self.assertNotIn('monolith_release', kernel)
+
+        guard = workflow_block(docker, guard_name)
+        self.assertLess(docker.index('  - uses: actions/checkout@'), docker.index(guard_name))
+        self.assertIn('id: source', guard.splitlines())
+        self.assertIn(f"if: github.repository == '{r.REPOSITORY}' && github.event_name == 'push' "
+                      "&& github.ref == 'refs/heads/main'", guard.splitlines())
+        self.assertIn('run: bash scripts/classify-backend-source.sh', guard.splitlines())
+
+    def test_backend_source_classification_requires_complete_service_set(self):
+        script = ROOT / 'scripts/classify-backend-source.sh'
+        fake_git = """
+git() {
+    case "$*" in
+        "rev-parse --verify HEAD") printf '%s\\n' "$CHECKOUT_SHA" ;;
+        "ls-tree --name-only $CHECKOUT_SHA -- "*)
+            if [[ -n "$SERVICE_ENTRYPOINTS" ]]; then
+                printf '%s\\n' "$SERVICE_ENTRYPOINTS"
+            fi
+            ;;
+        *) return 1 ;;
+    esac
+}
+"""
+        complete = '\n'.join([
+            'cmd/identity/main.go', 'cmd/workspace/main.go', 'cmd/environments/main.go',
+        ])
+        for entrypoints, source_sha, expected, exit_code in [
+            ('', A, 'kind=monolith\n', 0),
+            (complete, A, 'kind=services\n', 0),
+            ('cmd/identity/main.go', A, '', 1),
+            ('cmd/workspace/main.go', A, '', 1),
+            ('cmd/environments/main.go', A, '', 1),
+            ('cmd/identity/main.go\ncmd/workspace/main.go', A, '', 1),
+            ('', '0' * 40, '', 1),
+        ]:
+            with self.subTest(entrypoints=entrypoints, source_sha=source_sha), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / 'outputs'
+                env = dict(os.environ, GITHUB_SHA=source_sha, CHECKOUT_SHA=A,
+                           SERVICE_ENTRYPOINTS=entrypoints, GITHUB_OUTPUT=str(output))
+                result = subprocess.run(['bash', '-c', fake_git + '\nsource "$1"', '_', str(script)],
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, exit_code, result.stderr)
+                self.assertEqual(output.read_text() if output.exists() else '', expected)
+
+    def test_service_checks_wait_for_complete_source(self):
+        source = (ROOT / '.github/workflows/service-checks.yml').read_text()
+        detection = workflow_block(source, '  source:')
+        self.assertIn('run: bash scripts/classify-backend-source.sh', detection)
+        for job in ['images', 'smoke']:
+            with self.subTest(job=job):
+                lines = workflow_block(source, f'  {job}:').splitlines()
+                self.assertIn('needs: source', lines)
+                self.assertIn("if: needs.source.outputs.kind == 'services'", lines)
+
     def test_invalid_target_and_history_failure_never_call_docker_or_ssh(self):
         for target, history_error in [('main', False), (A, True)]:
             with self.subTest(target=target, history_error=history_error), tempfile.TemporaryDirectory() as d:
@@ -102,7 +206,8 @@ class Workflow(unittest.TestCase):
     def test_dispatch_failure_preserves_ready_release_and_never_claims_deployment_success(self):
         import textwrap
         source=(ROOT/'.github/workflows/ci.yml').read_text()
-        command=textwrap.dedent(source.split('      - name: Dispatch prepared Release to CD\n',1)[1].split('        run: |\n',1)[1].split('\n  course-sync:',1)[0])
+        step = workflow_block(workflow_block(source, '  dispatch-cd:'), '  - name: Dispatch prepared Release to CD')
+        command = textwrap.dedent(step.split('run: |\n', 1)[1])
         for code in (0,1):
             with tempfile.TemporaryDirectory() as d:
                 env=dict(os.environ,GITHUB_STEP_SUMMARY=d+'/summary',GITHUB_REPOSITORY=r.REPOSITORY,RELEASE_TAG='release-'+A)

@@ -8,6 +8,10 @@ on:
         required: false
         default: ''
         type: string
+      services:
+        description: 'all или список identity,workspace,environments через запятую'
+        default: all
+        type: string
 
 permissions:
   contents: read
@@ -23,4 +27,5 @@ jobs:
     with:
       action: rollback
       target_sha: ${{ inputs.sha }}
+      services: ${{ inputs.services }}
     secrets: inherit

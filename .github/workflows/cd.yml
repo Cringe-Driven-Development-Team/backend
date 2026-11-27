@@ -7,6 +7,14 @@ on:
         description: 'Подготовленный неизменяемый выпуск release-<полный SHA>; для старых версий используйте Rollback'
         required: true
         type: string
+      services:
+        description: 'all или список identity,workspace,environments через запятую'
+        default: all
+        type: string
+      first_cutover:
+        description: 'Первичное переключение с монолита с проверенной резервной копией'
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       action:
@@ -16,6 +24,10 @@ on:
       target_sha:
         description: Full target SHA; optional for automatic rollback selection
         default: ''
+        type: string
+      services:
+        description: 'all или список сервисов через запятую'
+        default: all
         type: string
 
 jobs:
@@ -41,6 +53,8 @@ jobs:
       RELEASE_ACTION: ${{ inputs.action || 'deploy' }}
       RELEASE_TAG: ${{ inputs.release_tag }}
       RELEASE_TARGET_SHA: ${{ inputs.target_sha }}
+      RELEASE_SERVICES: ${{ inputs.services || 'all' }}
+      RELEASE_FIRST_CUTOVER: ${{ inputs.first_cutover && 'true' || 'false' }}
       PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
       ANSIBLE_HOST_KEY_CHECKING: "True"
       ANSIBLE_SSH_ARGS: -C -o ControlMaster=auto -o ControlPersist=60s -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
@@ -64,6 +78,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Select deployment format
+        id: source
+        run: bash scripts/classify-backend-source.sh
+      - name: Select microservice orchestration
+        if: steps.source.outputs.kind == 'services'
+        run: |
+          echo 'RELEASE_MODE=services' >> "$GITHUB_ENV"
+          echo "RELEASE_ARTIFACT_FILE=$RUNNER_TEMP/deployment-result.json" >> "$GITHUB_ENV"
+      - name: Validate monolith operation inputs
+        if: steps.source.outputs.kind == 'monolith'
+        run: |
+          [[ "$RELEASE_SERVICES" == all && "$RELEASE_FIRST_CUTOVER" == false ]]
       - name: Initialize operation report
         id: init
         run: python3 scripts/release/release.py init
@@ -124,10 +150,23 @@ jobs:
       - name: Health check
         id: health
         run: python3 scripts/release/release.py health
+      - name: Save observed microservice versions
+        id: observation
+        if: always() && steps.init.outcome == 'success' && steps.source.outputs.kind == 'services'
+        run: python3 scripts/release/release.py observation
+      - name: Upload deployment evidence
+        id: artifact
+        if: always() && steps.observation.outputs.upload == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-deployment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.RELEASE_ARTIFACT_FILE }}
+          if-no-files-found: error
       - name: Record final Deployment status
         if: always() && steps.init.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_ARTIFACT_UPLOADED: ${{ steps.artifact.outcome }}
         run: python3 scripts/release/release.py finalize
       - name: Release Summary
         if: always() && steps.init.outcome == 'success'
