@@ -277,6 +277,37 @@ else:
 
 
 @pytest.mark.docker
+async def test_docker_monitoring_reports_kernel_and_tmpfs(docker_settings):
+    """Измерьте реальный cgroup и заполнение /workspace через host adapter."""
+    from runtime_agent.monitoring import KernelSampler
+    from runtime_agent.rpc.metrics import RuntimeResources
+
+    app = create_app(docker_settings)
+    async with app.router.lifespan_context(app):
+        agent = app.state.agent
+        resources = RuntimeResources()
+        sampler = KernelSampler(agent.containers, resources)
+        agent.containers.observe_removal = sampler.observe_removal
+        sid, runtime = await new_session(agent)
+        await asyncio.to_thread(sampler._sample)
+        initial, storage = resources.snapshot
+        assert storage == "tmpfs"
+        assert initial["workspace_quota_bytes"] == 256 * 1024**2
+        assert initial["cpu_limit_cores"] == 1
+        assert initial["memory_limit_bytes"] == 1024**3
+        agent.accept(command("gauge", "open('/workspace/probe', 'wb').write(b'x' * (8 << 20))"))
+        assert (await completed(agent, sid, "gauge"))["state"] == "SUCCEEDED"
+        await asyncio.to_thread(sampler._sample)
+        loaded, _ = resources.snapshot
+        assert loaded["workspace_used_bytes"] - initial["workspace_used_bytes"] == 8 << 20
+        assert loaded["cpu_seconds"] > initial["cpu_seconds"]
+        assert 0 < loaded["memory_usage_bytes"] <= loaded["memory_limit_bytes"]
+        await runtime.finish()
+        assert "workspace_used_bytes" not in resources.snapshot[0]
+        assert "memory_usage_bytes" not in resources.snapshot[0]
+
+
+@pytest.mark.docker
 async def test_docker_oom_stops_runtime(docker_settings):
     app = create_app(docker_settings)
     async with app.router.lifespan_context(app):

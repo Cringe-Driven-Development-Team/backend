@@ -18,6 +18,7 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/usecase"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
@@ -218,20 +219,27 @@ func (h *WorkspaceFileHandler) download(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(status)
 	controller := http.NewResponseController(w)
 	buf := make([]byte, 64<<10)
+	var received uint64
 	for {
 		if err = controller.SetWriteDeadline(time.Now().Add(time.Minute)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			middleware.MarkResponseFailure(r)
 			return nil
 		}
 		n, readErr := download.Body.Read(buf)
 		if n > 0 {
+			received += uint64(n)
 			if _, err = w.Write(buf[:n]); err != nil {
 				return nil
 			}
 			if err = controller.Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+				middleware.MarkResponseFailure(r)
 				return nil
 			}
 		}
 		if readErr != nil {
+			if !errors.Is(readErr, io.EOF) || received != download.Length {
+				middleware.MarkResponseFailure(r)
+			}
 			return nil
 		}
 	}

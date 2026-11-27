@@ -28,8 +28,79 @@ Release — `contents: write`; CD/Ansible GHCR credentials не получают
 
 ## Автоматическая подготовка выпуска
 
-Только push в `main` после обязательных проверок публикует production Release
-`release-<полный 40-hex SHA>`. PR и ручной CI не публикуют backend production-выпуск.
+CI классифицирует исходники по дереву Git проверяемого SHA. Полный набор
+`cmd/identity/main.go`, `cmd/workspace/main.go`, `cmd/environments/main.go`
+выбирает выпуск микросервисов. Неполный набор точек входа блокирует выпуск.
+
+### Микросервисы и manifest v2
+
+Job Service checks запускается из CI для PR, push в `main` и ручной проверки.
+Матрица собирает три образа из одного SHA, проверяет их упаковку и OCI labels.
+Отдельный job проверяет воспроизводимость OpenAPI и Protobuf и прогоняет HTTP/gRPC
+smoke с тестовым mTLS, PostgreSQL и Redis.
+
+Каждый образ содержит запускаемый сервис и `migrate`. Образ Identity также
+содержит `identity-admin`. В Environments входят provisioning tools,
+wheel агента с checksum и оба systemd unit-файла. Локально на исходниках
+трёх сервисов упаковку можно проверить так:
+
+```bash
+for service in identity workspace environments; do
+  docker build -f build/services.Dockerfile --target "$service" -t "cellestial-$service:local" .
+  bash scripts/check-service-image.sh "$service" "cellestial-$service:local"
+done
+```
+
+После trusted push в `main` публикация v2 ждёт Service checks, lint, unit/integration
+tests, контракты и проверку реального Python kernel. Для каждого сервиса
+используется отдельный GHCR package `cellestial-identity`, `cellestial-workspace`
+или `cellestial-environments`. При первом выпуске GHCR может создать их как
+закрытые. В настройках каждого package привяжите его к репозиторию backend,
+разрешите workflow запись и установите Public, затем повторите CI.
+Путь выпуска проверяет анонимный pull по digest с пустым Docker config.
+
+Тег выпуска остаётся `release-<полный backend SHA>`. Для образов создаются теги
+`sha-<полный backend SHA>`. При повторном CI доступный тег используется как есть,
+а образ проверяется по digest, исходному SHA и OCI labels. Версии runtime-agent и
+kernel проверяются по конфигурации образа Environments. Идентичность протокола
+строится из дерева файлов Protobuf и серверных контрактов OpenAPI.
+Релиз v2 содержит:
+
+- `release.json` с `format_version: 2`, `source_sha`, `ci_url`,
+  `protocol_revision` и картой `services`. Для каждого сервиса указаны digest-ref,
+  исходный SHA, платформа, image ID, версия схемы, имя, размер и SHA-256 архива.
+  Environments дополнительно фиксирует версию агента и kernel digest-ref.
+- `identity-image.tar.gz`, `workspace-image.tar.gz` и `environments-image.tar.gz`.
+  Перед загрузкой каждого архива CI сверяет image ID после `docker save` и
+  `docker load`.
+- `SHA256SUMS` для трёх архивов и точных байтов manifest.
+
+CI сериализует выпуск одного SHA. Draft получает manifest первым. Повтор
+скачивает загруженные файлы и добавляет только отсутствующие. Восстановленный
+архив должен совпасть с метаданными draft. Перед публикацией все файлы
+скачиваются обратно и проверяются, затем CI подтверждает immutability выпуска.
+Для первого переключения полный выпуск v2 явно выбирает оператор в CD.
+
+Для проверки и загрузки сохранённых образов:
+
+```sh
+gh release download <tag> -R Cringe-Driven-Development-Team/backend
+sha256sum -c SHA256SUMS
+for service in identity workspace environments; do
+  docker load -i "$service-image.tar.gz"
+done
+```
+
+Храните immutable release assets и digest из текущего production inventory,
+подтверждённых целей отката и работающих runtime-VPS. В эту проверку входят
+версии агентского артефакта и Python kernel. Перед очисткой кандидатов сверяйте
+ссылки по manifest, истории Deployment и инвентарю runtime-VPS.
+
+### Выпуск монолита до переключения
+
+Production Release `release-<полный 40-hex SHA>` для монолита публикуется
+после push в `main` и успешных обязательных проверок. PR и ручной CI
+пропускают публикацию backend production-выпуска.
 Образ имеет теги `sha-<SHA>` и `main`, без `latest`; источник выкатки — digest из manifest.
 Архив получается через pull опубликованного digest → docker save → gzip, без второй сборки.
 Перед публикацией архив загружается через docker load с проверкой image ID.
@@ -62,7 +133,7 @@ docker load -i backend-image.tar.gz
 
 ## Самостоятельный CD и повторное применение infra
 
-После публикации CI вызывает `workflow_dispatch` workflow `CD` на `main`, передавая
+После публикации выпуска монолита CI вызывает `workflow_dispatch` workflow `CD` на `main`, передавая
 конкретный `release_tag`. Вызывающая job имеет только `contents: read`, `actions: write`.
 На `release: published` автоматизация не полагается: публикация через `GITHUB_TOKEN`
 не запускает следующий workflow. Ошибка dispatch — отдельная ошибка CI job;
@@ -88,6 +159,39 @@ manifest, контрольные суммы скачанных файлов, р�
 применяя свежие переменные, включая `runtime_extra_env`. Infra шаблонизирует их
 в `.env` и Compose, а Compose пересоздаёт API при изменении окружения.
 Совпадение digest не является условием пропуска playbook.
+
+### CD и Rollback микросервисов
+
+После появления микросервисов в `main` CD принимает manifest v2 и параметр
+`services`. Значение `all` выбирает полный комплект. Для выборочной
+выкладки укажи имена через запятую, например `identity,workspace`.
+Соседние сервисы остаются на наблюдаемых digest. Выборочный выпуск проходит
+preflight при совпадении ревизии HTTP/gRPC контрактов с соседями. Если ревизия
+поменялась, требуется полный набор и проверка BFF в общем контуре.
+
+Первое переключение запускают через CD с `first_cutover=true` и
+`services=all` после подготовки резервной копии и проверки runtime-VPS
+по инфраструктурному runbook. Откат первой миграции возвращает данные и
+запуск монолита по этому runbook. Штатный Rollback выбирает более ранний
+подтверждённый набор или версию выбранных сервисов. Если требуется понизить
+версию схемы, восстановление выполняется по runbook.
+
+Для согласованного первого запуска без старых записей выберите
+`services=all` и `clean_start=true`, оставив `first_cutover=false`.
+Используйте выпуск с поддержкой миграций от владельца заранее созданной схемы.
+Ansible создаст три схемы в отдельной PostgreSQL базе на VPS2 и использует
+отдельный индекс Redis. Для запуска требуются подтверждённый `cutover.json`
+и проверенные копии PostgreSQL и Redis. После проверки первого запуска
+повторите полный CD с обоими выключенными флагами, чтобы включить воркеры.
+Подготовка и возврат описаны в [инфраструктурном runbook](https://github.com/Cringe-Driven-Development-Team/infra/blob/main/RUNBOOK.md#первый-запуск-с-пустыми-таблицами).
+
+Для CD и Rollback действует одна очередь `backend-production`. Перед
+переключением проверяются доступность выбранных digest, их OCI provenance и
+соответствие набора фактическому состоянию VPS. Каждая попытка сохраняет
+`deployment-result.json` в отдельный GitHub artifact и после его загрузки
+обновляет Deployment. В Summary указаны выбранные и наблюдавшиеся версии,
+проверки каждого сервиса и ссылки на сравнение SHA. Потеря наблюдения или
+незавершённая попытка требуют сверки с VPS перед следующей операцией.
 
 ### Как найти текущий подтверждённый Release
 

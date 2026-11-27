@@ -32,6 +32,9 @@ func (r *NotebookRepository) Rename(ctx context.Context, id, ownerID int64, name
 	if err != nil {
 		return domain.Notebook{}, err
 	}
+	if err = readCommentCounts(ctx, tx, &n); err != nil {
+		return domain.Notebook{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Notebook{}, err
 	}

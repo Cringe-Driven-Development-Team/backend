@@ -316,7 +316,7 @@ func TestIdentityService(t *testing.T) {
 			t.Fatalf("admin %s=%d", path, r.StatusCode)
 		}
 		if path == "/metrics" {
-			for _, name := range []string{"identity_build_info", "identity_http_requests_total", "identity_rpc_requests_total", "identity_db_acquired_connections", "go_goroutines", "process_cpu_seconds_total"} {
+			for _, name := range []string{"identity_build_info", "cellestial_http_requests_total", "cellestial_grpc_calls_total", "identity_db_acquired_connections", "go_goroutines", "process_cpu_seconds_total"} {
 				if !strings.Contains(string(raw), name) {
 					t.Errorf("missing metric %s", name)
 				}

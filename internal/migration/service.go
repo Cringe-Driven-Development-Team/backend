@@ -65,8 +65,14 @@ func Up(ctx context.Context, pool *pgxpool.Pool, s Service) error {
 	if err != nil {
 		return err
 	}
-	if _, err = pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+string(s)); err != nil {
+	var exists bool
+	if err = pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname=$1)", string(s)).Scan(&exists); err != nil {
 		return err
+	}
+	if !exists {
+		if _, err = pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+string(s)); err != nil {
+			return err
+		}
 	}
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
