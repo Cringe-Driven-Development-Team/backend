@@ -147,8 +147,7 @@ func toTokenPair(sess usecase.Session) (api.TokenPair, error) {
 // toAPIUser преобразует пользователя домена в публичный профиль.
 func (h *Handler) toAPIUser(u domain.User) api.User {
 	result := api.User{Id: u.ID, Login: u.Login, Has2fa: u.Has2FA}
-	if u.AvatarKey != "" {
-		v := h.avatarURL + "/" + u.AvatarKey
+	if v := domain.PublicAvatarURL(h.avatarURL, u.AvatarKey); v != "" {
 		result.AvatarUrl = &v
 	}
 	return result

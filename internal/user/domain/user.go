@@ -11,6 +11,7 @@ type User struct {
 
 // UserSuggestion contains only public identity fields.
 type UserSuggestion struct {
-	ID    int64
-	Login string
+	AvatarKey string
+	ID        int64
+	Login     string
 }

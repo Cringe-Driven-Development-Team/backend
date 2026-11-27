@@ -40,6 +40,8 @@ message BatchResolveUsersRequest {
 message User {
   int64 id = 1;
   string login = 2;
+  // Публичный URL аватара, пустой при отсутствии аватара.
+  string avatar_url = 3;
 }
 message UsersResponse {
   // Уникальные найденные пользователи в порядке ID. Отсутствующие ссылки пропускаются.

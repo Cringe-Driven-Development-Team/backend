@@ -6189,7 +6189,8 @@
                       "cell_id": "cell-1",
                       "author": {
                         "id": 2,
-                        "login": "reader"
+                        "login": "reader",
+                        "avatar_url": null
                       },
                       "text": "Комментарий\nк ячейке",
                       "created_at": "2026-11-22T12:00:00.123456Z",
@@ -6438,7 +6439,8 @@
                   "cell_id": "cell-1",
                   "author": {
                     "id": 2,
-                    "login": "reader"
+                    "login": "reader",
+                    "avatar_url": null
                   },
                   "text": "Комментарий\nк ячейке",
                   "created_at": "2026-11-22T12:00:00.123456Z",
@@ -6710,7 +6712,8 @@
                   "cell_id": "cell-1",
                   "author": {
                     "id": 2,
-                    "login": "reader"
+                    "login": "reader",
+                    "avatar_url": null
                   },
                   "text": "Комментарий\nк ячейке",
                   "created_at": "2026-11-22T12:00:00.123456Z",
@@ -8475,11 +8478,20 @@
           },
           "login": {
             "type": "string"
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Публичный URL аватара автора, как в GET /users/me. null, если аватар не загружен."
           }
         },
         "required": [
           "id",
-          "login"
+          "login",
+          "avatar_url"
         ],
         "additionalProperties": false
       },

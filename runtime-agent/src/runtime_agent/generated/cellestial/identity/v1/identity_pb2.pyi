@@ -40,12 +40,14 @@ class BatchResolveUsersRequest(_message.Message):
     def __init__(self, logins: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class User(_message.Message):
-    __slots__ = ("id", "login")
+    __slots__ = ("id", "login", "avatar_url")
     ID_FIELD_NUMBER: _ClassVar[int]
     LOGIN_FIELD_NUMBER: _ClassVar[int]
+    AVATAR_URL_FIELD_NUMBER: _ClassVar[int]
     id: int
     login: str
-    def __init__(self, id: _Optional[int] = ..., login: _Optional[str] = ...) -> None: ...
+    avatar_url: str
+    def __init__(self, id: _Optional[int] = ..., login: _Optional[str] = ..., avatar_url: _Optional[str] = ...) -> None: ...
 
 class UsersResponse(_message.Message):
     __slots__ = ("users", "results")

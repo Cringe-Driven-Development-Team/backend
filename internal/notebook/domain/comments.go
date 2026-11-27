@@ -2,10 +2,11 @@ package domain
 
 import "time"
 
-// CommentAuthor содержит стабильный ID автора и его текущий логин.
+// CommentAuthor содержит стабильный ID автора и его текущие логин и URL аватара.
 type CommentAuthor struct {
-	ID    int64
-	Login string
+	AvatarURL string
+	ID        int64
+	Login     string
 }
 
 // Comment хранит сообщение стены ячейки и права текущего посетителя.

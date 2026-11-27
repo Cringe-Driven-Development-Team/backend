@@ -35,13 +35,13 @@ func identityTLS(c SessionConfig) (*tls.Config, error) {
 }
 
 // newRPCServer разрешает только зарегистрированные методы заданным service identities.
-func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger *slog.Logger, directory grpcdelivery.Directory, healthServer *health.Server, metrics *rpctransport.Metrics, admin grpcdelivery.UserDeletionService) (*grpc.Server, error) {
+func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger *slog.Logger, users *grpcdelivery.UsersServer, healthServer *health.Server, metrics *rpctransport.Metrics, admin grpcdelivery.UserDeletionService) (*grpc.Server, error) {
 	tlsConfig, err := identityTLS(c)
 	if err != nil {
 		return nil, err
 	}
 	allowed := map[string][]string{identityv1.Session_ValidateSession_FullMethodName: {"workspace.internal.cellestial.ru"}}
-	if directory != nil {
+	if users != nil {
 		allowed[identityv1.Users_BatchGetUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru"}
 		allowed[identityv1.Users_BatchResolveUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru"}
 	}
@@ -58,8 +58,8 @@ func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger
 	options = append(options, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	server := grpc.NewServer(options...)
 	identityv1.RegisterSessionServer(server, grpcdelivery.NewSessionServer(verifier))
-	if directory != nil {
-		identityv1.RegisterUsersServer(server, grpcdelivery.NewUsersServer(directory))
+	if users != nil {
+		identityv1.RegisterUsersServer(server, users)
 	}
 	if healthServer != nil {
 		healthv1.RegisterHealthServer(server, healthServer)

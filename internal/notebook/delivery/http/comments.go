@@ -11,7 +11,11 @@ import (
 
 // toAPIComment возвращает только публичные поля с точными UTC-датами.
 func toAPIComment(c domain.Comment) api.Comment {
-	return api.Comment{Id: c.ID, NotebookId: c.NotebookID, CellId: c.CellID, Author: api.CommentAuthor{Id: c.Author.ID, Login: c.Author.Login}, Text: c.Text, CreatedAt: c.CreatedAt.UTC(), UpdatedAt: c.UpdatedAt.UTC(), CanEdit: c.CanEdit, CanDelete: c.CanDelete}
+	var avatarURL *string
+	if c.Author.AvatarURL != "" {
+		avatarURL = &c.Author.AvatarURL
+	}
+	return api.Comment{Id: c.ID, NotebookId: c.NotebookID, CellId: c.CellID, Author: api.CommentAuthor{Id: c.Author.ID, Login: c.Author.Login, AvatarUrl: avatarURL}, Text: c.Text, CreatedAt: c.CreatedAt.UTC(), UpdatedAt: c.UpdatedAt.UTC(), CanEdit: c.CanEdit, CanDelete: c.CanDelete}
 }
 
 // commentError преобразует прикладной отказ в безопасную контрактную ошибку.
