@@ -201,6 +201,28 @@ func TestMicroservicesProcesses(t *testing.T) {
 	}
 	checkScrape(ctx, t, http.DefaultClient, inventory,
 		fmt.Sprintf(`cellestial_runtime_target_info{server_id="%s",state="active"} 1`, serverID))
+	if _, err := db.Exec(ctx, `UPDATE environments.runtime_pool SET state='CLAIMED', session_id=$1 WHERE server_id=$2`, session, serverID.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=NULL WHERE session_id=$1`, session); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, inventory, nil)
+	scrape, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, readErr := io.ReadAll(scrape.Body)
+	_ = scrape.Body.Close()
+	if readErr != nil || scrape.StatusCode != http.StatusOK ||
+		!bytes.Contains(data, []byte("cellestial_runtime_inventory_available 1")) ||
+		bytes.Contains(data, []byte(serverID.String())) {
+		t.Fatalf("deleted VPS is still expected or inventory failed: %v", readErr)
+	}
+	if _, err := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); err != nil {
+		t.Fatal(err)
+	}
+
 	sid := "/runtime-sessions/" + session.String()
 	checkPath := sid + "/workspace/check"
 	processRequest(ctx, t, workspaceHTTP, wsHTTP, "GET", checkPath, testBFFKey, bearer, "", 200)

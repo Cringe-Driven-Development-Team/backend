@@ -23,10 +23,9 @@ const targetsQuery = `
 		SELECT server_id, CASE state
 			WHEN 'READY' THEN 'warm'
 			WHEN 'DELETING' THEN 'deleting'
-			WHEN 'CLAIMED' THEN 'claimed'
 			ELSE 'creating' END AS state, 1 AS priority
 		FROM environments.runtime_pool
-		WHERE NULLIF(server_id, '') IS NOT NULL
+		WHERE NULLIF(server_id, '') IS NOT NULL AND state <> 'CLAIMED'
 	) targets
 	ORDER BY server_id, priority
 `

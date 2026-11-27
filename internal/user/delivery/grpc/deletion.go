@@ -50,6 +50,10 @@ func (s *UserAdministration) GetUserDeletion(ctx context.Context, in *pb.GetUser
 
 func deletionResponse(d usecase.Deletion, err error) (*pb.UserDeletion, error) {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return nil, status.FromContextError(context.DeadlineExceeded).Err()
+	case errors.Is(err, context.Canceled):
+		return nil, status.FromContextError(context.Canceled).Err()
 	case errors.Is(err, usecase.ErrUserNotFound):
 		return nil, status.Error(codes.NotFound, "user or deletion operation not found")
 	case errors.Is(err, usecase.ErrDeletionConflict):
