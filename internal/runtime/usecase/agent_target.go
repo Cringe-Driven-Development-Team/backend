@@ -25,8 +25,6 @@ func AgentDNS(hostID uuid.UUID) string {
 
 // AgentGRPCSettings подключает сертификаты конкретной VPS и текущий fence намерения.
 type AgentGRPCSettings struct {
-	MonitoringScraperIP string
-	MonitoringClientCA  []byte
-	IssueCertificate    func(ip, dnsName string) (cert, key []byte, err error)
-	JobFence            func(context.Context, uuid.UUID) (uint64, error)
+	IssueCertificate func(ip, dnsName string) (cert, key []byte, err error)
+	JobFence         func(context.Context, uuid.UUID) (uint64, error)
 }

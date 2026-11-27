@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -67,7 +66,7 @@ func (r *Readiness) Poll(ctx context.Context, probe func(context.Context) bool) 
 }
 
 // Admin предоставляет отдельные liveness/readiness и scrape.
-func Admin(r *Readiness, registry *prometheus.Registry, metrics *middleware.HTTPMetrics) *http.Server {
+func Admin(r *Readiness, registry *prometheus.Registry) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
@@ -81,13 +80,8 @@ func Admin(r *Readiness, registry *prometheus.Registry, metrics *middleware.HTTP
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{Timeout: 2 * time.Second}))
-	return &http.Server{Handler: ObserveAdmin(mux, metrics), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second,
+	return &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second,
 		WriteTimeout: 3 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
-}
-
-// ObserveAdmin измеряет health и scrape на приватном HTTP-входе.
-func ObserveAdmin(handler http.Handler, metrics *middleware.HTTPMetrics) http.Handler {
-	return middleware.RequestID(middleware.ObserveHTTP(middleware.Recover(handler), nil, metrics, middleware.AdminRoute))
 }
 
 // Registry регистрирует runtime/process, build-info и ограниченные DB-pool показатели сервиса.

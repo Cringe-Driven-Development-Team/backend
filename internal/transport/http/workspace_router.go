@@ -23,7 +23,7 @@ type WorkspaceHandlers struct {
 }
 
 // NewWorkspaceRouter собирает HTTP API Workspace. HTTPS listener проверяет сертификат BFF до маршрутизации.
-func NewWorkspaceRouter(handlers WorkspaceHandlers, verifier authn.SessionVerifier, bffKey string, observe middleware.HTTPObserver, metrics ...*middleware.HTTPMetrics) (http.Handler, error) {
+func NewWorkspaceRouter(handlers WorkspaceHandlers, verifier authn.SessionVerifier, bffKey string, observe middleware.HTTPObserver) (http.Handler, error) {
 	if strings.TrimSpace(bffKey) == "" || verifier == nil || handlers.NotebookHandler == nil || handlers.RuntimeHandler == nil {
 		return nil, errors.New("workspace handlers, session verifier and BFF key are required")
 	}
@@ -53,12 +53,7 @@ func NewWorkspaceRouter(handlers WorkspaceHandlers, verifier authn.SessionVerifi
 	handler := security.S2S(bffKey, BaseURL)(security.AuthenticateWorkspace(verifier)(
 		bulkNotebookTransfers(middleware.CellComments(BaseURL)(middleware.NotebookImport(BaseURL)(bounded))),
 	))
-	var httpMetrics *middleware.HTTPMetrics
-	if len(metrics) > 0 {
-		httpMetrics = metrics[0]
-	}
-	return middleware.RequestID(middleware.ObserveHTTP(middleware.Recover(middleware.NotebookCachePolicy(BaseURL)(handler)), observe, httpMetrics,
-		func(r *http.Request) string { return middleware.RegisteredRoute(router, r) })), nil
+	return middleware.RequestID(middleware.Observe(middleware.Recover(middleware.NotebookCachePolicy(BaseURL)(handler)), observe)), nil
 }
 
 // workspaceFiles регистрирует только разрешённые потоковые маршруты и сохраняет legacy tail для delivery.

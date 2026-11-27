@@ -90,7 +90,7 @@ func (r *Runner) vars(c usecase.HostConfig) (map[string]any, error) {
 	if blocked == nil {
 		blocked = []string{}
 	}
-	vars := map[string]any{
+	return map[string]any{
 		"private_ip":         c.PrivateIP,
 		"server_cert_pem":    string(c.ServerCertPEM),
 		"server_key_pem":     string(c.ServerKeyPEM),
@@ -102,14 +102,7 @@ func (r *Runner) vars(c usecase.HostConfig) (map[string]any, error) {
 		"agent_requirements": r.art.AgentRequirements,
 		"agent_service":      r.art.AgentService,
 		"ca_cert_pem":        string(ca),
-	}
-	if m := c.Monitoring; m != nil {
-		vars["runtime_monitoring"] = map[string]string{
-			"scraper_ip": m.ScraperIP, "server_cert": string(m.ServerCertPEM),
-			"server_key": string(m.ServerKeyPEM), "client_ca": string(m.ClientCAPEM),
-		}
-	}
-	return vars, nil
+	}, nil
 }
 
 // writeJSON сохраняет переменные запуска в JSON-файл.

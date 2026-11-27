@@ -84,19 +84,18 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 		return nil, errors.New("invalid Identity TOTP configuration")
 	}
 	uc := usecase.NewUserUsecase(repo, store, tokens, security.PasswordHasher{}, security.RefreshTokens{}, c.RefreshTTL, usecase.WithTwoFactor(totp, authredis.NewAttemptLimiter(s.redis, "", c.RedisTimeout)), usecase.WithActiveAccounts(deletions))
-	metrics := newServiceMetrics(c.Version, s.pool)
-	rpcMetrics := rpctransport.NewMetrics(metrics.registry)
-	s3, e := s3client.NewClient(startup, observability.NewHTTPClientMetrics(metrics.registry))
+	s3, e := s3client.NewClient(startup)
 	if e != nil {
 		return nil, errors.New("cannot initialize Identity avatar storage")
 	}
 	avatarStorage := avatars3.NewStorage(s3, c.AvatarsBucket)
 	avatars := usecase.NewAvatarUsecase(repo, avatarStorage, sanitizeAvatar)
 	access := usecase.GuardedAccessSessions{Sessions: store, Accounts: deletions}
-	handler, e := userdelivery.NewIdentityRouter(userdelivery.NewHandler(uc, userdelivery.WithProfile(avatars, c.AvatarsPublicURL)), tokens, access, c.BFFAPIKey, metrics.middleware)
+	handler, e := userdelivery.NewIdentityRouter(userdelivery.NewHandler(uc, userdelivery.WithProfile(avatars, c.AvatarsPublicURL)), tokens, access, c.BFFAPIKey)
 	if e != nil {
 		return nil, errors.New("cannot initialize Identity HTTP router")
 	}
+	metrics := newServiceMetrics(c.Version, s.pool)
 	tlsConfig, e := mtls.HTTPServerConfig(mtls.Config{CertFile: c.TLSCertFile, KeyFile: c.TLSKeyFile, CAFile: c.TLSCAFile}, "bff.internal.cellestial.ru")
 	if e != nil {
 		return nil, e
@@ -105,7 +104,7 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 		TLS: mtls.Config{CertFile: c.TLSCertFile, KeyFile: c.TLSKeyFile, CAFile: c.TLSCAFile}, ServerName: "workspace.internal.cellestial.ru",
 		Service: "identity", Version: c.Version, Logger: logger, Timeout: 5 * time.Second,
 		Methods: map[string]rpctransport.MethodPolicy{workspacev1.UserCleanup_BeginUserCleanup_FullMethodName: {Retry: true}},
-		Metrics: rpcMetrics,
+		Metrics: rpctransport.NewMetrics(metrics.registry, "identity_to_workspace"),
 	})
 	if e != nil {
 		return nil, e
@@ -120,9 +119,9 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 		defer cancel()
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	})
-	s.http = &http.Server{Handler: bounded, TLSConfig: tlsConfig, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: c.HTTPTimeout, WriteTimeout: c.HTTPTimeout, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
+	s.http = &http.Server{Handler: metrics.middleware(bounded), TLSConfig: tlsConfig, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: c.HTTPTimeout, WriteTimeout: c.HTTPTimeout, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
 	s.health = health.NewServer()
-	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, usecase.NewDirectory(repo), s.health, rpcMetrics, s.deletions)
+	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, usecase.NewDirectory(repo), s.health, rpctransport.NewMetrics(metrics.registry, "identity"), s.deletions)
 	if e != nil {
 		return nil, e
 	}
@@ -136,7 +135,7 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 		w.WriteHeader(http.StatusOK)
 	})
 	admin.Handle("GET /metrics", promhttp.HandlerFor(metrics.registry, promhttp.HandlerOpts{Timeout: 2 * time.Second}))
-	s.admin = &http.Server{Handler: lifecycle.ObserveAdmin(admin, metrics.http), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
+	s.admin = &http.Server{Handler: admin, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
 	return s, nil
 }
 

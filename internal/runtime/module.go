@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agent"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agentrpc"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/ansible"
@@ -107,7 +106,7 @@ type Independent struct {
 }
 
 // BuildIndependent сохраняет исходный provisioning, переводя команды хоста на gRPC.
-func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool, dialer *agentrpc.Dialer, metrics ...*observability.HTTPClientMetrics) (Independent, error) {
+func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool, dialer *agentrpc.Dialer) (Independent, error) {
 	if cfg.Provider == "fake" {
 		p, err := assemble(ctx, cfg, pool)
 		if err != nil {
@@ -118,23 +117,12 @@ func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpo
 	if cfg.Provider != "openstack" {
 		return Independent{}, errors.New("runtime: invalid provider")
 	}
-	var monitoringCA []byte
-	if cfg.MonitoringClientCAFile != "" {
-		var err error
-		monitoringCA, err = os.ReadFile(cfg.MonitoringClientCAFile)
-		if err != nil || !x509.NewCertPool().AppendCertsFromPEM(monitoringCA) {
-			return Independent{}, errors.New("runtime: cannot load monitoring client CA")
-		}
-	}
-	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true, metrics...)
+	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true)
 	if err != nil {
 		return Independent{}, err
 	}
 	p := parts{cfg: cfg, repo: postgres.NewRepository(pool), cloud: adapters.cloud, host: adapters.host, sec: adapters.secrets}
-	transport := &usecase.AgentGRPCSettings{
-		IssueCertificate: adapters.secrets.IssueAgentCertificate, JobFence: p.repo.AgentJobFence,
-		MonitoringScraperIP: cfg.MonitoringScraperIP, MonitoringClientCA: monitoringCA,
-	}
+	transport := &usecase.AgentGRPCSettings{IssueCertificate: adapters.secrets.IssueAgentCertificate, JobFence: p.repo.AgentJobFence}
 	worker := p.workerWithAgent(ownerName(), workerLease, agentrpc.NewProvisioning(dialer), transport)
 	return Independent{Control: usecase.NewIntentService(p.repo, newService(p.repo, cfg), serviceSettings(cfg)), Targets: p.repo, Worker: worker}, nil
 }
@@ -227,7 +215,7 @@ type openStackAdapters struct {
 }
 
 // buildOpenStack связывает провайдера, конфигуратор, mTLS-клиент и секреты.
-func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock, grpcAgent bool, metrics ...*observability.HTTPClientMetrics) (openStackAdapters, error) {
+func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock, grpcAgent bool) (openStackAdapters, error) {
 	read := func(path string) ([]byte, error) {
 		b, err := os.ReadFile(path)
 		if err != nil {
@@ -276,7 +264,7 @@ func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase
 	if err != nil {
 		return openStackAdapters{}, fmt.Errorf("runtime: ansible: %w", err)
 	}
-	cloud, err := openstack.New(ctx, cfg, metrics...)
+	cloud, err := openstack.New(ctx, cfg)
 	if err != nil {
 		return openStackAdapters{}, fmt.Errorf("runtime: openstack: %w", err)
 	}

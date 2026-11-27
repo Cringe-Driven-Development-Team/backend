@@ -282,28 +282,3 @@ func waitFor(t *testing.T, cond func() bool) {
 	}
 	t.Fatal("condition not met")
 }
-
-// TestRunnerMonitoringVars проверяет имена переменных, которые читает роль infra.
-func TestRunnerMonitoringVars(t *testing.T) {
-	e := setup(t)
-	c := cfg()
-	vars, err := e.runner.vars(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := vars["runtime_monitoring"]; ok {
-		t.Fatal("monitoring must be absent without configuration")
-	}
-	c.Monitoring = &usecase.HostMonitoring{
-		ScraperIP: "10.0.0.4", ServerCertPEM: []byte("cert"),
-		ServerKeyPEM: []byte("key"), ClientCAPEM: []byte("ca"),
-	}
-	vars, err = e.runner.vars(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]string{"scraper_ip": "10.0.0.4", "server_cert": "cert", "server_key": "key", "client_ca": "ca"}
-	if diff := cmp.Diff(want, vars["runtime_monitoring"]); diff != "" {
-		t.Fatal(diff)
-	}
-}

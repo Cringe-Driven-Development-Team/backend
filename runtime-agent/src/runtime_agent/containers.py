@@ -6,7 +6,6 @@ import logging
 import os
 import secrets
 import stat
-from collections.abc import Callable
 
 import docker
 from docker.errors import NotFound
@@ -35,9 +34,6 @@ class Containers:
         self.settings = settings
         self.instance_id = instance_id
         self.client = docker.from_env(timeout=10)
-        self.observe_http: Callable[[str, str, int, float], None] | None = None
-        self.observe_http_body: Callable[[str, str, int, float, str], None] | None = None
-        self.observe_removal: Callable | None = None
 
     async def ping(self):
         """Проверьте доступность Docker без изменения сети."""
@@ -46,10 +42,6 @@ class Containers:
     def name(self):
         """Верните стабильное имя единственного контейнера агента."""
         return f"cellestial-{self.instance_id}-kernel"
-
-    def owns(self, container):
-        """Проверьте метку владения перед использованием найденного контейнера."""
-        return container.labels.get(LABEL) == self.instance_id
 
     async def network(self):
         """Проверьте предварительно подготовленную сеть IPv4 bridge."""
@@ -157,8 +149,6 @@ class Containers:
             address = container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
             address = str(ipaddress.IPv4Address(address))
             transport = Jupyter(f"http://{address}:8888", token)
-            transport.observe_http = self.observe_http
-            transport.observe_http_body = self.observe_http_body
             try:
                 await transport.start(self.settings.startup_seconds)
             except BaseException:
@@ -188,11 +178,9 @@ class Containers:
         """Удалите принадлежащий агенту контейнер вместе с временными данными."""
         try:
             container = await asyncio.to_thread(self.client.containers.get, self.name())
-            if not self.owns(container):
+            if container.labels.get(LABEL) != self.instance_id:
                 raise RuntimeError("Refusing to remove a foreign container")
             await asyncio.to_thread(container.remove, force=True, v=True)
-            if self.observe_removal is not None:
-                await asyncio.to_thread(self.observe_removal, container)
         except NotFound:
             pass
 

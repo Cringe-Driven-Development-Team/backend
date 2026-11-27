@@ -84,7 +84,7 @@ class Transport(grpc.aio.ServerInterceptor):
         token = request_id.set(identifier)
         started = time.monotonic()
         outcome = grpc.StatusCode.OK
-        self.metrics.begin(name, kind)
+        self.metrics.active.labels(name, kind).inc()
         try:
             await context.send_initial_metadata((("x-request-id", identifier),))
             metadata_size = sum(
@@ -151,7 +151,11 @@ class Transport(grpc.aio.ServerInterceptor):
             outcome = grpc.StatusCode.INTERNAL
             await abort(context, outcome, "internal")
         finally:
-            self.metrics.finish(name, kind, outcome.name, time.monotonic() - started)
+            self.metrics.active.labels(name, kind).dec()
+            self.metrics.requests.labels(name, outcome.name, kind).inc()
+            self.metrics.duration.labels(name, outcome.name, kind).observe(
+                time.monotonic() - started
+            )
             log.info(
                 "rpc.request",
                 extra={
@@ -167,7 +171,7 @@ class Transport(grpc.aio.ServerInterceptor):
             )
             request_id.reset(token)
 
-    async def received(self, messages, method, streaming):
+    async def received(self, messages, method):
         """Читайте с backpressure и idle limit; EOF не считается новым сообщением."""
         iterator = messages.__aiter__()
         while True:
@@ -178,13 +182,12 @@ class Transport(grpc.aio.ServerInterceptor):
             limit = 2 << 20 if method.startswith("/cellestial.files.") else 8 << 20
             if value.ByteSize() > limit:
                 raise AgentError(400, "message limit exceeded")
-            if streaming:
-                self.metrics.message(method, "received", value)
+            self.metrics.message(method, "received", value)
             yield value
 
-    async def one(self, messages, method, streaming):
+    async def one(self, messages, method):
         """Потребуйте ровно один unary request и half-close в пределах server budget."""
-        iterator = self.received(messages, method, streaming)
+        iterator = self.received(messages, method)
         try:
             request = await anext(iterator)
         except StopAsyncIteration:
@@ -199,9 +202,6 @@ class Transport(grpc.aio.ServerInterceptor):
         """Начните scope до чтения первого сообщения, даже у protobuf unary методов."""
         handler = await continuation(details)
         if handler is None:
-            self.metrics.requests.labels(
-                "unmatched", "unmatched", "unknown", "server", "Unimplemented"
-            ).inc()
             return None
         method = details.method
         if handler.response_streaming:
@@ -209,9 +209,9 @@ class Transport(grpc.aio.ServerInterceptor):
             async def stream(messages, context):
                 async with self.scope(method, context, True):
                     source = (
-                        self.received(messages, method, True)
+                        self.received(messages, method)
                         if handler.request_streaming
-                        else await self.one(messages, method, True)
+                        else await self.one(messages, method)
                     )
                     behavior = (
                         handler.stream_stream if handler.request_streaming else handler.unary_stream
@@ -228,18 +228,17 @@ class Transport(grpc.aio.ServerInterceptor):
             )
 
         async def unary(messages, context):
-            async with self.scope(method, context, handler.request_streaming):
+            async with self.scope(method, context, False):
                 source = (
-                    self.received(messages, method, True)
+                    self.received(messages, method)
                     if handler.request_streaming
-                    else await self.one(messages, method, False)
+                    else await self.one(messages, method)
                 )
                 behavior = (
                     handler.stream_unary if handler.request_streaming else handler.unary_unary
                 )
                 value = await behavior(source, context)
-                if handler.request_streaming:
-                    self.metrics.message(method, "sent", value)
+                self.metrics.message(method, "sent", value)
                 return value
 
         return grpc.stream_unary_rpc_method_handler(

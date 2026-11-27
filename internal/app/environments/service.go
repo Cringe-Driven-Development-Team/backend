@@ -14,7 +14,6 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agentrpc"
 	delivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/delivery/grpc"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/mtls"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpc"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,12 +47,11 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 		return err
 	}
 	reg := lifecycle.Registry(serviceName, c.Version, pool)
-	rpcMetrics := rpc.NewMetrics(reg)
-	dialer, err := agentrpc.NewDialer(c.AgentTLS, c.AgentPort, logger, c.Version, rpcMetrics)
+	dialer, err := agentrpc.NewDialer(c.AgentTLS, c.AgentPort, logger, c.Version, rpc.NewMetrics(reg, "environments_to_agent"))
 	if err != nil {
 		return err
 	}
-	components, err := runtime.BuildIndependent(startup, c.Runtime, pool, dialer, observability.NewHTTPClientMetrics(reg))
+	components, err := runtime.BuildIndependent(startup, c.Runtime, pool, dialer)
 	if err != nil {
 		logger.Warn("environments dependency initialization failed", "error_code", observability.ErrorCode(err))
 		return errors.New("cannot initialize Environments dependencies")
@@ -67,7 +65,7 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 	options := rpc.ServerOptions(rpc.UnaryConfig{
 		Logger: logger, Service: serviceName, Version: c.Version, Timeout: 5 * time.Second, StreamTimeout: 60 * time.Second,
 		StreamMethods: map[string]time.Duration{filesv1.Files_Download_FullMethodName: 2 * time.Hour},
-		AllowedPeers:  allowedPeers(), Metrics: rpcMetrics,
+		AllowedPeers:  allowedPeers(), Metrics: rpc.NewMetrics(reg, serviceName),
 	})
 	server := grpc.NewServer(append(options, grpc.Creds(credentials.NewTLS(tlsConfig)))...)
 	pb.RegisterControlServer(server, delivery.NewControl(components.Control))
@@ -78,13 +76,12 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 	probe := func(ctx context.Context) error {
 		return ready.Poll(ctx, func(ctx context.Context) bool { return pool.Ping(ctx) == nil })
 	}
-	registerTargetMetrics(reg, pool)
 	background := []func(context.Context) error{probe, runtimeMetrics(reg, pool)}
 	if !c.WorkersPaused {
 		background = append(background, components.Worker.Run)
 	}
 	return lifecycle.Run(ctx, c.ShutdownTimeout, []lifecycle.Endpoint{
-		lifecycle.RPC(c.GRPCAddr, server), lifecycle.HTTP(c.AdminAddr, lifecycle.Admin(ready, reg, middleware.NewHTTPMetrics(reg))),
+		lifecycle.RPC(c.GRPCAddr, server), lifecycle.HTTP(c.AdminAddr, lifecycle.Admin(ready, reg)),
 	}, ready.Stop, background...)
 }
 

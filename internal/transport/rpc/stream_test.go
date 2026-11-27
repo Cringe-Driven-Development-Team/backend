@@ -91,7 +91,7 @@ func TestStreamTransport(t *testing.T) {
 // TestRPCMetricsMessages учитывает bytes/messages без labels из payload или correlation.
 func TestRPCMetricsMessages(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	m := NewMetrics(reg)
+	m := NewMetrics(reg, "identity")
 	stream := contextStream{ServerStream: &testStream{ctx: context.Background()}, ctx: context.Background(), metrics: m, method: "/service/Stream"}
 	if err := stream.SendMsg(wrapperspb.String("private-payload")); err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestRPCMetricsMessages(t *testing.T) {
 	}
 	found := false
 	for _, f := range families {
-		if f.GetName() == "cellestial_grpc_stream_messages_total" {
+		if f.GetName() == "identity_rpc_messages_total" {
 			found = true
 			if len(f.Metric) != 1 || f.Metric[0].Counter.GetValue() != 1 {
 				t.Fatal("incorrect message count")

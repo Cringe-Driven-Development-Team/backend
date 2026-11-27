@@ -70,7 +70,7 @@ func TestMicroservicesProcesses(t *testing.T) {
 	idHTTP, idRPC, idAdmin := loopback(t), loopback(t), loopback(t)
 	wsHTTP, wsRPC, wsAdmin := loopback(t), loopback(t), loopback(t)
 	envRPC, envAdmin := loopback(t), loopback(t)
-	agentRPC, agentAdmin, agentMetrics := loopback(t), loopback(t), loopback(t)
+	agentRPC, agentAdmin := loopback(t), loopback(t)
 	_, agentPort, _ := net.SplitHostPort(agentRPC)
 	redisHost, redisPort, err := net.SplitHostPort(redis)
 	if err != nil {
@@ -151,10 +151,6 @@ func TestMicroservicesProcesses(t *testing.T) {
 	if !json.Valid(exported) || !bytes.Contains(exported, []byte(`"nbformat":4`)) {
 		t.Fatal("invalid streamed IPYNB")
 	}
-	processRequest(ctx, t, workspaceHTTP, wsHTTP, "POST", book+"/export", testBFFKey, bearer, "", 405)
-	checkScrape(ctx, t, http.DefaultClient, "http://"+wsAdmin+"/metrics",
-		`cellestial_http_requests_total{method="GET",route="/api/v1/notebooks/{id}/export",status_code="200"} 1`,
-		`cellestial_http_requests_total{method="POST",route="/api/v1/notebooks/{id}/export",status_code="405"} 1`)
 	var cell string
 	if err = db.QueryRow(ctx, `SELECT cell_id FROM workspace.notebook_cells WHERE notebook_id=$1 ORDER BY position LIMIT 1`, notebook.ID).Scan(&cell); err != nil {
 		t.Fatal(err)
@@ -163,11 +159,6 @@ func TestMicroservicesProcesses(t *testing.T) {
 	session := uuid.New()
 	settings := processTLS(t, pki, "agent."+session.String()+".internal.cellestial.ru")
 	settings["GRPC_ADDR"], settings["ADMIN_ADDR"] = agentRPC, agentAdmin
-	monitoringPKI := newPKI(t)
-	settings["METRICS_ADDR"] = agentMetrics
-	for key, value := range processTLS(t, monitoringPKI, "agent-metrics.internal.cellestial.ru") {
-		settings["METRICS_"+key] = value
-	}
 	settings["STATE_DIR"], settings["WORKSPACE_PATH"] = t.TempDir(), t.TempDir()
 	for _, entry := range []string{"data", "staging"} {
 		if err = os.Mkdir(filepath.Join(settings["WORKSPACE_PATH"], entry), 0700); err != nil {
@@ -187,42 +178,7 @@ func TestMicroservicesProcesses(t *testing.T) {
 	waitReady(ctx, t, agentAdmin, agent)
 	assignAgent(ctx, t, pki, agentRPC, session, agent)
 
-	serverID := uuid.New()
-	if _, execErr := db.Exec(ctx, `INSERT INTO environments.runtime_pool(id,state,server_id,image_id,agent_version) VALUES($1,'READY',$2,'test','test')`, uuid.New(), serverID.String()); execErr != nil {
-		t.Fatal(execErr)
-	}
-	inventory := "http://" + envAdmin + "/metrics"
-	checkScrape(ctx, t, http.DefaultClient, inventory, "cellestial_runtime_inventory_available 1",
-		fmt.Sprintf(`cellestial_runtime_target_info{server_id="%s",state="warm"} 1`, serverID))
-
 	seedRuntime(ctx, t, db, session, profile.ID, notebook.ID)
-	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); execErr != nil {
-		t.Fatal(execErr)
-	}
-	checkScrape(ctx, t, http.DefaultClient, inventory,
-		fmt.Sprintf(`cellestial_runtime_target_info{server_id="%s",state="active"} 1`, serverID))
-	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_pool SET state='CLAIMED', session_id=$1 WHERE server_id=$2`, session, serverID.String()); execErr != nil {
-		t.Fatal(execErr)
-	}
-	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=NULL WHERE session_id=$1`, session); execErr != nil {
-		t.Fatal(execErr)
-	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, inventory, nil)
-	scrape, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, readErr := io.ReadAll(scrape.Body)
-	_ = scrape.Body.Close()
-	if readErr != nil || scrape.StatusCode != http.StatusOK ||
-		!bytes.Contains(data, []byte("cellestial_runtime_inventory_available 1")) ||
-		bytes.Contains(data, []byte(serverID.String())) {
-		t.Fatalf("deleted VPS is still expected or inventory failed: %v", readErr)
-	}
-	if _, execErr := db.Exec(ctx, `UPDATE environments.runtime_environments SET server_id=$1 WHERE session_id=$2`, serverID.String(), session); execErr != nil {
-		t.Fatal(execErr)
-	}
-
 	sid := "/runtime-sessions/" + session.String()
 	checkPath := sid + "/workspace/check"
 	processRequest(ctx, t, workspaceHTTP, wsHTTP, "GET", checkPath, testBFFKey, bearer, "", 200)
@@ -274,25 +230,12 @@ func TestMicroservicesProcesses(t *testing.T) {
 		}
 	}
 	checkProcessMetrics(ctx, t, wsAdmin, "workspace_execution_queue_length")
-	scraper := monitoringPKI.certificate(t, "prometheus.internal.cellestial.ru", x509.ExtKeyUsageClientAuth)
-	monitorClient := testHTTP(monitoringPKI, scraper, "agent-metrics")
-	checkScrape(ctx, t, monitorClient, "https://"+agentMetrics+"/metrics", "runtime_agent_kernel_state", "cellestial_grpc_calls_total")
-	checkMetricsTransport(ctx, t, pki, monitoringPKI, scraper, agentMetrics, agentRPC, session)
-	var checkMonitoringAfterStop func()
-	if os.Getenv("MONITORING_PROMETHEUS_BIN") != "" {
-		checkMonitoringAfterStop = checkPrometheus(ctx, t, map[string]string{
-			"identity": idAdmin, "workspace": wsAdmin, "environments": envAdmin, "runtime-agent": agentMetrics,
-		}, processTLS(t, monitoringPKI, "prometheus.internal.cellestial.ru"))
-	}
+	checkProcessMetrics(ctx, t, agentAdmin, "runtime_agent_kernel_state")
 	checkProcessMetrics(ctx, t, envAdmin, "environments_provisioning_pending")
 	checkProcessMetrics(ctx, t, idAdmin, "identity_build_info")
 	deleteAccount(ctx, t, pki, idRPC, profile.ID)
 	processRequest(ctx, t, workspaceHTTP, wsHTTP, "GET", book, testBFFKey, bearer, "", 401)
-	agent.stop(t)
-	if checkMonitoringAfterStop != nil {
-		checkMonitoringAfterStop()
-	}
-	for _, proc := range []*runningService{workspace, identity, environments} {
+	for _, proc := range []*runningService{workspace, identity, environments, agent} {
 		proc.stop(t)
 	}
 }
@@ -658,59 +601,17 @@ func seedRuntime(ctx context.Context, t *testing.T, db *pgxpool.Pool, session uu
 	}
 }
 
-// checkProcessMetrics проверяет метрики Go-сервиса на приватном admin listener.
 func checkProcessMetrics(ctx context.Context, t *testing.T, addr, name string) {
 	t.Helper()
-	checkScrape(ctx, t, http.DefaultClient, "http://"+addr+"/metrics", name)
-}
-
-// checkScrape проверяет HTTP и конкретные семейства/labels без correlation в них.
-func checkScrape(ctx context.Context, t *testing.T, client *http.Client, endpoint string, expected ...string) {
-	t.Helper()
-	r, _ := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-	resp, err := client.Do(r)
+	r, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/metrics", nil)
+	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
-	if err != nil || resp.StatusCode != 200 || bytes.Contains(data, []byte("process-correlation")) {
-		t.Fatalf("unexpected scrape status=%d err=%v", resp.StatusCode, err)
-	}
-	for _, name := range expected {
-		if !bytes.Contains(data, []byte(name)) {
-			t.Fatalf("missing scrape sample %s", name)
-		}
-	}
-}
-
-// checkMetricsTransport проверяет раздельное доверие управляющего и scrape-входов.
-func checkMetricsTransport(ctx context.Context, t *testing.T, pki, monitor *testPKI, scraper tls.Certificate, metrics, agent string, session uuid.UUID) {
-	t.Helper()
-	for _, client := range []*http.Client{
-		{Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			RootCAs: monitor.pool, ServerName: "agent-metrics.internal.cellestial.ru",
-		}}},
-		testHTTP(monitor, pki.certificate(t, "environments.internal.cellestial.ru", x509.ExtKeyUsageClientAuth), "agent-metrics"),
-	} {
-		r, _ := http.NewRequestWithContext(ctx, "GET", "https://"+metrics+"/metrics", nil)
-		if resp, err := client.Do(r); err == nil {
-			resp.Body.Close()
-			t.Fatal("metrics accepted missing or foreign certificate")
-		}
-	}
-	conn, err := grpc.NewClient(agent, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-		RootCAs: pki.pool, ServerName: "agent." + session.String() + ".internal.cellestial.ru",
-		Certificates: []tls.Certificate{scraper},
-	})))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	attempt, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	if _, err = agentv1.NewControlClient(conn).Health(attempt, &agentv1.Target{SessionId: session.String()}); err == nil {
-		t.Fatal("control RPC accepted monitoring certificate")
+	if err != nil || resp.StatusCode != 200 || !bytes.Contains(data, []byte(name)) || bytes.Contains(data, []byte("process-correlation")) {
+		t.Fatalf("unexpected scrape %s status=%d err=%v", name, resp.StatusCode, err)
 	}
 }
 

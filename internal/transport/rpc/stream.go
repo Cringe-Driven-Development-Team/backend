@@ -28,7 +28,7 @@ func (s contextStream) Context() context.Context { return s.ctx }
 func (s contextStream) SendMsg(value any) error {
 	err := s.ServerStream.SendMsg(value)
 	if err == nil {
-		s.metrics.message(s.method, "server", "sent", value)
+		s.metrics.message(s.method, "sent", value)
 	}
 	return err
 }
@@ -37,7 +37,7 @@ func (s contextStream) SendMsg(value any) error {
 func (s contextStream) RecvMsg(value any) error {
 	err := s.ServerStream.RecvMsg(value)
 	if err == nil {
-		s.metrics.message(s.method, "server", "received", value)
+		s.metrics.message(s.method, "received", value)
 	}
 	return err
 }
@@ -61,7 +61,7 @@ func StreamServer(cfg UnaryConfig) grpc.StreamServerInterceptor {
 		if _, ok := cfg.AllowedPeers[method]; !ok {
 			method = "unmatched"
 		}
-		finish := cfg.Metrics.begin(method, "stream", "server")
+		finish := cfg.Metrics.begin(method)
 		ctx := stream.Context()
 		md, _ := metadata.FromIncomingContext(ctx)
 		id := uuid.NewString()

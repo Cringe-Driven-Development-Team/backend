@@ -163,25 +163,3 @@ func TestRuntimeWarmPoolSize(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
-
-// TestRuntimeMonitoringRequiresCompletePrivateConfig проверяет парность настроек мониторинга.
-func TestRuntimeMonitoringRequiresCompletePrivateConfig(t *testing.T) {
-	values := openstackValues()
-	values["RUNTIME_MONITORING_SCRAPER_IP"] = "10.0.0.4"
-	if _, err := LoadFrom(settings(values)); err == nil {
-		t.Fatal("expected missing monitoring client CA error")
-	}
-	values["RUNTIME_MONITORING_CLIENT_CA_FILE"] = "/run/secrets/monitoring/client-ca.pem"
-	values["RUNTIME_MONITORING_SCRAPER_IP"] = "203.0.113.4"
-	if _, err := LoadFrom(settings(values)); err == nil {
-		t.Fatal("expected invalid private IPv4 error")
-	}
-	values["RUNTIME_MONITORING_SCRAPER_IP"] = "10.0.0.4"
-	cfg, err := LoadFrom(settings(values))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Runtime.MonitoringScraperIP != "10.0.0.4" || cfg.Runtime.MonitoringClientCAFile != values["RUNTIME_MONITORING_CLIENT_CA_FILE"] {
-		t.Fatal("monitoring settings were not loaded")
-	}
-}

@@ -9,7 +9,6 @@ User=cellestial-agent
 Group=cellestial-agent
 SupplementaryGroups=docker
 EnvironmentFile=/etc/cellestial-agent/agent.env
-EnvironmentFile=-/etc/cellestial-agent/monitoring.env
 Environment=STATE_DIR=/var/lib/cellestial-agent
 StateDirectory=cellestial-agent
 StateDirectoryMode=0700

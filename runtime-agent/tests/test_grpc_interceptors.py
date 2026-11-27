@@ -66,10 +66,10 @@ async def test_recovery_and_cancel_log_once(grpc_agent, monkeypatch, caplog):
         call = health_pb2_grpc.HealthStub(channel).Watch(health_pb2.HealthCheckRequest())
         await call.read()
         call.cancel()
-        await until(lambda: b'"Canceled"' in metrics.render())
+        await until(lambda: b'"CANCELLED"' in metrics.render())
     assert (
-        b'cellestial_grpc_active_streams{grpc_method="Watch",grpc_service="grpc.health.v1.Health",'
-        b'rpc_side="server",rpc_type="stream"} 0.0' in metrics.render()
+        b'runtime_agent_rpc_server_active{method="/grpc.health.v1.Health/Watch",type="stream"} 0.0'
+        in metrics.render()
     )
 
 
@@ -83,21 +83,3 @@ def test_correlation_rejects_duplicates_and_unsafe_values():
         "first",
         "second",
     )
-
-
-async def test_unknown_rpcs_use_one_counter_series(grpc_agent):
-    """Учтите неизвестные RPC под одним набором labels, сохраняя Unimplemented."""
-    _, _, _, metrics, pki, port = grpc_agent
-    async with grpc.aio.secure_channel(
-        f"127.0.0.1:{port}",
-        pki.channel_credentials("environments.internal.cellestial.ru"),
-        options=(("grpc.ssl_target_name_override", "agent.test.internal.cellestial.ru"),),
-    ) as channel:
-        for method in ("/private.Service/One", "/private.Service/Two"):
-            with pytest.raises(grpc.aio.AioRpcError) as error:
-                await channel.unary_unary(method)(b"", timeout=1)
-            assert error.value.code() == grpc.StatusCode.UNIMPLEMENTED
-    assert (
-        b'grpc_code="Unimplemented",grpc_method="unmatched",grpc_service="unmatched",'
-        b'rpc_side="server",rpc_type="unknown"} 2.0'
-    ) in metrics.render()
