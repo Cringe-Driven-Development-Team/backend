@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agent"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/agentrpc"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/adapters/ansible"
@@ -106,7 +107,7 @@ type Independent struct {
 }
 
 // BuildIndependent сохраняет исходный provisioning, переводя команды хоста на gRPC.
-func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool, dialer *agentrpc.Dialer) (Independent, error) {
+func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpool.Pool, dialer *agentrpc.Dialer, metrics ...*observability.HTTPClientMetrics) (Independent, error) {
 	if cfg.Provider == "fake" {
 		p, err := assemble(ctx, cfg, pool)
 		if err != nil {
@@ -117,7 +118,7 @@ func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpo
 	if cfg.Provider != "openstack" {
 		return Independent{}, errors.New("runtime: invalid provider")
 	}
-	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true)
+	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true, metrics...)
 	if err != nil {
 		return Independent{}, err
 	}
@@ -215,7 +216,7 @@ type openStackAdapters struct {
 }
 
 // buildOpenStack связывает провайдера, конфигуратор, mTLS-клиент и секреты.
-func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock, grpcAgent bool) (openStackAdapters, error) {
+func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase.Clock, grpcAgent bool, metrics ...*observability.HTTPClientMetrics) (openStackAdapters, error) {
 	read := func(path string) ([]byte, error) {
 		b, err := os.ReadFile(path)
 		if err != nil {
@@ -264,7 +265,7 @@ func buildOpenStack(ctx context.Context, cfg config.RuntimeConfig, clock usecase
 	if err != nil {
 		return openStackAdapters{}, fmt.Errorf("runtime: ansible: %w", err)
 	}
-	cloud, err := openstack.New(ctx, cfg)
+	cloud, err := openstack.New(ctx, cfg, metrics...)
 	if err != nil {
 		return openStackAdapters{}, fmt.Errorf("runtime: openstack: %w", err)
 	}

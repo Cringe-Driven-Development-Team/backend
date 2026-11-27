@@ -97,7 +97,7 @@ func UnaryClient(c ClientConfig) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoke grpc.UnaryInvoker, opts ...grpc.CallOption) (err error) {
 		started := time.Now()
 		name := methodName(c, method)
-		finish := c.Metrics.begin(name)
+		finish := c.Metrics.begin(name, "unary", "client")
 		attempts := 0
 		policy := c.Methods[method]
 		timeout := policy.Timeout
@@ -132,10 +132,8 @@ func UnaryClient(c ClientConfig) grpc.UnaryClientInterceptor {
 				return status.FromContextError(ctx.Err()).Err()
 			}
 			attempts++
-			c.Metrics.message(name, "sent", req)
 			err = invoke(ctx, method, req, reply, cc, opts...)
 			if err == nil {
-				c.Metrics.message(name, "received", reply)
 				return nil
 			}
 			if status.Code(err) != codes.Unavailable || attempts == maximum {
@@ -168,7 +166,7 @@ type measuredClientStream struct {
 func (s *measuredClientStream) SendMsg(value any) error {
 	err := s.ClientStream.SendMsg(value)
 	if err == nil {
-		s.metrics.message(s.method, "sent", value)
+		s.metrics.message(s.method, "client", "sent", value)
 	} else if !errors.Is(err, io.EOF) {
 		s.finish(err)
 	}
@@ -179,7 +177,7 @@ func (s *measuredClientStream) SendMsg(value any) error {
 func (s *measuredClientStream) RecvMsg(value any) error {
 	err := s.ClientStream.RecvMsg(value)
 	if err == nil {
-		s.metrics.message(s.method, "received", value)
+		s.metrics.message(s.method, "client", "received", value)
 	} else {
 		s.finish(err)
 	}
@@ -191,7 +189,7 @@ func StreamClient(c ClientConfig) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (stream grpc.ClientStream, err error) {
 		name := methodName(c, method)
 		started := time.Now()
-		finishMetric := c.Metrics.begin(name)
+		finishMetric := c.Metrics.begin(name, "stream", "client")
 		timeout := c.Methods[method].StreamTimeout
 		if timeout <= 0 {
 			timeout = c.StreamTimeout

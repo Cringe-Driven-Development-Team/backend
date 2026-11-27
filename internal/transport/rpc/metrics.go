@@ -1,45 +1,72 @@
 package rpc
 
 import (
+	"strings"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/protobuf/proto"
 )
 
-// Metrics владеет ограниченными labels unary RPC; имя метода нормализует interceptor.
+// Metrics объединяет измерения RPC всех направлений процесса в одном реестре.
 type Metrics struct {
 	requests        *prometheus.CounterVec
-	duration        *prometheus.HistogramVec
+	unary, stream   *prometheus.HistogramVec
 	active          *prometheus.GaugeVec
 	messages, bytes *prometheus.CounterVec
 }
 
-// NewMetrics регистрирует счётчики в отдельном registry процесса.
-func NewMetrics(reg prometheus.Registerer, namespace string) *Metrics {
-	m := &Metrics{requests: prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: namespace, Name: "rpc_requests_total", Help: "Completed RPC calls."}, []string{"method", "status"}), duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Namespace: namespace, Name: "rpc_duration_seconds", Help: "RPC duration.", Buckets: prometheus.DefBuckets}, []string{"method", "status"}), active: prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Name: "rpc_active", Help: "Active RPC calls."}, []string{"method"})}
-	m.messages = prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: namespace, Name: "rpc_messages_total", Help: "Successfully transferred RPC messages."}, []string{"method", "direction"})
-	m.bytes = prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: namespace, Name: "rpc_message_bytes_total", Help: "Uncompressed protobuf bytes transferred."}, []string{"method", "direction"})
-	reg.MustRegister(m.requests, m.duration, m.active, m.messages, m.bytes)
+// NewMetrics подключает общие семейства к реестру процесса.
+func NewMetrics(reg prometheus.Registerer) *Metrics {
+	method := []string{"grpc_service", "grpc_method", "rpc_type", "rpc_side"}
+	calls := append(append([]string(nil), method...), "grpc_code")
+	message := append(append([]string(nil), method...), "direction")
+	m := &Metrics{
+		requests: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "cellestial_grpc_calls_total", Help: "Completed gRPC calls."}, calls),
+		unary:    prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "cellestial_grpc_call_duration_seconds", Help: "Unary gRPC duration in seconds.", Buckets: observability.LatencyBuckets()}, calls),
+		stream:   prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "cellestial_grpc_stream_duration_seconds", Help: "gRPC stream lifetime in seconds.", Buckets: observability.StreamBuckets()}, calls),
+		active:   prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "cellestial_grpc_active_streams", Help: "Active gRPC streams."}, method),
+		messages: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "cellestial_grpc_stream_messages_total", Help: "Successfully transferred stream messages."}, message),
+		bytes:    prometheus.NewCounterVec(prometheus.CounterOpts{Name: "cellestial_grpc_stream_message_bytes_total", Help: "Uncompressed protobuf stream bytes."}, message),
+	}
+	reg.MustRegister(m.requests, m.unary, m.stream, m.active, m.messages, m.bytes)
 	return m
 }
 
-// begin возвращает завершение измерения без идентификаторов пользователей/запросов.
-func (m *Metrics) begin(method string) func(string) {
+// rpcLabels разбирает заранее нормализованный interceptor полный метод.
+func rpcLabels(method, kind, side string) []string {
+	service, operation, ok := strings.Cut(strings.TrimPrefix(method, "/"), "/")
+	if !ok {
+		service, operation = "unmatched", "unmatched"
+	}
+	return []string{service, operation, kind, side}
+}
+
+// begin начинает измерение unary или stream и возвращает callback для итогового статуса.
+func (m *Metrics) begin(method, kind, side string) func(string) {
 	if m == nil {
 		return func(string) {}
 	}
-	m.active.WithLabelValues(method).Inc()
+	labels := rpcLabels(method, kind, side)
+	histogram := m.unary
+	if kind == "stream" {
+		histogram = m.stream
+		m.active.WithLabelValues(labels...).Inc()
+	}
 	started := time.Now()
 	return func(code string) {
-		m.active.WithLabelValues(method).Dec()
-		m.requests.WithLabelValues(method, code).Inc()
-		m.duration.WithLabelValues(method, code).Observe(time.Since(started).Seconds())
+		if kind == "stream" {
+			m.active.WithLabelValues(labels...).Dec()
+		}
+		values := append(rpcLabels(method, kind, side), code)
+		m.requests.WithLabelValues(values...).Inc()
+		histogram.WithLabelValues(values...).Observe(time.Since(started).Seconds())
 	}
 }
 
-// message измеряет размер protobuf без преобразования payload в labels или лог.
-func (m *Metrics) message(method, direction string, value any) {
+// message измеряет успешно переданное protobuf-сообщение потока.
+func (m *Metrics) message(method, side, direction string, value any) {
 	if m == nil {
 		return
 	}
@@ -47,6 +74,7 @@ func (m *Metrics) message(method, direction string, value any) {
 	if !ok {
 		return
 	}
-	m.messages.WithLabelValues(method, direction).Inc()
-	m.bytes.WithLabelValues(method, direction).Add(float64(proto.Size(msg)))
+	values := append(rpcLabels(method, "stream", side), direction)
+	m.messages.WithLabelValues(values...).Inc()
+	m.bytes.WithLabelValues(values...).Add(float64(proto.Size(msg)))
 }

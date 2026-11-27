@@ -18,7 +18,12 @@ func TestMetricsBoundedLabels(t *testing.T) {
 	}
 	defer pool.Close()
 	metrics := newServiceMetrics("test", pool)
-	h := metrics.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) }))
+	h := metrics.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) }), func(r *http.Request) string {
+		if r.URL.Path == "/api/v1/auth/login" {
+			return r.URL.Path
+		}
+		return "unmatched"
+	})
 	for i := range 1000 {
 		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(fmt.Sprintf("RANDOM%d", i), fmt.Sprintf("/api/v1/private/%d", i), nil))
 	}
@@ -27,10 +32,11 @@ func TestMetricsBoundedLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authFound := false
+	authFound, httpFound := false, false
 	for _, f := range families {
 		switch f.GetName() {
-		case "identity_http_requests_total":
+		case "cellestial_http_requests_total":
+			httpFound = true
 			if len(f.Metric) != 2 {
 				t.Fatalf("unbounded HTTP cardinality: %d", len(f.Metric))
 			}
@@ -41,7 +47,7 @@ func TestMetricsBoundedLabels(t *testing.T) {
 			}
 		}
 	}
-	if !authFound {
+	if !authFound || !httpFound {
 		t.Fatal("auth outcome metric missing")
 	}
 }
