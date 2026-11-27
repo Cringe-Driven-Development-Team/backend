@@ -43,14 +43,25 @@ func (r *NotebookRepository) ListPage(ctx context.Context, ownerID int64, q usec
 		pageArgs = append(pageArgs, q.After.UpdatedAt, q.After.ID)
 	}
 	pageArgs = append(pageArgs, q.Limit+1)
-	query := `SELECT id,name,cells_count,preview_code,updated_at FROM notebooks WHERE ` + where + ` ORDER BY updated_at DESC,id DESC LIMIT $` + strconv.Itoa(len(pageArgs))
+	// Сначала выделяем страницу, чтобы считать только комментарии к её блокнотам.
+	query := `WITH page AS (
+		SELECT id,name,cells_count,preview_code,updated_at FROM notebooks WHERE ` + where + `
+		ORDER BY updated_at DESC,id DESC LIMIT $` + strconv.Itoa(len(pageArgs)) + `
+	), comment_counts AS (
+		SELECT c.notebook_id,count(*) AS total
+		FROM cell_comments c JOIN page p ON p.id=c.notebook_id
+		GROUP BY c.notebook_id
+	)
+	SELECT p.id,p.name,p.cells_count,p.preview_code,p.updated_at,COALESCE(cc.total,0)
+	FROM page p LEFT JOIN comment_counts cc ON cc.notebook_id=p.id
+	ORDER BY p.updated_at DESC,p.id DESC`
 	rows, err := tx.Query(ctx, query, pageArgs...)
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var n domain.NotebookSummary
-		if err = rows.Scan(&n.ID, &n.Name, &n.CellsCount, &n.PreviewCode, &n.UpdatedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.Name, &n.CellsCount, &n.PreviewCode, &n.UpdatedAt, &n.CommentsCount); err != nil {
 			rows.Close()
 			return result, err
 		}

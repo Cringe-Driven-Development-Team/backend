@@ -33,19 +33,21 @@ type Cell struct {
 
 // Notebook содержит согласованный снимок метаданных, полей документа и упорядоченных ячеек.
 type Notebook struct {
-	ID          int64
-	OwnerID     int64
-	Name        string
-	Revision    string
-	PreviewCode string
-	SizeBytes   int64
-	Document    Document
-	CellsCount  int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	Cells       []Cell
-	SharingMode SharingMode
-	Access      NotebookAccess
+	ID                int64
+	OwnerID           int64
+	Name              string
+	Revision          string
+	PreviewCode       string
+	SizeBytes         int64
+	Document          Document
+	CellsCount        int
+	CommentsCount     int64
+	CellCommentsCount map[string]int64
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Cells             []Cell
+	SharingMode       SharingMode
+	Access            NotebookAccess
 }
 
 // NotebookSummary нужен списку: только база, без файла.
@@ -55,6 +57,7 @@ type NotebookSummary struct {
 	ID               int64
 	Name             string
 	CellsCount       int
+	CommentsCount    int64
 	UpdatedAt        time.Time
 }
 

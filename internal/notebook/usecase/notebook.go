@@ -63,7 +63,7 @@ func (uc *NotebookUsecase) Create(ctx context.Context, ownerID int64, name strin
 
 // Get читает доступный блокнот; ownerID обозначает посетителя, 0 — анонима.
 func (uc *NotebookUsecase) Get(ctx context.Context, id, ownerID int64) (domain.Notebook, error) {
-	n, err := uc.repo.GetReadable(ctx, id, ownerID)
+	n, err := uc.repo.GetReadable(ctx, id, ownerID, true)
 	if err != nil {
 		return domain.Notebook{}, err
 	}
@@ -73,7 +73,7 @@ func (uc *NotebookUsecase) Get(ctx context.Context, id, ownerID int64) (domain.N
 
 // Content возвращает согласованный снимок доступного посетителю блокнота.
 func (uc *NotebookUsecase) Content(ctx context.Context, id, ownerID int64) (domain.Content, error) {
-	n, err := uc.repo.GetReadable(ctx, id, ownerID)
+	n, err := uc.repo.GetReadable(ctx, id, ownerID, false)
 	if err != nil {
 		return domain.Content{}, err
 	}

@@ -173,3 +173,26 @@ func (r *NotebookRepository) DeleteComment(ctx context.Context, notebookID int64
 		return err
 	})
 }
+
+// readCommentCounts заполняет счётчики из снимка транзакции вызывающего.
+func readCommentCounts(ctx context.Context, tx pgx.Tx, n *domain.Notebook) error {
+	rows, err := tx.Query(ctx, `SELECT cell_id,count(*) FROM cell_comments WHERE notebook_id=$1 GROUP BY cell_id`, n.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cellID string
+		var count int64
+		if err = rows.Scan(&cellID, &count); err != nil {
+			return err
+		}
+		if n.CellCommentsCount == nil {
+			n.CellCommentsCount = make(map[string]int64)
+		}
+		n.CellCommentsCount[cellID] = count
+		n.CommentsCount += count
+	}
+	return rows.Err()
+}

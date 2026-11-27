@@ -32,7 +32,8 @@ func (r *NotebookRepository) CheckRead(ctx context.Context, id, userID int64) er
 	return checkRead(ctx, r.db, id, userID)
 }
 
-func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64) (domain.Notebook, error) {
+// GetReadable читает доступный пользователю снимок, при необходимости со счётчиками комментариев.
+func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return domain.Notebook{}, err
@@ -48,6 +49,11 @@ func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64) 
 	n, err = readContent(ctx, tx, n)
 	if err != nil {
 		return domain.Notebook{}, err
+	}
+	if includeCommentCounts {
+		if err = readCommentCounts(ctx, tx, &n); err != nil {
+			return domain.Notebook{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Notebook{}, err
