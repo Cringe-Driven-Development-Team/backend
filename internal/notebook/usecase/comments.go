@@ -42,9 +42,23 @@ func (uc *NotebookUsecase) ListComments(ctx context.Context, notebookID int64, c
 		}
 		query.After = &p
 	}
-	rows, err := uc.repo.ListComments(ctx, notebookID, cellID, visitorID, query)
-	if err != nil {
-		return CommentPage{}, err
+	var rows CommentRows
+	for attempt := 0; attempt < 2; attempt++ {
+		var err error
+		rows, err = uc.repo.ListComments(ctx, notebookID, cellID, visitorID, query)
+		if err != nil {
+			return CommentPage{}, err
+		}
+		found, err := uc.decorateComments(ctx, rows.Items[:min(limit, len(rows.Items))])
+		if err != nil {
+			return CommentPage{}, err
+		}
+		if found {
+			break
+		}
+		if attempt == 1 {
+			return CommentPage{}, ErrUserDirectoryInconsistent
+		}
 	}
 	page := CommentPage{Items: rows.Items}
 	if len(page.Items) > limit {
@@ -74,10 +88,15 @@ func (uc *NotebookUsecase) CreateComment(ctx context.Context, notebookID int64, 
 	if err != nil {
 		return domain.Comment{}, err
 	}
+	author, err := uc.author(ctx, visitorID)
+	if err != nil {
+		return domain.Comment{}, err
+	}
 	record, err := uc.repo.CreateComment(ctx, notebookID, cellID, visitorID, text)
 	if err != nil {
 		return domain.Comment{}, err
 	}
+	record.Comment.Author = author
 	return commentForVisitor(record.Comment, record.OwnerID, visitorID), nil
 }
 
@@ -93,10 +112,15 @@ func (uc *NotebookUsecase) UpdateComment(ctx context.Context, notebookID int64, 
 	if err != nil {
 		return domain.Comment{}, err
 	}
+	author, err := uc.author(ctx, visitorID)
+	if err != nil {
+		return domain.Comment{}, err
+	}
 	record, err := uc.repo.UpdateComment(ctx, notebookID, cellID, visitorID, commentID, text)
 	if err != nil {
 		return domain.Comment{}, err
 	}
+	record.Comment.Author = author
 	return commentForVisitor(record.Comment, record.OwnerID, visitorID), nil
 }
 

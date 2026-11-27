@@ -1,0 +1,23 @@
+syntax = "proto3";
+package cellestial.common.v1;
+option go_package = "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/common/v1;commonv1";
+
+// ErrorDetail содержит только allowlisted бизнес-код и безопасные details.
+message ErrorDetail {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  string request_id = 4;
+  // JSON разрешён лишь для явно описанных details ошибки; не raw exception.
+  bytes details_json = 5;
+}
+// ObjectHeader начинает один целостный protobuf payload, не более 64 MiB.
+message ObjectHeader {
+  string object_id = 1;
+  uint64 length = 2;
+  bytes sha256 = 3;
+}
+// ObjectChunk ограничен 1 MiB; offset обязан совпадать с концом прежнего chunk.
+message ObjectChunk { uint64 offset = 1; bytes payload = 2; }
+// ObjectEnd обязателен: EOF без него не подтверждает целостность объекта.
+message ObjectEnd { uint64 length = 1; bytes sha256 = 2; }

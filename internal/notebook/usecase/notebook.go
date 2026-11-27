@@ -10,11 +10,14 @@ import (
 // NotebookUsecase выполняет пользовательские операции с блокнотами через порты.
 type NotebookUsecase struct {
 	repo          Repository
+	users         Users
 	sessions      ActiveSessions
 	newID         func() string
 	cursor        ListCursor
 	commentCursor CommentCursor
 	decodeImport  ImportDecoder
+	decodeStream  ImportStreamDecoder
+	encodeExport  ExportEncoder
 }
 
 // Option настраивает зависимости операций блокнота.

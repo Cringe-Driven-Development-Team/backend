@@ -29,7 +29,7 @@ func TestNotebookDeletionAndSessionStartSerialize(t *testing.T) {
 				t.Fatalf("start after delete: %v", startErr)
 			}
 			var count int
-			if err := pool.QueryRow(ctx, `SELECT count(*) FROM runtime_sessions WHERE notebook_id=$1`, id).Scan(&count); err != nil || count != 0 {
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_sessions WHERE notebook_id=$1`, id).Scan(&count); err != nil || count != 0 {
 				t.Fatalf("orphan session: %d %v", count, err)
 			}
 		case errors.Is(deleteErr, notebookusecase.ErrNotebookInUse):
@@ -70,7 +70,7 @@ func TestNotebookDeletionAfterRejectedExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM runtime_projections WHERE session_id=$1`, session.ID).Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_projections WHERE session_id=$1`, session.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("unexpected projection: %d %v", count, err)
 	}
 	if err = s.notebooks.DeleteNotebook(ctx, id, owner); err != nil {

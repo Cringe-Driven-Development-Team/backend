@@ -97,7 +97,10 @@ func requireUser(_ context.Context, input *openapi3filter.AuthenticationInput) e
 // validationError оформляет безопасный ответ на невалидный запрос.
 func validationError(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, opts nethttpmiddleware.ErrorHandlerOpts) {
 	var securityErr *openapi3filter.SecurityRequirementsError
+	var limit *http.MaxBytesError
 	switch {
+	case errors.As(err, &limit):
+		httperr.RequestError(w, nil, err)
 	case errors.As(err, &securityErr):
 		httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")
 	case opts.StatusCode == http.StatusNotFound:

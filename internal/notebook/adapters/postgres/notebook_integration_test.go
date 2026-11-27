@@ -12,51 +12,25 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/ipynb"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
-	"github.com/google/uuid"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testRepository(t *testing.T) (*NotebookRepository, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("TEST_POSTGRES_DSN is not set")
-	}
-	ctx := context.Background()
-	admin, e := pgxpool.New(ctx, dsn)
-	if e != nil {
-		t.Fatal(e)
-	}
-	schema := "notebook_" + uuid.NewString()
-	q := pgx.Identifier{schema}.Sanitize()
-	if _, e = admin.Exec(ctx, "CREATE SCHEMA "+q); e != nil {
-		t.Fatal(e)
-	}
-	cfg, e := pgxpool.ParseConfig(dsn)
-	if e != nil {
-		t.Fatal(e)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
-	if path := os.Getenv("NOTEBOOK_SQL_TRACE"); path != "" {
-		file, traceErr := os.Create(path)
-		if traceErr != nil {
-			t.Fatal(traceErr)
+	pool := pgtest.NewDatabase(t, "TEST_POSTGRES_DSN", func(cfg *pgxpool.Config) {
+		if path := os.Getenv("NOTEBOOK_SQL_TRACE"); path != "" {
+			file, err := os.Create(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = file.Close() })
+			cfg.ConnConfig.Tracer = &sqlTrace{file: file}
 		}
-		t.Cleanup(func() { _ = file.Close() })
-		cfg.ConnConfig.Tracer = &sqlTrace{file: file}
-	}
-	pool, e := pgxpool.NewWithConfig(ctx, cfg)
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() { pool.Close(); _, _ = admin.Exec(ctx, "DROP SCHEMA "+q+" CASCADE"); admin.Close() })
-	if e = migrations.Up(ctx, pool); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash')`); e != nil {
-		t.Fatal(e)
+	})
+	if _, err := pool.Exec(context.Background(), `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash')`); err != nil {
+		t.Fatal(err)
 	}
 	return NewNotebookRepository(pool), pool
 }

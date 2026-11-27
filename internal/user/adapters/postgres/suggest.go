@@ -10,7 +10,7 @@ import (
 // SuggestUsers performs indexed literal prefix search and excludes the caller.
 func (r *UserRepository) SuggestUsers(ctx context.Context, userID int64, q string, limit int) ([]domain.UserSuggestion, error) {
 	pattern := strings.ReplaceAll(strings.ToLower(q), "_", `\_`) + "%"
-	rows, err := r.db.Query(ctx, `SELECT id,login FROM users WHERE lower(login) COLLATE "C" LIKE $1 ESCAPE '\' AND id <> $2 ORDER BY lower(login) COLLATE "C",id LIMIT $3`, pattern, userID, limit)
+	rows, err := r.db.Query(ctx, `SELECT id,login FROM `+r.table+` WHERE lower(login) COLLATE "C" LIKE $1 ESCAPE '\' AND id <> $2 ORDER BY lower(login) COLLATE "C",id LIMIT $3`, pattern, userID, limit)
 	if err != nil {
 		return nil, err
 	}

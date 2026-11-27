@@ -9,13 +9,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const commentColumns = `c.id,c.notebook_id,c.cell_id,c.author_id,u.login,c.text,c.created_at,c.updated_at`
+const commentColumns = `c.id,c.notebook_id,c.cell_id,c.author_id,c.text,c.created_at,c.updated_at`
 
 // lockCommentWall сериализует операции с изменением доступа и удалением ячейки.
 // Проверка грантов отдельным запросом после ожидания видит свежий READ COMMITTED snapshot.
 func lockCommentWall(ctx context.Context, tx pgx.Tx, notebookID int64, cellID string, visitorID int64) (int64, error) {
 	var ownerID int64
-	err := tx.QueryRow(ctx, `SELECT owner_id FROM notebooks WHERE id=$1 FOR UPDATE`, notebookID).Scan(&ownerID)
+	err := tx.QueryRow(ctx, `SELECT owner_id FROM workspace.notebooks WHERE id=$1 FOR UPDATE`, notebookID).Scan(&ownerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, usecase.ErrNotebookNotFound
 	}
@@ -26,7 +26,7 @@ func lockCommentWall(ctx context.Context, tx pgx.Tx, notebookID int64, cellID st
 		return 0, err
 	}
 	var cell string
-	err = tx.QueryRow(ctx, `SELECT cell_id FROM notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, notebookID, cellID).Scan(&cell)
+	err = tx.QueryRow(ctx, `SELECT cell_id FROM workspace.notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, notebookID, cellID).Scan(&cell)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, usecase.ErrCellNotFound
 	}
@@ -40,6 +40,12 @@ func (r *NotebookRepository) withCommentWall(ctx context.Context, notebookID int
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if visitorID > 0 {
+		if err = lockActor(ctx, tx, visitorID); err != nil {
+			return err
+		}
+	}
+
 	ownerID, err := lockCommentWall(ctx, tx, notebookID, cellID, visitorID)
 	if err != nil {
 		return err
@@ -53,7 +59,7 @@ func (r *NotebookRepository) withCommentWall(ctx context.Context, notebookID int
 // scanComment читает только публичные данные автора и сообщения.
 func scanComment(row pgx.Row) (domain.Comment, error) {
 	var c domain.Comment
-	err := row.Scan(&c.ID, &c.NotebookID, &c.CellID, &c.Author.ID, &c.Author.Login, &c.Text, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.NotebookID, &c.CellID, &c.Author.ID, &c.Text, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, usecase.ErrCommentNotFound
 	}
@@ -64,7 +70,7 @@ func scanComment(row pgx.Row) (domain.Comment, error) {
 
 // readComment проверяет полную привязку и блокирует найденное сообщение.
 func readComment(ctx context.Context, tx pgx.Tx, notebookID int64, cellID string, commentID int64) (domain.Comment, error) {
-	return scanComment(tx.QueryRow(ctx, `SELECT `+commentColumns+` FROM cell_comments c JOIN users u ON u.id=c.author_id WHERE c.notebook_id=$1 AND c.cell_id=$2 AND c.id=$3 FOR UPDATE OF c`, notebookID, cellID, commentID))
+	return scanComment(tx.QueryRow(ctx, `SELECT `+commentColumns+` FROM workspace.cell_comments c WHERE c.notebook_id=$1 AND c.cell_id=$2 AND c.id=$3 FOR UPDATE OF c`, notebookID, cellID, commentID))
 }
 
 // ListComments читает не более limit+1 сообщений одной стены с актуальными логинами.
@@ -75,7 +81,7 @@ func (r *NotebookRepository) ListComments(ctx context.Context, notebookID int64,
 	result := usecase.CommentRows{Items: []domain.Comment{}}
 	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
 		result.OwnerID = ownerID
-		sql := `SELECT ` + commentColumns + ` FROM cell_comments c JOIN users u ON u.id=c.author_id WHERE c.notebook_id=$1 AND c.cell_id=$2`
+		sql := `SELECT ` + commentColumns + ` FROM workspace.cell_comments c WHERE c.notebook_id=$1 AND c.cell_id=$2`
 		args := []any{notebookID, cellID}
 		if query.After != nil {
 			sql += ` AND (c.created_at,c.id)<($3,$4)`
@@ -116,7 +122,7 @@ func (r *NotebookRepository) CreateComment(ctx context.Context, notebookID int64
 	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
 		result.OwnerID = ownerID
 		var id int64
-		err := tx.QueryRow(ctx, `INSERT INTO cell_comments(notebook_id,cell_id,author_id,text,created_at,updated_at) VALUES($1,$2,$3,$4,statement_timestamp(),statement_timestamp()) RETURNING id`, notebookID, cellID, visitorID, text).Scan(&id)
+		err := tx.QueryRow(ctx, `INSERT INTO workspace.cell_comments(notebook_id,cell_id,author_id,text,created_at,updated_at) VALUES($1,$2,$3,$4,statement_timestamp(),statement_timestamp()) RETURNING id`, notebookID, cellID, visitorID, text).Scan(&id)
 		if err != nil {
 			return err
 		}
@@ -143,7 +149,7 @@ func (r *NotebookRepository) UpdateComment(ctx context.Context, notebookID int64
 		if c.Author.ID != visitorID {
 			return usecase.ErrCommentForbidden
 		}
-		if _, err = tx.Exec(ctx, `UPDATE cell_comments SET text=$4,updated_at=GREATEST(clock_timestamp(),updated_at+INTERVAL '1 microsecond') WHERE notebook_id=$1 AND cell_id=$2 AND id=$3`, notebookID, cellID, commentID, text); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE workspace.cell_comments SET text=$4,updated_at=GREATEST(clock_timestamp(),updated_at+INTERVAL '1 microsecond') WHERE notebook_id=$1 AND cell_id=$2 AND id=$3`, notebookID, cellID, commentID, text); err != nil {
 			return err
 		}
 		result.OwnerID = ownerID
@@ -169,7 +175,7 @@ func (r *NotebookRepository) DeleteComment(ctx context.Context, notebookID int64
 		if c.Author.ID != visitorID && ownerID != visitorID {
 			return usecase.ErrCommentForbidden
 		}
-		_, err = tx.Exec(ctx, `DELETE FROM cell_comments WHERE notebook_id=$1 AND cell_id=$2 AND id=$3`, notebookID, cellID, commentID)
+		_, err = tx.Exec(ctx, `DELETE FROM workspace.cell_comments WHERE notebook_id=$1 AND cell_id=$2 AND id=$3`, notebookID, cellID, commentID)
 		return err
 	})
 }

@@ -9,6 +9,8 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"errors"
+	"image"
+	"image/draw"
 	"image/png"
 	"net/url"
 	"strconv"
@@ -55,12 +57,17 @@ func (*TOTP) Setup(secret, login string) (usecase.TwoFactorSetup, error) {
 	if err != nil {
 		return usecase.TwoFactorSetup{}, errors.New("construct TOTP setup")
 	}
-	img, err := key.Image(384, 384)
+	const size, margin = 384, 48
+	img, err := key.Image(size-2*margin, size-2*margin)
 	if err != nil {
 		return usecase.TwoFactorSetup{}, errors.New("render TOTP QR")
 	}
+	// Оставляем белую зону вокруг кода, сохраняя целочисленный размер модулей.
+	canvas := image.NewGray(image.Rect(0, 0, size, size))
+	draw.Draw(canvas, canvas.Bounds(), image.White, image.Point{}, draw.Src)
+	draw.Draw(canvas, canvas.Bounds().Inset(margin), img, img.Bounds().Min, draw.Src)
 	var out bytes.Buffer
-	if err = png.Encode(&out, img); err != nil {
+	if err = png.Encode(&out, canvas); err != nil {
 		return usecase.TwoFactorSetup{}, errors.New("encode TOTP QR")
 	}
 	return usecase.TwoFactorSetup{Secret: secret, QRCode: "data:image/png;base64," + base64.StdEncoding.EncodeToString(out.Bytes())}, nil

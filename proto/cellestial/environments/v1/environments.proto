@@ -1,0 +1,58 @@
+syntax = "proto3";
+package cellestial.environments.v1;
+option go_package = "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/environments/v1;environmentsv1";
+import "cellestial/agent/v1/agent.proto";
+
+// Control принимает durable намерения; короткий RPC не ожидает provisioning VPS.
+service Control {
+  rpc RequestCreate(CreateRequest) returns (Environment);
+  rpc GetEnvironment(EnvironmentRequest) returns (Environment);
+  rpc RequestDelete(DeleteRequest) returns (Environment);
+  rpc GetOperation(OperationRequest) returns (Operation);
+}
+// SessionAgent скрывает адрес и credentials агента, сохраняя типизированные команды.
+service SessionAgent {
+  rpc Health(cellestial.agent.v1.Target) returns (cellestial.agent.v1.HealthResponse);
+  rpc Execute(cellestial.agent.v1.ExecuteRequest) returns (stream cellestial.agent.v1.ResultFrame);
+  rpc GetExecution(cellestial.agent.v1.ExecutionRequest) returns (stream cellestial.agent.v1.ResultFrame);
+  rpc ReadEvents(cellestial.agent.v1.EventsRequest) returns (stream cellestial.agent.v1.EventFrame);
+  rpc InspectVariables(cellestial.agent.v1.ExecutionRequest) returns (stream cellestial.agent.v1.ResultFrame);
+  rpc Activity(cellestial.agent.v1.Target) returns (cellestial.agent.v1.HealthResponse);
+  rpc Drain(cellestial.agent.v1.Target) returns (cellestial.agent.v1.HealthResponse);
+  rpc Stop(cellestial.agent.v1.Target) returns (cellestial.agent.v1.HealthResponse);
+  rpc Interrupt(cellestial.agent.v1.Target) returns (cellestial.agent.v1.ControlResponse);
+  rpc Restart(cellestial.agent.v1.Target) returns (cellestial.agent.v1.ControlResponse);
+  rpc StopExecutions(cellestial.agent.v1.StopExecutionsRequest) returns (cellestial.agent.v1.ControlResponse);
+}
+message CreateRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  bytes fingerprint = 3;
+  string language = 4;
+  string profile = 5;
+  uint64 fence = 6;
+}
+message EnvironmentRequest { string session_id = 1; }
+message DeleteRequest {
+  string session_id = 1;
+  string operation_id = 2;
+  bytes fingerprint = 3;
+  string reason_code = 4;
+  uint64 fence = 5;
+}
+// Environment не содержит сети, provider IDs или секретов. Deleted ACK не равен cleanup_confirmed.
+message Environment {
+  string session_id = 1;
+  string state = 2;
+  string reason_code = 3;
+  bool cleanup_confirmed = 4;
+}
+message OperationRequest { string operation_id = 1; }
+message Operation {
+  string operation_id = 1;
+  string session_id = 2;
+  string state = 3;
+  bool done = 4;
+  bool cleanup_confirmed = 5;
+  string error_code = 6;
+}

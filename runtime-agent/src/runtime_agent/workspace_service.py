@@ -242,7 +242,8 @@ class WorkspaceService:
             )
         except Exception:
             log.error(
-                "workspace.command.failed", extra={"event_fields": {"request_id": request_id}}
+                "workspace.command.failed",
+                extra={"event_fields": {"operation_request_id": request_id}},
             )
             error = FileError("internal", resync=True)
         self.errors[error.code] = self.errors.get(error.code, 0) + 1

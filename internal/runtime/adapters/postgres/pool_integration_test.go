@@ -3,49 +3,19 @@ package postgres
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // integrationRepo создаёт отдельную схему PostgreSQL с миграциями (RUNTIME_TEST_DATABASE_URL).
 func integrationRepo(t *testing.T) *Repository {
 	t.Helper()
-	dsn := os.Getenv("RUNTIME_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("RUNTIME_TEST_DATABASE_URL is unset")
-	}
-	ctx := context.Background()
-	root, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "runtime_pool_" + uuid.NewString()[:8]
-	schema := pgx.Identifier{name}.Sanitize()
-	if _, err = root.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = name
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { pool.Close(); _, _ = root.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); root.Close() })
-	if err = migrations.Up(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
-	return NewRepository(pool)
+	return NewRepository(pgtest.NewDatabase(t, "RUNTIME_TEST_DATABASE_URL"))
 }
 
 // queuedEnv создаёт окружение QUEUED и берёт его задание владельцем owner.
@@ -58,7 +28,7 @@ func queuedEnv(t *testing.T, r *Repository, owner string) domain.Environment {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = r.db.Exec(ctx, `UPDATE runtime_jobs SET status = 'running', lease_owner = $2 WHERE session_id = $1`,
+	if _, err = r.db.Exec(ctx, `UPDATE environments.runtime_jobs SET status = 'running', lease_owner = $2 WHERE session_id = $1`,
 		env.SessionID, owner); err != nil {
 		t.Fatal(err)
 	}

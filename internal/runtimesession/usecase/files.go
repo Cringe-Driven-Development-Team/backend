@@ -14,22 +14,30 @@ type FileAgent interface {
 
 // Files проверяет владельца и готовность runtime перед каждой файловой командой или частью.
 func (s *Service) Files(ctx context.Context, owner int64, id uuid.UUID, req FileRequest) (FileResponse, error) {
-	if owner <= 0 {
-		return FileResponse{}, D.ErrNotFound
-	}
-	session, err := s.store.Owned(ctx, owner, id)
-	if err != nil {
+	if err := authorizeFiles(ctx, s.store, owner, id); err != nil {
 		return FileResponse{}, err
-	}
-	if session.State != D.Ready {
-		if session.State == D.Stopping || session.State == D.Stopped || session.State == D.Failed {
-			return FileResponse{}, D.ErrWorkspaceClosed
-		}
-		return FileResponse{}, D.ErrUnavailable
 	}
 	agent, ok := s.agent.(FileAgent)
 	if !ok {
 		return FileResponse{}, D.ErrUnavailable
 	}
 	return agent.Files(ctx, id, req)
+}
+
+// authorizeFiles проверяет локальное владение и готовность до любого сетевого обращения.
+func authorizeFiles(ctx context.Context, store Store, owner int64, id uuid.UUID) error {
+	if owner <= 0 {
+		return D.ErrNotFound
+	}
+	session, err := store.Owned(ctx, owner, id)
+	if err != nil {
+		return err
+	}
+	if session.State != D.Ready {
+		if session.State == D.Stopping || session.State == D.Stopped || session.State == D.Failed {
+			return D.ErrWorkspaceClosed
+		}
+		return D.ErrUnavailable
+	}
+	return nil
 }

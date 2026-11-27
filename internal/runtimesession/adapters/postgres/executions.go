@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,6 +17,7 @@ import (
 // executionRecord сохраняет публичный результат и служебные параметры команды отдельно, чтобы последние не
 // попали в API.
 type executionRecord struct {
+	CorrelationID string `json:",omitempty"`
 	SourceVersion string
 	// Public Публичная часть записи, разрешённая для ответа API.
 	Public domain.Execution
@@ -50,7 +52,7 @@ func encodeExecution(x domain.Execution) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := executionRecord{Public: x, SourceVersion: x.SourceVersion, OwnerID: x.OwnerID, NotebookID: x.NotebookID, Code: []byte(x.Code), TimeoutSeconds: x.TimeoutSeconds, Dispatch: x.Dispatch, Version: x.Version, Generation: x.Generation, ClearPending: x.ClearPending, Kind: x.Kind, OutputJSON: outputs, ResultJSON: []byte(x.Result)}
+	r := executionRecord{Public: x, CorrelationID: x.CorrelationID, SourceVersion: x.SourceVersion, OwnerID: x.OwnerID, NotebookID: x.NotebookID, Code: []byte(x.Code), TimeoutSeconds: x.TimeoutSeconds, Dispatch: x.Dispatch, Version: x.Version, Generation: x.Generation, ClearPending: x.ClearPending, Kind: x.Kind, OutputJSON: outputs, ResultJSON: []byte(x.Result)}
 	for _, raw := range x.Outputs {
 		key, err := displayKey(raw)
 		if err != nil {
@@ -70,6 +72,7 @@ func decodeExecution(b []byte) (domain.Execution, error) {
 	var r executionRecord
 	e := json.Unmarshal(b, &r)
 	x := r.Public
+	x.CorrelationID = r.CorrelationID
 	x.SourceVersion = r.SourceVersion
 	x.OwnerID = r.OwnerID
 	x.NotebookID = r.NotebookID
@@ -105,7 +108,7 @@ func readExecution(row pgx.Row) (domain.Execution, error) {
 
 // Execution читает сохранённое исполнение, проверяя принадлежность сессии владельцу.
 func (s *Store) Execution(ctx context.Context, owner int64, sid uuid.UUID, id string) (domain.Execution, error) {
-	return readExecution(s.db.QueryRow(ctx, "SELECT e.data FROM runtime_executions e JOIN runtime_sessions s ON s.id=e.session_id WHERE e.session_id=$1 AND e.id=$2 AND s.owner_id=$3", sid, id, owner))
+	return readExecution(s.db.QueryRow(ctx, "SELECT e.data FROM workspace.runtime_executions e JOIN workspace.runtime_sessions s ON s.id=e.session_id WHERE e.session_id=$1 AND e.id=$2 AND s.owner_id=$3", sid, id, owner))
 }
 
 // Admit под блокировкой проверяет владельца, состояние сессии и source_hash, затем сохраняет команду до
@@ -120,14 +123,14 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 		return domain.Execution{}, err
 	}
 	var nb int64
-	e = tx.QueryRow(ctx, "SELECT n.id FROM notebooks n JOIN runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
+	e = tx.QueryRow(ctx, "SELECT n.id FROM workspace.notebooks n JOIN workspace.runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return domain.Execution{}, domain.ErrNotFound
 	}
 	if e != nil {
 		return domain.Execution{}, e
 	}
-	prior, e := readExecution(tx.QueryRow(ctx, "SELECT data FROM runtime_executions WHERE session_id=$1 AND id=$2", sid, r.ExecutionID))
+	prior, e := readExecution(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_executions WHERE session_id=$1 AND id=$2", sid, r.ExecutionID))
 	if e == nil {
 		if !prior.Same(r) {
 			return prior, domain.ErrConflict
@@ -137,7 +140,7 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 	if !errors.Is(e, domain.ErrNotFound) {
 		return prior, e
 	}
-	v, e := readSession(tx.QueryRow(ctx, "SELECT data FROM runtime_sessions WHERE id=$1 FOR UPDATE", sid))
+	v, e := readSession(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_sessions WHERE id=$1 FOR UPDATE", sid))
 	if e != nil {
 		return prior, e
 	}
@@ -145,7 +148,7 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 		return prior, domain.ErrConflict
 	}
 	var queued int
-	e = tx.QueryRow(ctx, `SELECT count(*) FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&queued)
+	e = tx.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&queued)
 	if e != nil {
 		return prior, e
 	}
@@ -167,16 +170,16 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 		return prior, e
 	}
 	var attempt int64
-	e = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM runtime_executions WHERE notebook_id=$1 AND cell_id=$2", nb, r.CellID).Scan(&attempt)
+	e = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM workspace.runtime_executions WHERE notebook_id=$1 AND cell_id=$2", nb, r.CellID).Scan(&attempt)
 	if e != nil {
 		return prior, e
 	}
-	x := domain.Execution{ID: r.ExecutionID, SessionID: sid, OwnerID: owner, NotebookID: nb, CellID: r.CellID, SourceHash: r.SourceHash, SourceVersion: sourceVersion, Code: code, TimeoutSeconds: r.TimeoutSeconds, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "pending"}
+	x := domain.Execution{CorrelationID: newExecutionCorrelation(ctx), ID: r.ExecutionID, SessionID: sid, OwnerID: owner, NotebookID: nb, CellID: r.CellID, SourceHash: r.SourceHash, SourceVersion: sourceVersion, Code: code, TimeoutSeconds: r.TimeoutSeconds, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "pending"}
 	b, e := encodeExecution(x)
 	if e != nil {
 		return x, e
 	}
-	_, e = tx.Exec(ctx, "INSERT INTO runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,$5,$6)", sid, x.ID, nb, x.CellID, attempt, b)
+	_, e = tx.Exec(ctx, "INSERT INTO workspace.runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,$5,$6)", sid, x.ID, nb, x.CellID, attempt, b)
 	if e != nil {
 		return x, translate(e)
 	}
@@ -186,7 +189,7 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 	if err != nil {
 		return x, err
 	}
-	_, e = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, sessionData)
+	_, e = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, sessionData)
 	if e != nil {
 		return x, e
 	}
@@ -195,7 +198,7 @@ func (s *Store) Admit(ctx context.Context, owner int64, sid uuid.UUID, r domain.
 
 // NextPending читает только следующую неотправленную команду без завершённой истории.
 func (s *Store) NextPending(ctx context.Context, sid uuid.UUID) (domain.Execution, error) {
-	return readExecution(s.db.QueryRow(ctx, "SELECT data FROM runtime_executions WHERE session_id=$1 AND data->>'Dispatch'='PENDING' ORDER BY admission_order LIMIT 1", sid))
+	return readExecution(s.db.QueryRow(ctx, "SELECT data FROM workspace.runtime_executions WHERE session_id=$1 AND data->>'Dispatch'='PENDING' ORDER BY admission_order LIMIT 1", sid))
 }
 
 // MarkUnknown завершает недостоверные попытки в базе, не загружая их тяжёлые результаты в Go.
@@ -206,7 +209,7 @@ func (s *Store) MarkUnknown(ctx context.Context, l domain.Lease) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var valid bool
-	err = tx.QueryRow(ctx, "SELECT lease_version=$2 AND lease_until>now() FROM runtime_sessions WHERE id=$1 FOR UPDATE", l.Session.ID, l.Version).Scan(&valid)
+	err = tx.QueryRow(ctx, "SELECT lease_version=$2 AND lease_until>now() FROM workspace.runtime_sessions WHERE id=$1 FOR UPDATE", l.Session.ID, l.Version).Scan(&valid)
 	if err != nil {
 		return err
 	}
@@ -214,10 +217,10 @@ func (s *Store) MarkUnknown(ctx context.Context, l domain.Lease) error {
 		return domain.ErrLeaseLost
 	}
 	_, err = tx.Exec(ctx, `WITH changed AS (
- UPDATE runtime_executions SET data=jsonb_set(jsonb_set(data,'{Public,state}','"UNKNOWN"'),'{Dispatch}','"ACCEPTED"')
+ UPDATE workspace.runtime_executions SET data=jsonb_set(jsonb_set(data,'{Public,state}','"UNKNOWN"'),'{Dispatch}','"ACCEPTED"')
  WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')
  RETURNING session_id,id,data
-) INSERT INTO runtime_projections(session_id,execution_id,version)
+) INSERT INTO workspace.runtime_projections(session_id,execution_id,version)
  SELECT session_id,id,(data->>'Version')::bigint FROM changed
  WHERE COALESCE(data->>'Kind','')!='inspect' AND data->'Public'->>'projection'='pending'
  ON CONFLICT(session_id,execution_id) DO UPDATE SET version=EXCLUDED.version,next_attempt=now()`, l.Session.ID)
@@ -236,7 +239,7 @@ func (s *Store) SaveExecution(ctx context.Context, l domain.Lease, x domain.Exec
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var ok bool
-	e = tx.QueryRow(ctx, "SELECT lease_version=$2 AND lease_until>now() FROM runtime_sessions WHERE id=$1 FOR UPDATE", l.Session.ID, l.Version).Scan(&ok)
+	e = tx.QueryRow(ctx, "SELECT lease_version=$2 AND lease_until>now() FROM workspace.runtime_sessions WHERE id=$1 FOR UPDATE", l.Session.ID, l.Version).Scan(&ok)
 	if e != nil {
 		return e
 	}
@@ -247,12 +250,12 @@ func (s *Store) SaveExecution(ctx context.Context, l domain.Lease, x domain.Exec
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, "UPDATE runtime_executions SET data=$3 WHERE session_id=$1 AND id=$2", x.SessionID, x.ID, b)
+	_, e = tx.Exec(ctx, "UPDATE workspace.runtime_executions SET data=$3 WHERE session_id=$1 AND id=$2", x.SessionID, x.ID, b)
 	if e != nil {
 		return e
 	}
 	if x.Projection == "pending" && x.Terminal() && x.State != "REJECTED" {
-		_, e = tx.Exec(ctx, "INSERT INTO runtime_projections(session_id,execution_id,version) VALUES($1,$2,$3) ON CONFLICT(session_id,execution_id) DO UPDATE SET version=EXCLUDED.version,next_attempt=now()", x.SessionID, x.ID, x.Version)
+		_, e = tx.Exec(ctx, "INSERT INTO workspace.runtime_projections(session_id,execution_id,version) VALUES($1,$2,$3) ON CONFLICT(session_id,execution_id) DO UPDATE SET version=EXCLUDED.version,next_attempt=now()", x.SessionID, x.ID, x.Version)
 		if e != nil {
 			return e
 		}
@@ -263,7 +266,7 @@ func (s *Store) SaveExecution(ctx context.Context, l domain.Lease, x domain.Exec
 // readCell работает под блокировкой ноутбука вызывающего и никогда не читает outputs и attachments.
 func readCell(ctx context.Context, tx pgx.Tx, notebookID int64, cellID string) (code, version string, position int, err error) {
 	var kind string
-	err = tx.QueryRow(ctx, `SELECT source,source_version,position,kind FROM notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, notebookID, cellID).Scan(&code, &version, &position, &kind)
+	err = tx.QueryRow(ctx, `SELECT source,source_version,position,kind FROM workspace.notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, notebookID, cellID).Scan(&code, &version, &position, &kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = domain.ErrNotFound
 	}
@@ -271,4 +274,13 @@ func readCell(ctx context.Context, tx pgx.Tx, notebookID int64, cellID string) (
 		err = domain.ErrInvalid
 	}
 	return code, version, position, err
+}
+
+// newExecutionCorrelation сохраняет контекст admission, не связанный с execution/request id.
+func newExecutionCorrelation(ctx context.Context) string {
+	id := observability.RequestID(ctx)
+	if observability.ValidRequestID(id) {
+		return id
+	}
+	return uuid.NewString()
 }

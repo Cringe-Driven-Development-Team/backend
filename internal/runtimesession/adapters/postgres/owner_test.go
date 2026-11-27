@@ -17,7 +17,7 @@ func TestConcurrentStartsDifferentNotebooksOneOwner(t *testing.T) {
 	s, pool, owner, nb := integrationStore(t)
 	ctx := context.Background()
 	var nb2 int64
-	if err := pool.QueryRow(ctx, "INSERT INTO notebooks(owner_id,name,revision) VALUES($1,'second','revision2') RETURNING id", owner).Scan(&nb2); err != nil {
+	if err := pool.QueryRow(ctx, "INSERT INTO workspace.notebooks(owner_id,name,revision) VALUES($1,'second','revision2') RETURNING id", owner).Scan(&nb2); err != nil {
 		t.Fatal(err)
 	}
 	if v, activeErr := s.Active(ctx, owner); activeErr != nil || v != nil {
@@ -72,10 +72,10 @@ func TestDifferentOwnersCanStartIndependently(t *testing.T) {
 	s, p, owner, nb := integrationStore(t)
 	ctx := context.Background()
 	var owner2, nb2 int64
-	if err := p.QueryRow(ctx, "INSERT INTO users(login,password_hash) VALUES('other','hash') RETURNING id").Scan(&owner2); err != nil {
+	if err := p.QueryRow(ctx, "INSERT INTO identity.users(login,password_hash) VALUES('other','hash') RETURNING id").Scan(&owner2); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.QueryRow(ctx, "INSERT INTO notebooks(owner_id,name,revision) VALUES($1,'other','other') RETURNING id", owner2).Scan(&nb2); err != nil {
+	if err := p.QueryRow(ctx, "INSERT INTO workspace.notebooks(owner_id,name,revision) VALUES($1,'other','other') RETURNING id", owner2).Scan(&nb2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Start(ctx, newSession(owner, nb)); err != nil {
@@ -99,7 +99,7 @@ func TestPublicCursorPaginationKeepsLargeFirstEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 1; i <= 3; i++ {
-		if _, err = p.Exec(ctx, "INSERT INTO runtime_events(session_id,public_seq,kind,body) VALUES($1,$2,'test',$3)", v.ID, i, `{"text":"abcdefghijklmnop"}`); err != nil {
+		if _, err = p.Exec(ctx, "INSERT INTO workspace.runtime_events(session_id,public_seq,kind,body) VALUES($1,$2,'test',$3)", v.ID, i, `{"text":"abcdefghijklmnop"}`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -134,7 +134,7 @@ func TestPendingDispatchInAdmissionOrderAcrossCells(t *testing.T) {
 		if err != nil || x.ID != want {
 			t.Fatalf("dispatch[%d]=%s, want %s: %v", i, x.ID, want, err)
 		}
-		if _, err = p.Exec(ctx, `UPDATE runtime_executions SET data=jsonb_set(data,'{Dispatch}','"ACCEPTED"') WHERE session_id=$1 AND id=$2`, v.ID, x.ID); err != nil {
+		if _, err = p.Exec(ctx, `UPDATE workspace.runtime_executions SET data=jsonb_set(data,'{Dispatch}','"ACCEPTED"') WHERE session_id=$1 AND id=$2`, v.ID, x.ID); err != nil {
 			t.Fatal(err)
 		}
 	}

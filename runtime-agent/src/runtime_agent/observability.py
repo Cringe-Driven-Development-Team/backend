@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import sqlite3
 import time
@@ -20,12 +21,16 @@ class EventFormatter(logging.Formatter):
 
     def format(self, record):
         """Добавьте время, уровень и имя события к его полям."""
+        fields = getattr(record, "event_fields", {})
         return json.dumps(
             {
+                "service": "runtime-agent",
+                "version": os.environ.get("VERSION", "local"),
+                "request_id": request_id.get() or "",
                 "time": self.formatTime(record),
                 "level": record.levelname,
                 "event": record.getMessage(),
-                **getattr(record, "event_fields", {}),
+                **fields,
             }
         )
 
@@ -34,9 +39,10 @@ def configure_logging(level):
     """Подключите вывод JSON с порогом вывода level для HTTP и SQLite."""
     handler = logging.StreamHandler()
     handler.setFormatter(EventFormatter())
-    log.handlers[:] = [handler]
-    log.propagate = False
-    log.setLevel(level.upper())
+    package = logging.getLogger("runtime_agent")
+    package.handlers[:] = [handler]
+    package.propagate = False
+    package.setLevel(level.upper())
 
 
 def session_task(operation, *, name, identifier):

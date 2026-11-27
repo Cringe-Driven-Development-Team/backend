@@ -91,7 +91,7 @@ func TestEventIgnoresUnrelatedHistory(t *testing.T) {
 		}
 	}
 	// Чужой архив намеренно не декодируется в Execution: фоновый путь не должен его загружать.
-	if _, err = p.Exec(ctx, `UPDATE runtime_executions SET data='{"Public":{"state":"SUCCEEDED","outputs":42},"Dispatch":"ACCEPTED"}' WHERE id='history'`); err != nil {
+	if _, err = p.Exec(ctx, `UPDATE workspace.runtime_executions SET data='{"Public":{"state":"SUCCEEDED","outputs":42},"Dispatch":"ACCEPTED"}' WHERE id='history'`); err != nil {
 		t.Fatal(err)
 	}
 	l, err := s.Claim(ctx, "worker")
@@ -142,7 +142,7 @@ func TestPendingSelectionIgnoresHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = p.Exec(ctx, `UPDATE runtime_executions SET data='{"Public":{"state":"SUCCEEDED","outputs":42},"Dispatch":"ACCEPTED"}' WHERE id='history'`); err != nil {
+	if _, err = p.Exec(ctx, `UPDATE workspace.runtime_executions SET data='{"Public":{"state":"SUCCEEDED","outputs":42},"Dispatch":"ACCEPTED"}' WHERE id='history'`); err != nil {
 		t.Fatal(err)
 	}
 	x, err := s.NextPending(ctx, v.ID)
@@ -166,7 +166,7 @@ func TestPendingSelectionIgnoresHistory(t *testing.T) {
 		t.Fatal("no pending command expected", err)
 	}
 	var state string
-	if err = p.QueryRow(ctx, `SELECT data->'Public'->>'state' FROM runtime_executions WHERE id='history'`).Scan(&state); err != nil || state != "SUCCEEDED" {
+	if err = p.QueryRow(ctx, `SELECT data->'Public'->>'state' FROM workspace.runtime_executions WHERE id='history'`).Scan(&state); err != nil || state != "SUCCEEDED" {
 		t.Fatal(state, err)
 	}
 }
@@ -194,7 +194,7 @@ func TestDisplayUpdatePagesOnlyMatchingGeneration(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if _, err = p.Exec(ctx, "INSERT INTO runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,1,$5)", v.ID, x.ID, nb, x.CellID, raw); err != nil {
+		if _, err = p.Exec(ctx, "INSERT INTO workspace.runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,1,$5)", v.ID, x.ID, nb, x.CellID, raw); err != nil {
 			t.Fatal(err)
 		}
 	}

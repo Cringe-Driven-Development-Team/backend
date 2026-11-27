@@ -10,6 +10,7 @@ import (
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpcerror"
 	"github.com/google/uuid"
 )
 
@@ -109,12 +110,17 @@ func failureFor(err error) (*failure, error) {
 	if err == nil {
 		return nil, nil
 	}
+	if _, _, ok := rpcerror.Response(err); ok {
+		return nil, err
+	}
 	var active *D.ActiveSessionError
 	if errors.As(err, &active) {
 		return &failure{409, api.RuntimeActiveSessionConflict{Code: "active_session_exists", Message: "Another runtime session is active", ActiveSession: session(active.Session)}}, nil
 	}
 	status, code, message := 0, "", ""
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return nil, context.DeadlineExceeded
 	case errors.Is(err, D.ErrInvalid):
 		status, code, message = 400, "validation_error", "Invalid runtime request"
 	case errors.Is(err, D.ErrNotFound):

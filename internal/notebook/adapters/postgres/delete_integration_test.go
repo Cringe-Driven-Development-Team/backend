@@ -26,15 +26,15 @@ func deletionHistory(t *testing.T, pool *pgxpool.Pool, id int64) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
 	sid := uuid.New()
-	if _, err := pool.Exec(ctx, `INSERT INTO runtime_sessions(id,owner_id,notebook_id,request_id,language,state,data) VALUES($1,1,$2,$3,'python','STOPPED','{"public":{"cleanup_pending":false},"CreateUnknown":false}')`, sid, id, sid.String()); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO workspace.runtime_sessions(id,owner_id,notebook_id,request_id,language,state,data) VALUES($1,1,$2,$3,'python','STOPPED','{"public":{"cleanup_pending":false},"CreateUnknown":false}')`, sid, id, sid.String()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,'execution',$2,'cell',1,'{"Public":{"state":"SUCCEEDED","projection":"applied"},"Dispatch":"DONE"}')`, sid, id); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO workspace.runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,'execution',$2,'cell',1,'{"Public":{"state":"SUCCEEDED","projection":"applied"},"Dispatch":"DONE"}')`, sid, id); err != nil {
 		t.Fatal(err)
 	}
 	for _, query := range []string{
-		`INSERT INTO runtime_events(session_id,public_seq,kind,body) VALUES($1,1,'execution','{}')`,
-		`INSERT INTO runtime_batches(session_id,request_id,request,result) VALUES($1,'batch','{}','{}')`,
+		`INSERT INTO workspace.runtime_events(session_id,public_seq,kind,body) VALUES($1,1,'execution','{}')`,
+		`INSERT INTO workspace.runtime_batches(session_id,request_id,request,result) VALUES($1,'batch','{}','{}')`,
 	} {
 		if _, err := pool.Exec(ctx, query, sid); err != nil {
 			t.Fatal(err)
@@ -93,12 +93,12 @@ func TestDeleteNotebookRemovesContentAndCompletedHistory(t *testing.T) {
 
 func TestDeleteNotebookRejectsBusyWithoutChanges(t *testing.T) {
 	for name, query := range map[string]string{
-		"active idle":        `UPDATE runtime_sessions SET state='READY' WHERE id=$1`,
-		"active executing":   `UPDATE runtime_executions SET data='{"Public":{"state":"RUNNING"},"Dispatch":"SENT"}' WHERE session_id=$1`,
-		"cleanup pending":    `UPDATE runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','true') WHERE id=$1`,
-		"unknown create":     `UPDATE runtime_sessions SET data=jsonb_set(data,'{CreateUnknown}','true') WHERE id=$1`,
-		"leased worker":      `UPDATE runtime_sessions SET lease_until=now()+interval '1 minute' WHERE id=$1`,
-		"pending projection": `INSERT INTO runtime_projections(session_id,execution_id,version) VALUES($1,'execution',1)`,
+		"active idle":        `UPDATE workspace.runtime_sessions SET state='READY' WHERE id=$1`,
+		"active executing":   `UPDATE workspace.runtime_executions SET data='{"Public":{"state":"RUNNING"},"Dispatch":"SENT"}' WHERE session_id=$1`,
+		"cleanup pending":    `UPDATE workspace.runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','true') WHERE id=$1`,
+		"unknown create":     `UPDATE workspace.runtime_sessions SET data=jsonb_set(data,'{CreateUnknown}','true') WHERE id=$1`,
+		"leased worker":      `UPDATE workspace.runtime_sessions SET lease_until=now()+interval '1 minute' WHERE id=$1`,
+		"pending projection": `INSERT INTO workspace.runtime_projections(session_id,execution_id,version) VALUES($1,'execution',1)`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			repo, pool := testRepository(t)
@@ -137,16 +137,16 @@ func TestDeleteNotebookOtherNotebookAndRetryAfterCleanup(t *testing.T) {
 	other := deletionNotebook(t, repo)
 	sid := deletionHistory(t, pool, n.ID)
 	otherSID := deletionHistory(t, pool, other.ID)
-	if _, err := pool.Exec(ctx, `UPDATE runtime_sessions SET state='READY' WHERE id=$1`, otherSID); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.runtime_sessions SET state='READY' WHERE id=$1`, otherSID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','true') WHERE id=$1`, sid); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','true') WHERE id=$1`, sid); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.DeleteNotebook(ctx, n.ID, 1); !errors.Is(err, usecase.ErrNotebookInUse) {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','false') WHERE id=$1`, sid); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE workspace.runtime_sessions SET data=jsonb_set(data,'{public,cleanup_pending}','false') WHERE id=$1`, sid); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.Get(ctx, n.ID, 1); err != nil {

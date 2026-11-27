@@ -24,7 +24,7 @@ func renameNotebook(t *testing.T, repo *NotebookRepository, pool *pgxpool.Pool) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(context.Background(), `UPDATE notebooks SET updated_at='2026-01-01T00:00:00Z' WHERE id=$1`, n.ID); err != nil {
+	if _, err = pool.Exec(context.Background(), `UPDATE workspace.notebooks SET updated_at='2026-01-01T00:00:00Z' WHERE id=$1`, n.ID); err != nil {
 		t.Fatal(err)
 	}
 	n, err = repo.Get(context.Background(), n.ID, 1)
@@ -71,7 +71,7 @@ func TestRenameNotebookNoop(t *testing.T) {
 func TestRenameNotebookOwnerAndMissing(t *testing.T) {
 	repo, pool := testRepository(t)
 	before := renameNotebook(t, repo, pool)
-	if _, err := pool.Exec(context.Background(), `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'other','hash')`); err != nil {
+	if _, err := pool.Exec(context.Background(), `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
 	for _, pair := range [][2]int64{{before.ID, 2}, {before.ID + 1, 1}} {

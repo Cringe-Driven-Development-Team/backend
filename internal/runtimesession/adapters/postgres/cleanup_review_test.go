@@ -23,7 +23,7 @@ func (e *cleanupEnvironment) Get(_ context.Context, id uuid.UUID) (D.Environment
 	if e.deleted {
 		state = "DELETED"
 	}
-	return D.Environment{SessionID: id, State: state}, nil
+	return D.Environment{SessionID: id, State: state, CleanupConfirmed: e.deleted}, nil
 }
 
 // RequestCreate не используется при завершении существующей сессии.
@@ -54,8 +54,8 @@ func (*cleanupAgent) Events(context.Context, uuid.UUID, int64, D.EventLimits) ([
 	return []D.AgentEvent{}, nil
 }
 
-// TestCleanupFailureReleasesSlotAndSurvivesRestart проверяет новый запуск при сбое облака и продолжение очистки новым обработчиком.
-func TestCleanupFailureReleasesSlotAndSurvivesRestart(t *testing.T) {
+// TestCleanupFailureRetainsSlotAndSurvivesRestart проверяет удержание слота при сбое облака и восстановление очистки.
+func TestCleanupFailureRetainsSlotAndSurvivesRestart(t *testing.T) {
 	s, p, owner, nb := integrationStore(t)
 	ctx := context.Background()
 	v := newSession(owner, nb)
@@ -79,19 +79,18 @@ func TestCleanupFailureReleasesSlotAndSurvivesRestart(t *testing.T) {
 		t.Fatal("session must finish before cloud cleanup", saved, err)
 	}
 	active, err := s.Active(ctx, owner)
-	if err != nil || active != nil {
-		t.Fatal("slot remains occupied", active, err)
+	if err != nil || active == nil || active.ID != v.ID {
+		t.Fatal("cleanup_pending slot was released", active, err)
 	}
-	// Повтор старого запроса запуска возвращает завершённую сессию, а новый запрос занимает свободный слот.
+	// Повтор возвращает прежний результат; новый Start до cleanup_confirmed запрещён.
 	retry, err := s.Start(ctx, v)
 	if err != nil || retry.State != D.Stopped {
 		t.Fatal(retry, err)
 	}
-	newer, err := s.Start(ctx, newSession(owner, nb))
-	if err != nil {
-		t.Fatal("new session blocked by cleanup", err)
+	if _, err = s.Start(ctx, newSession(owner, nb)); !errors.Is(err, D.ErrActiveSessionExists) {
+		t.Fatalf("second session allowed during cleanup: %v", err)
 	}
-	if _, err = p.Exec(ctx, "UPDATE runtime_sessions SET next_check=CASE WHEN id=$1 THEN now() ELSE now()+interval '1 hour' END", v.ID); err != nil {
+	if _, err = p.Exec(ctx, "UPDATE workspace.runtime_sessions SET next_check=CASE WHEN id=$1 THEN now() ELSE now()+interval '1 hour' END", v.ID); err != nil {
 		t.Fatal(err)
 	}
 	l, err = s.Claim(ctx, "after-restart")
@@ -105,7 +104,7 @@ func TestCleanupFailureReleasesSlotAndSurvivesRestart(t *testing.T) {
 		t.Fatal("cleanup not retried independently", env.requests, agent.stops)
 	}
 	env.deleted = true
-	if _, err = p.Exec(ctx, "UPDATE runtime_sessions SET next_check=$2 WHERE id=$1", v.ID, time.Now().Add(-time.Second)); err != nil {
+	if _, err = p.Exec(ctx, "UPDATE workspace.runtime_sessions SET next_check=$2 WHERE id=$1", v.ID, time.Now().Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	l, err = s.Claim(ctx, "confirmed")
@@ -118,6 +117,16 @@ func TestCleanupFailureReleasesSlotAndSurvivesRestart(t *testing.T) {
 	saved, err = s.Owned(ctx, owner, v.ID)
 	if err != nil || saved.CleanupError || saved.State != D.Stopped {
 		t.Fatal(saved, err)
+	}
+	if active, err = s.Active(ctx, owner); err != nil || active != nil {
+		t.Fatal("confirmed cleanup did not release slot", active, err)
+	}
+	newer, err := s.Start(ctx, newSession(owner, nb))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = p.Exec(ctx, "UPDATE workspace.runtime_sessions SET next_check=now()+interval '1 hour' WHERE id=$1", newer.ID); err != nil {
+		t.Fatal(err)
 	}
 	active, err = s.Active(ctx, owner)
 	if err != nil || active == nil || active.ID != newer.ID {

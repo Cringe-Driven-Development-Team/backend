@@ -88,5 +88,5 @@ func notebookRead(r *http.Request) bool {
 		return false
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/notebooks/"), "/")
-	return parts[0] != "" && (len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") || (len(parts) == 5 && parts[1] == "content" && parts[2] == "cells" && parts[3] != "" && parts[4] == "comments"))
+	return parts[0] != "" && (len(parts) == 1 || (len(parts) == 2 && (parts[1] == "content" || parts[1] == "export")) || (len(parts) == 5 && parts[1] == "content" && parts[2] == "cells" && parts[3] != "" && parts[4] == "comments"))
 }

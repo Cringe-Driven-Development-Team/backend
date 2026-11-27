@@ -22,7 +22,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 			t.Run(operation+"/"+order, func(t *testing.T) {
 				repo, pool := testRepository(t)
 				ctx := t.Context()
-				if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
+				if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
 					t.Fatal(err)
 				}
 				uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
@@ -30,7 +30,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err = repo.PutSharing(ctx, source.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
+				if _, err = repo.PutSharing(ctx, source.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
 					t.Fatal(err)
 				}
 				var copy domain.Notebook
@@ -38,7 +38,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 				change := func(r *NotebookRepository) error {
 					switch operation {
 					case "revoke":
-						_, e := r.PutSharing(ctx, source.ID, 1, domain.SharingModePrivate, []string{})
+						_, e := r.PutSharing(ctx, source.ID, 1, domain.SharingModePrivate, []int64{})
 						return e
 					case "delete":
 						return r.DeleteNotebook(ctx, source.ID, 1)
@@ -63,7 +63,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 						t.Fatalf("copy after access loss: %v", err2)
 					}
 					var count int
-					if e := pool.QueryRow(ctx, `SELECT count(*) FROM notebooks WHERE owner_id=2`).Scan(&count); e != nil || count != 0 {
+					if e := pool.QueryRow(ctx, `SELECT count(*) FROM workspace.notebooks WHERE owner_id=2`).Scan(&count); e != nil || count != 0 {
 						t.Fatalf("partial copy: %d %v", count, e)
 					}
 					return
@@ -105,7 +105,7 @@ func (d cloneFailureDB) Begin(ctx context.Context) (pgx.Tx, error) {
 type cloneFailureTx struct{ pgx.Tx }
 
 func (tx cloneFailureTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	if strings.HasPrefix(sql, "INSERT INTO notebook_cell_data") {
+	if strings.HasPrefix(sql, "INSERT INTO workspace.notebook_cell_data") {
 		return pgconn.CommandTag{}, errors.New("injected copy failure")
 	}
 	return tx.Tx.Exec(ctx, sql, args...)

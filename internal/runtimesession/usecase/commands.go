@@ -60,7 +60,7 @@ func (s *Service) Kernel(ctx context.Context, owner int64, id uuid.UUID, restart
 		return "", s.agent.Interrupt(ctx, id)
 	})
 	if err != nil && !errors.Is(err, D.ErrNotFound) && !errors.Is(err, D.ErrConflict) {
-		return "", D.ErrUnavailable
+		return "", errors.Join(D.ErrUnavailable, err)
 	}
 	return generation, err
 }

@@ -38,6 +38,14 @@ func TestSetupQRMatchesManualSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for y := range 48 {
+		for x := range img.Bounds().Dx() {
+			r, g, b, _ := img.At(x, y).RGBA()
+			if r != 0xffff || g != 0xffff || b != 0xffff {
+				t.Fatal("QR quiet zone must be white")
+			}
+		}
+	}
 	bitmap, err := gozxing.NewBinaryBitmapFromImage(img)
 	if err != nil {
 		t.Fatal(err)

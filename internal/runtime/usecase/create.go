@@ -184,6 +184,17 @@ func agentURL(ip string) string { return "https://" + ip + ":" + agentPort }
 
 // agentEndpoint читает адрес и открывает учётные данные внутреннего API.
 func (r *jobRun) agentEndpoint(env domain.Environment, s SealedSecrets) (AgentEndpoint, error) {
+	if transport := r.w.s.AgentGRPC; transport != nil {
+		fence, err := transport.JobFence(r.leaseCtx, env.SessionID)
+		if err != nil {
+			return AgentEndpoint{}, err
+		}
+		hostID := env.SessionID
+		if env.PoolID != uuid.Nil {
+			hostID = env.PoolID
+		}
+		return AgentEndpoint{Target: AgentTarget{SessionID: env.SessionID, HostID: hostID, PrivateIP: env.Resources.PrivateIP, Fence: fence}}, nil
+	}
 	tok, err := r.w.sec.Open(s.Token)
 	if err != nil {
 		return AgentEndpoint{}, fmt.Errorf("open token: %w", err)
@@ -202,7 +213,13 @@ func (r *jobRun) configure(ctx context.Context, env domain.Environment) error {
 
 // prepareHost запускает prepare.yml на VPS: агент стартует в режиме ожидания, данных сессии нет.
 func (w *Worker) prepareHost(ctx context.Context, name uuid.UUID, ip, hostPublicKey string) error {
-	certPEM, keyPEM, err := w.sec.IssueServerCert(ip)
+	var certPEM, keyPEM []byte
+	var err error
+	if transport := w.s.AgentGRPC; transport != nil {
+		certPEM, keyPEM, err = transport.IssueCertificate(ip, AgentDNS(name))
+	} else {
+		certPEM, keyPEM, err = w.sec.IssueServerCert(ip)
+	}
 	if err != nil {
 		return fmt.Errorf("issue server cert: %w", err)
 	}
@@ -299,7 +316,7 @@ func (r *jobRun) createFailed(cause error) (bool, error) {
 		errors.Is(cause, errAgentStopped) ||
 		errors.Is(cause, errStartupTimeout) || r.startupExpired(env)) {
 		env.LastError = "provisioning failed: " + cause.Error()
-		r.w.log.Warn("provisioning failed", "session_id", env.SessionID, "state", env.State, "error", cause)
+		r.w.log.WarnContext(r.leaseCtx, "provisioning failed", "session_id", env.SessionID, "state", env.State, "error_code", runtimeErrorCode(cause))
 		_, err := r.save(env, domain.StateCleanupPending)
 		if err != nil && !errors.Is(err, ErrStale) {
 			return true, err

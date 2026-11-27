@@ -161,8 +161,14 @@ class Agent:
             self.journal.create(session_id, language, token)
             self.token = token
             self.session = Session(self, session_id, language)
-            await self.open_workspace()
             transport, self.warm = self.warm, None
+            try:
+                await self.open_workspace()
+            except Exception:
+                # Durable assignment уже записан. Не оставляем его навсегда STARTING.
+                self.session.transport = transport
+                await self.session.finish("FAILED", "workspace_unavailable")
+                raise AgentError(503, "Workspace is unavailable") from None
             log.info("Assigned to session %s", session_id)
             await self.session.start(transport)
             self.notify()

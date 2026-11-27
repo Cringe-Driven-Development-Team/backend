@@ -22,6 +22,7 @@ type UserUsecase struct {
 	passwords  PasswordHasher
 	refresh    RefreshTokens
 	refreshTTL time.Duration
+	active     ActiveAccounts
 	// now подменяется в тестах, чтобы проверить истёкший токен.
 	now func() time.Time
 }
@@ -135,6 +136,11 @@ func (uc *UserUsecase) Refresh(ctx context.Context, refreshToken string) (Sessio
 	old, err := uc.sessions.Find(ctx, oldHash)
 	if err != nil {
 		return Session{}, refreshError(err)
+	}
+	if uc.active != nil {
+		if err = uc.active.ActiveAccount(ctx, old.UserID); err != nil {
+			return Session{}, refreshError(err)
+		}
 	}
 	if !uc.now().Before(old.ExpiresAt) {
 		return Session{}, ErrInvalidRefresh

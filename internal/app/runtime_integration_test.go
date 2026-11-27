@@ -25,6 +25,7 @@ import (
 	delivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/delivery/http"
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	UC "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	transport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	userpg "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/postgres"
@@ -32,10 +33,7 @@ import (
 	security "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 	userhttp "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/http"
 	useruc "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -48,33 +46,10 @@ func TestRuntimeFullHTTPFlowWithFakeEnvironment(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	root, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer root.Close()
-	name := "api13_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	schema := pgx.Identifier{name}.Sanitize()
-	if _, err = root.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _, _ = root.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") }()
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = name
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
-	if err = migrations.Up(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
+	pool := pgtest.NewDatabase(t, "RUNTIME_TEST_DATABASE_URL")
 	rc := redis.NewClient(&redis.Options{Addr: redisAddr, MaxRetries: -1})
 	defer func() { _ = rc.Close() }()
-	prefix := name + ":"
+	prefix := "api13_" + uuid.NewString() + ":"
 	sessions := userredis.NewStore(rc, prefix, time.Second)
 	defer func() {
 		keys, _ := rc.Keys(context.Background(), prefix+"*").Result()
@@ -534,7 +509,10 @@ func TestRuntimeFullHTTPFlowWithFakeEnvironment(t *testing.T) {
 	pump()
 	call("POST", base+"/stop", "", 202)
 	call("POST", fmt.Sprintf("/notebooks/%d/runtime-sessions", second.ID), `{"request_id":"while-stopping","language":"python"}`, 409)
-	wait(func() bool { v, e := store.Owned(ctx, user.ID, session.ID); return e == nil && v.State == D.Stopped })
+	wait(func() bool {
+		v, e := store.Owned(ctx, user.ID, session.ID)
+		return e == nil && v.State == D.Stopped && !v.CleanupError
+	})
 	assertBadge(0)
 	w = call("GET", fmt.Sprintf("/notebooks/%d/content", first.ID), "", 200)
 	if !strings.Contains(w.Body.String(), `43\n`) {
@@ -543,8 +521,6 @@ func TestRuntimeFullHTTPFlowWithFakeEnvironment(t *testing.T) {
 	if strings.Contains(w.Body.String(), `\u0000`) {
 		t.Fatal("NUL output must remain in the execution archive, not notebook JSONB", w.Body.String())
 	}
-	// Пользовательская сессия уже завершена, но тест также дожидается реальной очистки тестового окружения.
-	wait(func() bool { v, e := store.Owned(ctx, user.ID, session.ID); return e == nil && !v.CleanupError })
 	call("GET", "/runtime-sessions/active", "", 200)
 	w = call("POST", fmt.Sprintf("/notebooks/%d/runtime-sessions", second.ID), `{"request_id":"second-session","language":"python"}`, 202)
 	var rSession struct {

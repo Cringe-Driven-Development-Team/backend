@@ -120,6 +120,8 @@ type Session struct {
 	NotebookID int64 `json:"notebook_id"`
 	// RequestID Ключ идемпотентности пользовательского запроса.
 	RequestID string `json:"-"`
+	// CorrelationID Связь между HTTP-запросом и сохранённой фоновой работой.
+	CorrelationID string `json:"-"`
 	// Language Язык kernel: только python.
 	Language string `json:"language"`
 	// State Текущее состояние объекта.
@@ -159,6 +161,8 @@ type Session struct {
 // Execution хранит неизменные параметры попытки и накопленный результат; служебные поля не выдаются через
 // API.
 type Execution struct {
+	// CorrelationID связывает принятие команды и её отправку после восстановления worker.
+	CorrelationID string `json:"-"`
 	// SourceVersion идентифицирует точный сохранённый исходник, допущенный к выполнению.
 	SourceVersion string `json:"-"`
 	// Kind Вид команды, события или ячейки, определяющий обработку.
@@ -336,6 +340,8 @@ type EnvironmentRequest struct {
 
 // Environment содержит только безопасные сведения о подготовке окружения, необходимые runtime-сессии.
 type Environment struct {
+	// CleanupConfirmed означает подтверждённую невозможность позднего Create и отсутствие ресурсов.
+	CleanupConfirmed bool
 	// SessionID UUID runtime-сессии.
 	SessionID uuid.UUID
 	// State Текущее состояние объекта.
