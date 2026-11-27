@@ -227,9 +227,11 @@ func (x *BatchResolveUsersRequest) GetLogins() []string {
 }
 
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Login         string                 `protobuf:"bytes,2,opt,name=login,proto3" json:"login,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Login string                 `protobuf:"bytes,2,opt,name=login,proto3" json:"login,omitempty"`
+	// Публичный URL аватара, пустой при отсутствии аватара.
+	AvatarUrl     string `protobuf:"bytes,3,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -274,6 +276,13 @@ func (x *User) GetId() int64 {
 func (x *User) GetLogin() string {
 	if x != nil {
 		return x.Login
+	}
+	return ""
+}
+
+func (x *User) GetAvatarUrl() string {
+	if x != nil {
+		return x.AvatarUrl
 	}
 	return ""
 }
@@ -619,10 +628,12 @@ const file_cellestial_identity_v1_identity_proto_rawDesc = "" +
 	"\x14BatchGetUsersRequest\x12\x19\n" +
 	"\buser_ids\x18\x01 \x03(\x03R\auserIds\"2\n" +
 	"\x18BatchResolveUsersRequest\x12\x16\n" +
-	"\x06logins\x18\x01 \x03(\tR\x06logins\",\n" +
+	"\x06logins\x18\x01 \x03(\tR\x06logins\"K\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x14\n" +
-	"\x05login\x18\x02 \x01(\tR\x05login\"\x85\x01\n" +
+	"\x05login\x18\x02 \x01(\tR\x05login\x12\x1d\n" +
+	"\n" +
+	"avatar_url\x18\x03 \x01(\tR\tavatarUrl\"\x85\x01\n" +
 	"\rUsersResponse\x122\n" +
 	"\x05users\x18\x01 \x03(\v2\x1c.cellestial.identity.v1.UserR\x05users\x12@\n" +
 	"\aresults\x18\x02 \x03(\v2&.cellestial.identity.v1.UserResolutionR\aresults\"X\n" +

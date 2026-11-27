@@ -72,12 +72,13 @@ func TestCommentUsecaseList(t *testing.T) {
 
 func TestCommentUsecaseWrites(t *testing.T) {
 	repo := &commentRepo{}
-	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(&directoryFake{}))
+	const avatar = "https://cdn.example.com/avatar.png"
+	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(&directoryFake{avatarURL: avatar}))
 	c, err := uc.CreateComment(t.Context(), 1, "cell", 2, "  hello\n world  ")
-	if err != nil || repo.text != "hello\n world" || !c.CanEdit || !c.CanDelete {
+	if err != nil || repo.text != "hello\n world" || !c.CanEdit || !c.CanDelete || c.Author.AvatarURL != avatar {
 		t.Fatal(c, err)
 	}
-	if _, err = uc.UpdateComment(t.Context(), 1, "cell", 2, 3, " trimmed "); err != nil || repo.text != "trimmed" {
+	if c, err = uc.UpdateComment(t.Context(), 1, "cell", 2, 3, " trimmed "); err != nil || repo.text != "trimmed" || c.Author.AvatarURL != avatar {
 		t.Fatal(err)
 	}
 	before := repo.calls

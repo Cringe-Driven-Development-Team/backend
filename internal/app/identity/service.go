@@ -23,6 +23,7 @@ import (
 	avatars3 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/s3"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/workspacerpc"
+	grpcdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/grpc"
 	userdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/delivery/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/usecase"
 	identitymigrations "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations/identity"
@@ -121,7 +122,7 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 	})
 	s.http = &http.Server{Handler: metrics.middleware(bounded), TLSConfig: tlsConfig, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: c.HTTPTimeout, WriteTimeout: c.HTTPTimeout, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
 	s.health = health.NewServer()
-	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, usecase.NewDirectory(repo), s.health, rpctransport.NewMetrics(metrics.registry, "identity"), s.deletions)
+	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, grpcdelivery.NewUsersServer(usecase.NewDirectory(repo), c.AvatarsPublicURL), s.health, rpctransport.NewMetrics(metrics.registry, "identity"), s.deletions)
 	if e != nil {
 		return nil, e
 	}
