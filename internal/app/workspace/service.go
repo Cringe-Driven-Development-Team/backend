@@ -7,7 +7,6 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	sessiondelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/delivery/http"
 	sessions "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/usecase"
 	httptransport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/mtls"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpc"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -66,7 +66,9 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 		return err
 	}
 	registry := lifecycle.Registry(serviceName, c.Version, pool)
-	identity, err := client(c, c.IdentityAddr, "identity", 2*time.Second, logger, registry)
+	rpcMetrics := rpc.NewMetrics(registry)
+	httpMetrics := middleware.NewHTTPMetrics(registry)
+	identity, err := client(c, c.IdentityAddr, "identity", 2*time.Second, logger, rpcMetrics)
 	if err != nil {
 		return err
 	}
@@ -75,7 +77,7 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 			_ = identity.Close()
 		}
 	}()
-	environments, err := client(c, c.EnvironmentsAddr, "environments", 5*time.Second, logger, registry)
+	environments, err := client(c, c.EnvironmentsAddr, "environments", 5*time.Second, logger, rpcMetrics)
 	if err != nil {
 		return err
 	}
@@ -97,7 +99,7 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 		NotebookHandler: notebookdelivery.NewHandler(books),
 		RuntimeHandler:  sessiondelivery.NewHandler(sessions.NewService(store, nil, agent)),
 		Files:           sessiondelivery.NewWorkspaceFileHandler(sessions.NewWorkspaceFiles(store, environmentsrpc.NewFiles(filesv1.NewFilesClient(environments)))),
-	}, verify, c.BFFKey, httpObserver(registry))
+	}, verify, c.BFFKey, httpObserver(registry), httpMetrics)
 	if err != nil {
 		return err
 	}
@@ -124,7 +126,7 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 			workspacev1.UserCleanup_BeginUserCleanup_FullMethodName: {"identity.internal.cellestial.ru"},
 			workspacev1.UserCleanup_GetUserCleanup_FullMethodName:   {"identity.internal.cellestial.ru"},
 		},
-		Metrics: rpc.NewMetrics(registry, serviceName),
+		Metrics: rpcMetrics,
 	})
 	rpcServer := grpc.NewServer(append(options, grpc.Creds(credentials.NewTLS(rpcTLS)))...)
 	healthv1.RegisterHealthServer(rpcServer, healthServer)
@@ -139,12 +141,12 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 		background = append(background, worker.Run)
 	}
 	return lifecycle.Run(ctx, c.ShutdownTimeout, []lifecycle.Endpoint{
-		lifecycle.HTTP(c.HTTPAddr, httpServer), lifecycle.RPC(c.GRPCAddr, rpcServer), lifecycle.HTTP(c.AdminAddr, lifecycle.Admin(ready, registry)),
+		lifecycle.HTTP(c.HTTPAddr, httpServer), lifecycle.RPC(c.GRPCAddr, rpcServer), lifecycle.HTTP(c.AdminAddr, lifecycle.Admin(ready, registry, httpMetrics)),
 	}, ready.Stop, background...)
 }
 
 // client выбирает перечень повторяемых операций, не включая управление kernel.
-func client(c Config, address, service string, timeout time.Duration, logger *slog.Logger, registry *prometheus.Registry) (*grpc.ClientConn, error) {
+func client(c Config, address, service string, timeout time.Duration, logger *slog.Logger, rpcMetrics *rpc.Metrics) (*grpc.ClientConn, error) {
 	methods := map[string]rpc.MethodPolicy{healthv1.Health_Check_FullMethodName: {Retry: true}}
 	switch service {
 	case "identity":
@@ -175,7 +177,7 @@ func client(c Config, address, service string, timeout time.Duration, logger *sl
 	}
 	options, err := rpc.ClientOptions(rpc.ClientConfig{
 		TLS: c.TLS, ServerName: service + ".internal.cellestial.ru", Service: serviceName, Version: c.Version,
-		Timeout: timeout, Logger: logger, Methods: methods, Metrics: rpc.NewMetrics(registry, serviceName+"_to_"+service),
+		Timeout: timeout, Logger: logger, Methods: methods, Metrics: rpcMetrics,
 	})
 	if err != nil {
 		return nil, err
@@ -205,21 +207,10 @@ func boundHTTP(next http.Handler, timeout time.Duration) http.Handler {
 
 // httpObserver использует шаблоны router и конечный набор HTTP-методов.
 func httpObserver(reg *prometheus.Registry) func(string, string, int, time.Duration) {
-	labels := []string{"method", "route", "status"}
-	count := prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: serviceName, Name: "http_requests_total", Help: "Completed HTTP calls."}, labels)
-	duration := prometheus.NewHistogramVec(prometheus.HistogramOpts{Namespace: serviceName, Name: "http_duration_seconds", Help: "HTTP duration in seconds."}, labels)
 	books := prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: serviceName, Name: "notebook_operations_total", Help: "Notebook operation outcomes."},
 		[]string{"method", "route", "outcome"})
-	reg.MustRegister(count, duration, books)
-	return func(method, route string, code int, elapsed time.Duration) {
-		switch method {
-		case "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS":
-		default:
-			method = "other"
-		}
-		values := []string{method, route, strconv.Itoa(code)}
-		count.WithLabelValues(values...).Inc()
-		duration.WithLabelValues(values...).Observe(elapsed.Seconds())
+	reg.MustRegister(books)
+	return func(method, route string, code int, _ time.Duration) {
 		if strings.HasPrefix(route, "/api/v1/notebooks") {
 			outcome := "success"
 			if code >= 500 {

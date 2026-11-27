@@ -14,6 +14,7 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/gorilla/mux"
 )
 
@@ -62,5 +63,7 @@ func (h *Handler) ExportNotebook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", *quotedETag(revision))
 	w.Header().Set("Content-Digest", "sha-256=:"+base64.StdEncoding.EncodeToString(sum.Sum(nil))+":")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.CopyBuffer(w, io.LimitReader(file, size), make([]byte, 64<<10))
+	if n, err := io.CopyBuffer(w, io.LimitReader(file, size), make([]byte, 64<<10)); err != nil || n != size {
+		middleware.MarkResponseFailure(r)
+	}
 }

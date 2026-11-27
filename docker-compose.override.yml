@@ -9,6 +9,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-devsecret}
       - AWS_ENDPOINT_URL_S3=${AWS_ENDPOINT_URL_S3:-http://s3:8333}
       - S3_AVATARS_BUCKET=${S3_AVATARS_BUCKET:-cellestial-avatars-local}
+      - S3_PRIVATE_FILES_BUCKET=${S3_PRIVATE_FILES_BUCKET:-cellestial-private-files-local}
       - S3_AVATARS_PUBLIC_URL=${S3_AVATARS_PUBLIC_URL:-http://localhost:${S3_PORT:-8333}/${S3_AVATARS_BUCKET:-cellestial-avatars-local}}
     depends_on:
       s3:
@@ -18,7 +19,12 @@ services:
 
   s3:
     image: chrislusf/seaweedfs:4.48
-    command: mini -dir=/data -ip=s3 -ip.bind=0.0.0.0 -bucket=${S3_AVATARS_BUCKET:-cellestial-avatars-local}
+    command:
+      - mini
+      - -dir=/data
+      - -ip=s3
+      - -ip.bind=0.0.0.0
+      - -bucket=${S3_AVATARS_BUCKET:-cellestial-avatars-local},${S3_PRIVATE_FILES_BUCKET:-cellestial-private-files-local}
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-devkey}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-devsecret}
@@ -39,9 +45,22 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     environment:
       S3_AVATARS_BUCKET: ${S3_AVATARS_BUCKET:-cellestial-avatars-local}
+      S3_PRIVATE_FILES_BUCKET: ${S3_PRIVATE_FILES_BUCKET:-cellestial-private-files-local}
     command:
       - |
-        printf 's3.bucket.access -name %s -user anonymous -access Read\n' "$$S3_AVATARS_BUCKET" | weed shell -master=s3:9333 -filer=s3:8888
+        if [ "$$S3_AVATARS_BUCKET" = "$$S3_PRIVATE_FILES_BUCKET" ]; then
+          echo 'S3_AVATARS_BUCKET and S3_PRIVATE_FILES_BUCKET must differ' >&2
+          exit 1
+        fi
+        for bucket in "$$S3_AVATARS_BUCKET" "$$S3_PRIVATE_FILES_BUCKET"; do
+          case "$$bucket" in
+            *[!a-z0-9.-]*) echo 'Invalid local S3 bucket name' >&2; exit 1 ;;
+          esac
+        done
+        {
+          printf 's3.bucket.access -name %s -user anonymous -access none\n' "$$S3_PRIVATE_FILES_BUCKET"
+          printf 's3.bucket.access -name %s -user anonymous -access Read\n' "$$S3_AVATARS_BUCKET"
+        } | weed shell -master=s3:9333 -filer=s3:8888
     depends_on:
       s3:
         condition: service_healthy

@@ -4,7 +4,9 @@ import asyncio
 import base64
 import json
 import struct
+import time
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import aiohttp
@@ -68,6 +70,8 @@ class Jupyter:
         self.ws = None
         self.kernel_id = None
         self.client_id = str(uuid.uuid4())
+        self.observe_http: Callable[[str, str, int, float], None] | None = None
+        self.observe_http_body: Callable[[str, str, int, float, str], None] | None = None
 
     async def request(self, method, path, **kwargs):
         """Отправьте авторизованный HTTP-запрос.
@@ -80,7 +84,24 @@ class Jupyter:
         assert self.http is not None
         async with self.http.request(method, self.base_url + path, **kwargs) as response:
             response.raise_for_status()
-            return await response.json() if response.status != 204 else None
+            if response.status == 204:
+                return None
+            started = time.monotonic()
+            outcome = "read_error"
+            try:
+                await response.read()
+                outcome = "complete"
+            finally:
+                if self.observe_http_body is not None:
+                    self.observe_http_body(
+                        self._operation(path),
+                        method,
+                        response.status,
+                        time.monotonic() - started,
+                        outcome,
+                    )
+            # aiohttp повторно использует буфер response.read() при декодировании JSON.
+            return await response.json()
 
     async def start(self, startup_seconds):
         """Создайте kernel и дождитесь его готовности.
@@ -90,6 +111,10 @@ class Jupyter:
         """
         trace = aiohttp.TraceConfig()
         trace.on_request_redirect.append(reject_redirect)
+        if self.observe_http is not None:
+            trace.on_request_start.append(self._request_started)
+            trace.on_request_end.append(self._request_finished)
+            trace.on_request_exception.append(self._request_finished)
         self.http = aiohttp.ClientSession(
             trace_configs=[trace],
             headers={"Authorization": "token " + self.token},
@@ -110,6 +135,33 @@ class Jupyter:
             self.kernel_id = kernel["id"]
             await self.connect()
             await self.wait_ready()
+
+    async def _request_started(self, _session, trace, _params):
+        """Сохраните начало фактической попытки запроса."""
+        trace.started = time.monotonic()
+
+    async def _request_finished(self, _session, trace, params):
+        """Учтите исходящий HTTP, включая handshake канала, без ID и query."""
+        response = getattr(params, "response", None)
+        if self.observe_http is not None:
+            self.observe_http(
+                self._operation(params.url.path),
+                params.method,
+                response.status if response is not None else 0,
+                time.monotonic() - trace.started,
+            )
+
+    @staticmethod
+    def _operation(path):
+        """Нормализуйте путь Jupyter до одного зарегистрированного шаблона."""
+        operation = "other"
+        if path in ("/api/kernelspecs", "/api/kernels"):
+            operation = path
+        elif path.startswith("/api/kernels/"):
+            tail = path.split("/")
+            if len(tail) == 5 and tail[4] in ("channels", "interrupt", "restart"):
+                operation = f"/api/kernels/{{id}}/{tail[4]}"
+        return operation
 
     async def connect(self):
         """Откройте WebSocket для каналов созданного kernel."""

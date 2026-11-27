@@ -21,6 +21,7 @@ type RuntimeConfig struct {
 	ImageID, FlavorID, VolumeType                       string
 	SSHKeyName, SSHUser, SSHPrivateKeyFile              string
 	TLSCACertFile, TLSCAKeyFile                         string
+	MonitoringScraperIP, MonitoringClientCAFile         string
 	TLSClientCertFile, TLSClientKeyFile                 string
 	WorkDir                                             string
 
@@ -92,6 +93,8 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 	r.SSHKeyName, r.SSHUser, r.SSHPrivateKeyFile = get("RUNTIME_SSH_KEY_NAME", ""), get("RUNTIME_SSH_USER", "root"), get("RUNTIME_SSH_PRIVATE_KEY_FILE", "")
 	r.TLSCACertFile, r.TLSCAKeyFile = get("RUNTIME_TLS_CA_CERT_FILE", ""), get("RUNTIME_TLS_CA_KEY_FILE", "")
 	r.TLSClientCertFile, r.TLSClientKeyFile = get("RUNTIME_TLS_CLIENT_CERT_FILE", ""), get("RUNTIME_TLS_CLIENT_KEY_FILE", "")
+	r.MonitoringScraperIP = get("RUNTIME_MONITORING_SCRAPER_IP", "")
+	r.MonitoringClientCAFile = get("RUNTIME_MONITORING_CLIENT_CA_FILE", "")
 	r.WorkDir = get("RUNTIME_WORK_DIR", "/var/lib/cellestial/runtime")
 	r.KernelDNS = get("RUNTIME_KERNEL_DNS", "1.1.1.1")
 	r.EnvName = get("RUNTIME_ENV_NAME", "")
@@ -125,6 +128,15 @@ func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 		return RuntimeConfig{}, errors.New("invalid RUNTIME_SECRETS_KEY: expected base64 of exactly 32 bytes")
 	}
 	r.SecretsKey = key
+	if (r.MonitoringScraperIP == "") != (r.MonitoringClientCAFile == "") {
+		return RuntimeConfig{}, errors.New("RUNTIME_MONITORING_SCRAPER_IP and RUNTIME_MONITORING_CLIENT_CA_FILE must be set together")
+	}
+	if r.MonitoringScraperIP != "" {
+		ip := net.ParseIP(r.MonitoringScraperIP)
+		if ip.To4() == nil || !ip.IsPrivate() || strings.Contains(r.MonitoringScraperIP, ":") {
+			return RuntimeConfig{}, errors.New("invalid RUNTIME_MONITORING_SCRAPER_IP: expected private IPv4")
+		}
+	}
 	// Для openstack имя окружения обязательно: по метке cellestial_env воркер находит и удаляет
 	// свои ресурсы, и ошибочное умолчание задело бы ресурсы другого окружения.
 	if r.Provider == "fake" && r.EnvName == "" {

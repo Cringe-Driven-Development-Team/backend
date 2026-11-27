@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/config"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtime/usecase"
 	"github.com/gophercloud/gophercloud/v2"
 	gopenstack "github.com/gophercloud/gophercloud/v2/openstack"
@@ -21,8 +22,17 @@ const defaultPoll = 5 * time.Second
 
 // New авторизуется в Keystone v3 паролем сервисного пользователя (с переавторизацией по истечении
 // токена) и получает endpoints Nova, Cinder и Neutron из каталога для cfg.OSRegion.
-func New(ctx context.Context, cfg config.RuntimeConfig) (*Provider, error) {
-	pc, err := gopenstack.AuthenticatedClient(ctx, gophercloud.AuthOptions{
+func New(ctx context.Context, cfg config.RuntimeConfig, metrics ...*observability.HTTPClientMetrics) (*Provider, error) {
+	pc, err := gopenstack.NewClient(cfg.OSAuthURL)
+	if err != nil {
+		return nil, classify("authenticate", err)
+	}
+	if len(metrics) > 0 && metrics[0] != nil {
+		pc.HTTPClient.Transport = observability.HTTPRoundTrip(func(req *http.Request) (*http.Response, error) {
+			return metrics[0].Measure("openstack", cloudOperation, http.DefaultTransport.RoundTrip, req)
+		})
+	}
+	err = gopenstack.Authenticate(ctx, pc, gophercloud.AuthOptions{
 		IdentityEndpoint: cfg.OSAuthURL,
 		Username:         cfg.OSUsername,
 		Password:         cfg.OSPassword,
@@ -102,3 +112,31 @@ func classify(op string, err error) error {
 
 // isNotFound распознаёт отсутствие ресурса по HTTP-ошибке OpenStack.
 func isNotFound(err error) bool { return gophercloud.ResponseCodeIs(err, http.StatusNotFound) }
+
+// cloudOperation классифицирует запрос по фиксированным коллекциям OpenStack.
+func cloudOperation(req *http.Request) string {
+	parts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
+	for i, part := range parts {
+		switch part {
+		case "tokens":
+			if i > 0 && parts[i-1] == "auth" {
+				return "auth/tokens"
+			}
+		case "servers", "volumes", "ports":
+			switch len(parts) - i {
+			case 1:
+				return part
+			case 2:
+				if parts[i+1] == "detail" {
+					return part + "/detail"
+				}
+				return part + "/{id}"
+			case 3:
+				if parts[i+2] == "action" {
+					return part + "/{id}/action"
+				}
+			}
+		}
+	}
+	return "other"
+}
