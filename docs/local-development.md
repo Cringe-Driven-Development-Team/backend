@@ -51,11 +51,29 @@
 bcrypt-сравнение с фиктивным хешем той же стоимости, что и новые хеши паролей.
 Для неизвестного логина и неверного пароля API возвращает одинаковую ошибку.
 
-## S3 и аватары
+## S3 для аватаров и приватных файлов
 
 Локально `s3-init` настраивает бакет и публичное чтение аватаров. Go использует
 `S3_AVATARS_BUCKET`, `S3_AVATARS_PUBLIC_URL` и настройки `AWS_*`.
 Production S3/CDN настраивает infra. [Загрузка аватара](user-profile.md#загрузка-аватара).
+
+SeaweedFS также создаёт приватный бакет `S3_PRIVATE_FILES_BUCKET`.
+У него должно быть отдельное имя. Для проверки с настройками Compose по умолчанию
+из корня backend запустите:
+
+```sh
+docker compose up -d s3 s3-init
+docker compose wait s3-init
+AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=devkey AWS_SECRET_ACCESS_KEY=devsecret \
+  AWS_ENDPOINT_URL_S3=http://127.0.0.1:8333 \
+  S3_PRIVATE_FILES_BUCKET=cellestial-private-files-local S3_PRIVATE_FILES_SMOKE=1 \
+  go test ./internal/storage/s3client -run '^TestPrivateFilesS3$' -count=1 -v
+```
+
+Подставьте значения своего Compose, если меняли порт, бакет или ключи.
+Проверка записывает небольшой файл, сравнивает байты после чтения и ожидает HTTP 403
+на анонимный GET того же объекта. Объект остаётся под уникальным ключом
+`smoke/private-files/`, который тест печатает. Его можно убрать ключом оператора.
 
 ## Агент исполнения Python
 
