@@ -25,7 +25,7 @@ func (r *UserRepository) WithAuthLock(ctx context.Context, id int64, fn func(*us
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var state usecase.AuthState
-	err = tx.QueryRow(ctx, `SELECT id, login, password_hash, COALESCE(avatar_key, ''), totp_enabled, totp_secret, totp_last_step FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&state.User.ID, &state.User.Login, &state.PasswordHash, &state.User.AvatarKey, &state.User.Has2FA, &state.Secret, &state.LastStep)
+	err = tx.QueryRow(ctx, `SELECT id, login, password_hash, COALESCE(avatar_key, ''), totp_enabled, totp_secret, totp_last_step FROM `+r.table+` WHERE id = $1`+r.active+` FOR UPDATE`, id).Scan(&state.User.ID, &state.User.Login, &state.PasswordHash, &state.User.AvatarKey, &state.User.Has2FA, &state.Secret, &state.LastStep)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return usecase.ErrUserNotFound
 	}
@@ -38,7 +38,7 @@ func (r *UserRepository) WithAuthLock(ctx context.Context, id int64, fn func(*us
 		return err
 	}
 	if state.User.Has2FA != old.User.Has2FA || state.LastStep != old.LastStep || !bytes.Equal(state.Secret, old.Secret) {
-		_, err = tx.Exec(ctx, `UPDATE users SET totp_enabled = $2, totp_secret = $3, totp_last_step = $4, updated_at = clock_timestamp() WHERE id = $1`, id, state.User.Has2FA, state.Secret, state.LastStep)
+		_, err = tx.Exec(ctx, `UPDATE `+r.table+` SET totp_enabled = $2, totp_secret = $3, totp_last_step = $4, updated_at = clock_timestamp() WHERE id = $1`, id, state.User.Has2FA, state.Secret, state.LastStep)
 		if err != nil {
 			return fmt.Errorf("save authentication: %w", err)
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/google/uuid"
 )
@@ -37,7 +38,7 @@ func (s *Service) Start(ctx context.Context, owner, notebook int64, r domain.Sta
 	}
 	id := uuid.New()
 	now := s.now()
-	return s.store.Start(ctx, domain.Session{ID: id, OwnerID: owner, NotebookID: notebook, RequestID: r.RequestID, Language: r.Language, State: domain.Provisioning, Stage: "queued", CreatedAt: now, LastActivityAt: now})
+	return s.store.Start(ctx, domain.Session{ID: id, OwnerID: owner, NotebookID: notebook, RequestID: r.RequestID, CorrelationID: durableCorrelation(ctx), Language: r.Language, State: domain.Provisioning, Stage: "queued", CreatedAt: now, LastActivityAt: now})
 }
 
 // GetSession возвращает сессию только после проверки её принадлежности пользователю.
@@ -99,6 +100,16 @@ func (s *Service) Stop(ctx context.Context, owner int64, id uuid.UUID) error {
 		v.State = domain.Stopping
 		v.Stage = "stopping"
 		v.Reason = "requested"
+		v.CorrelationID = durableCorrelation(ctx)
 		return nil
 	})
+}
+
+// durableCorrelation сохраняет проверенный HTTP request ID или создаёт ID для самостоятельной работы.
+func durableCorrelation(ctx context.Context) string {
+	id := observability.RequestID(ctx)
+	if observability.ValidRequestID(id) {
+		return id
+	}
+	return uuid.NewString()
 }

@@ -47,14 +47,14 @@ func TestImportNotebookPersistenceAndRollback(t *testing.T) {
 		t.Fatalf("stored document changed: %s; error=%v", out, err)
 	}
 	// Первая ячейка проходит, вторая нарушает ограничение внутри транзакции.
-	if _, err := pool.Exec(ctx, "ALTER TABLE notebook_cells ADD CHECK (position <> 1) NOT VALID"); err != nil {
+	if _, err := pool.Exec(ctx, "ALTER TABLE workspace.notebook_cells ADD CHECK (position <> 1) NOT VALID"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := uc.Import(ctx, 1, "Rollback", raw); err == nil {
 		t.Fatal("expected insert failure")
 	}
 	var notebooks, cellCount int
-	if err := pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM notebooks), (SELECT count(*) FROM notebook_cells)").Scan(&notebooks, &cellCount); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM workspace.notebooks), (SELECT count(*) FROM workspace.notebook_cells)").Scan(&notebooks, &cellCount); err != nil {
 		t.Fatal(err)
 	}
 	if notebooks != 1 || cellCount != 2 {

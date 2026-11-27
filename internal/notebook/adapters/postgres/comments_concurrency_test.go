@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,15 +18,15 @@ func commentNotebook(t *testing.T) (*NotebookRepository, *pgxpool.Pool, domain.N
 	t.Helper()
 	repo, pool := testRepository(t)
 	ctx := t.Context()
-	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash')`); err != nil {
 		t.Fatal(err)
 	}
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	n, err := uc.Create(ctx, 1, "wall")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := repo.CreateComment(ctx, n.ID, n.Cells[0].ID, 2, "before")
@@ -62,7 +63,7 @@ func TestCellCommentsSerializeWithAccessAndDeletion(t *testing.T) {
 					change := func(r *NotebookRepository) error {
 						switch changeKind {
 						case "revoke":
-							_, e := r.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{})
+							_, e := r.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{})
 							return e
 						case "cell":
 							_, e := r.Apply(ctx, n.ID, 1, n.Revision, usecase.Operation{Kind: usecase.Delete, CellID: cell})
@@ -88,7 +89,7 @@ func TestCellCommentsSerializeWithAccessAndDeletion(t *testing.T) {
 					}
 					if changeKind != "revoke" {
 						var count int
-						if e := pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); e != nil || count != 0 {
+						if e := pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); e != nil || count != 0 {
 							t.Fatalf("cascade %d %v", count, e)
 						}
 					}
@@ -116,7 +117,7 @@ func TestCellCommentsConcurrentPatches(t *testing.T) {
 		t.Fatal(one, two, e1, e2)
 	}
 	var text string
-	if err := pool.QueryRow(t.Context(), `SELECT text FROM cell_comments WHERE id=$1`, c.ID).Scan(&text); err != nil || text != "two" {
+	if err := pool.QueryRow(t.Context(), `SELECT text FROM workspace.cell_comments WHERE id=$1`, c.ID).Scan(&text); err != nil || text != "two" {
 		t.Fatal(text, err)
 	}
 }
@@ -130,7 +131,7 @@ func TestCellCommentsCanceledLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = blocker.Rollback(context.Background()) }()
-	if _, err = blocker.Exec(ctx, `SELECT id FROM notebooks WHERE id=$1 FOR UPDATE`, n.ID); err != nil {
+	if _, err = blocker.Exec(ctx, `SELECT id FROM workspace.notebooks WHERE id=$1 FOR UPDATE`, n.ID); err != nil {
 		t.Fatal(err)
 	}
 	waitCtx, stop := context.WithCancel(ctx)
@@ -151,7 +152,7 @@ func TestCellCommentsCanceledLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); err != nil || count != 1 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal(count, err)
 	}
 	if _, err = NewNotebookRepository(pool).CreateComment(ctx, n.ID, c.CellID, 2, "next"); err != nil {
@@ -185,7 +186,7 @@ type commentFaultTx struct {
 //
 //nolint:ireturn // Реализует pgx.Tx.
 func (tx *commentFaultTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	if strings.Contains(sql, "FROM cell_comments") {
+	if strings.Contains(sql, "FROM workspace.cell_comments") {
 		tx.reads++
 		if tx.reads == tx.readAt {
 			return commentErrorRow{}

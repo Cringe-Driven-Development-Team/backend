@@ -6,13 +6,17 @@ import (
 	"time"
 
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/storage/workspaceguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 // checkAdmission проверяет возможность приёма команды под блокировкой очереди.
 func (s *Store) checkAdmission(ctx context.Context, tx pgx.Tx, owner int64, sid uuid.UUID) error {
-	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM runtime_sessions WHERE id=$1 AND owner_id=$2", sid, owner))
+	if _, err := workspaceguard.Actor(ctx, tx, owner); err != nil {
+		return err
+	}
+	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_sessions WHERE id=$1 AND owner_id=$2", sid, owner))
 	if err != nil {
 		return err
 	}
@@ -97,7 +101,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 	if err != nil {
 		return err
 	}
-	snapshot, err := s.db.Query(ctx, `SELECT id FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED') ORDER BY admission_order`, sid)
+	snapshot, err := s.db.Query(ctx, `SELECT id FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED') ORDER BY admission_order`, sid)
 	if err != nil {
 		return err
 	}
@@ -124,7 +128,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
-	err = tx.QueryRow(ctx, "UPDATE runtime_sessions SET lease_version=lease_version+1,lease_until=now()+interval '90 seconds' WHERE id=$1 RETURNING lease_version", sid).Scan(&version)
+	err = tx.QueryRow(ctx, "UPDATE workspace.runtime_sessions SET lease_version=lease_version+1,lease_until=now()+interval '90 seconds' WHERE id=$1 RETURNING lease_version", sid).Scan(&version)
 	if err != nil {
 		return err
 	}
@@ -148,7 +152,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 		if e != nil {
 			return e
 		}
-		if _, e = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,state=$3,lease_version=lease_version+1,lease_until='-infinity',next_check=now() WHERE id=$1", sid, raw, v.State); e != nil {
+		if _, e = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,state=$3,lease_version=lease_version+1,lease_until='-infinity',next_check=now() WHERE id=$1", sid, raw, v.State); e != nil {
 			return e
 		}
 		if e = tx.Commit(ctx); e != nil {
@@ -156,7 +160,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 		}
 		return callErr
 	}
-	rows, err := tx.Query(ctx, `SELECT data FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED') ORDER BY admission_order`, sid)
+	rows, err := tx.Query(ctx, `SELECT data FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED') ORDER BY admission_order`, sid)
 	if err != nil {
 		return err
 	}
@@ -198,7 +202,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 		if e != nil {
 			return e
 		}
-		if _, err = tx.Exec(ctx, "INSERT INTO runtime_events(session_id,public_seq,kind,body) VALUES($1,$2,'execution_state',$3)", sid, v.PublicSeq, body); err != nil {
+		if _, err = tx.Exec(ctx, "INSERT INTO workspace.runtime_events(session_id,public_seq,kind,body) VALUES($1,$2,'execution_state',$3)", sid, v.PublicSeq, body); err != nil {
 			return err
 		}
 	}
@@ -209,7 +213,7 @@ func (s *Store) StopExecutions(ctx context.Context, owner int64, sid uuid.UUID, 
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,state=$3,lease_version=lease_version+1,lease_until='-infinity',next_check=now() WHERE id=$1", sid, raw, v.State)
+	_, err = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,state=$3,lease_version=lease_version+1,lease_until='-infinity',next_check=now() WHERE id=$1", sid, raw, v.State)
 	if err != nil {
 		return err
 	}

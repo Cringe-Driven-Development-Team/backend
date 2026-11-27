@@ -33,7 +33,7 @@ func TestNotebookListTransaction(t *testing.T) {
 						counts.WillReturnError(failure)
 					} else {
 						counts.WillReturnRows(pgxmock.NewRows([]string{"total", "matched"}).AddRow(int64(9), int64(9)))
-						page := db.ExpectQuery(`SELECT id,name,cells_count,preview_code,updated_at FROM notebooks`).WithArgs(int64(7), 25)
+						page := db.ExpectQuery(`SELECT id,name,cells_count,preview_code,updated_at FROM workspace.notebooks`).WithArgs(int64(7), 25)
 						switch stage {
 						case "query":
 							page.WillReturnError(failure)

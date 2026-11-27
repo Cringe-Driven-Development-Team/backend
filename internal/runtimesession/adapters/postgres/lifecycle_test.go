@@ -23,7 +23,7 @@ func TestRuntimeHistoryAndStopIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = p.Exec(ctx, "INSERT INTO runtime_environments(session_id,operation_id,language,profile,state,desired_state,agent_version) VALUES($1,$2,'python','default','READY','READY','test')", v.ID, uuid.New()); err != nil {
+	if _, err = p.Exec(ctx, "INSERT INTO environments.runtime_environments(session_id,operation_id,language,profile,state,desired_state,agent_version) VALUES($1,$2,'python','default','READY','READY','test')", v.ID, uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	module, err := runtime.Build(ctx, config.RuntimeConfig{Provider: "fake", SecretsKey: make([]byte, 32), MaxActive: 3, MaxConcurrentOps: 1}, p)
@@ -39,7 +39,7 @@ func TestRuntimeHistoryAndStopIntent(t *testing.T) {
 	}
 	worker := UC.NewWorker(s, env.New(module.Environments), module.Agent, nil)
 	for range 7 {
-		if _, err = p.Exec(ctx, "UPDATE runtime_sessions SET next_check=now() WHERE id=$1", v.ID); err != nil {
+		if _, err = p.Exec(ctx, "UPDATE workspace.runtime_sessions SET next_check=now() WHERE id=$1", v.ID); err != nil {
 			t.Fatal(err)
 		}
 		l, e := s.Claim(ctx, "history-worker")
@@ -55,11 +55,11 @@ func TestRuntimeHistoryAndStopIntent(t *testing.T) {
 		t.Fatal(current, err)
 	}
 	active, err := uc.GetActive(ctx, owner)
-	if err != nil || active != nil {
-		t.Fatal("stopped runtime still occupies user slot", active, err)
+	if err != nil || active == nil || active.ID != v.ID || !active.CleanupError {
+		t.Fatal("cleanup_pending runtime must retain user slot", active, err)
 	}
 	var desired string
-	if err = p.QueryRow(ctx, "SELECT desired_state FROM runtime_environments WHERE session_id=$1", v.ID).Scan(&desired); err != nil || desired != "DELETED" {
+	if err = p.QueryRow(ctx, "SELECT desired_state FROM environments.runtime_environments WHERE session_id=$1", v.ID).Scan(&desired); err != nil || desired != "DELETED" {
 		t.Fatal(desired, err)
 	}
 }

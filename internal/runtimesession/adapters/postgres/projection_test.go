@@ -35,7 +35,7 @@ func TestProjectionRetryPreservesRevisionAndCannotOverwriteNewAttempt(t *testing
 		t.Fatal(err)
 	}
 	var before string
-	if err = p.QueryRow(ctx, `SELECT revision FROM notebooks WHERE id=$1`, nb).Scan(&before); err != nil {
+	if err = p.QueryRow(ctx, `SELECT revision FROM workspace.notebooks WHERE id=$1`, nb).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = p.Exec(ctx, `CREATE FUNCTION reject_projection() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected storage failure'; END $$; CREATE TRIGGER reject_projection BEFORE UPDATE ON notebook_cell_data FOR EACH ROW EXECUTE FUNCTION reject_projection()`); err != nil {
@@ -45,10 +45,10 @@ func TestProjectionRetryPreservesRevisionAndCannotOverwriteNewAttempt(t *testing
 		t.Fatal("storage failure ignored")
 	}
 	var revision string
-	if err = p.QueryRow(ctx, "SELECT revision FROM notebooks WHERE id=$1", nb).Scan(&revision); err != nil || revision != before {
+	if err = p.QueryRow(ctx, "SELECT revision FROM workspace.notebooks WHERE id=$1", nb).Scan(&revision); err != nil || revision != before {
 		t.Fatal(revision, err)
 	}
-	if _, err = p.Exec(ctx, "UPDATE runtime_projections SET next_attempt=now() WHERE session_id=$1", v.ID); err != nil {
+	if _, err = p.Exec(ctx, "UPDATE workspace.runtime_projections SET next_attempt=now() WHERE session_id=$1", v.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = p.Exec(ctx, `DROP TRIGGER reject_projection ON notebook_cell_data`); err != nil {
@@ -57,7 +57,7 @@ func TestProjectionRetryPreservesRevisionAndCannotOverwriteNewAttempt(t *testing
 	if err = s.Project(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err = p.QueryRow(ctx, "SELECT revision FROM notebooks WHERE id=$1", nb).Scan(&revision); err != nil || revision != before {
+	if err = p.QueryRow(ctx, "SELECT revision FROM workspace.notebooks WHERE id=$1", nb).Scan(&revision); err != nil || revision != before {
 		t.Fatal(revision, err)
 	}
 	notebook, err := s.notebooks.Get(ctx, nb, owner)
@@ -81,7 +81,7 @@ func TestProjectionRetryPreservesRevisionAndCannotOverwriteNewAttempt(t *testing
 	if err = s.Project(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err = p.QueryRow(ctx, `SELECT revision FROM notebooks WHERE id=$1`, nb).Scan(&revision); err != nil || revision != before {
+	if err = p.QueryRow(ctx, `SELECT revision FROM workspace.notebooks WHERE id=$1`, nb).Scan(&revision); err != nil || revision != before {
 		t.Fatal("old attempt projected over newer attempt")
 	}
 	notebook, err = s.notebooks.Get(ctx, nb, owner)

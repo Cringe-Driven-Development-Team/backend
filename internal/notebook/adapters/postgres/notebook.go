@@ -29,7 +29,7 @@ type NotebookRepository struct{ db DB }
 // NewNotebookRepository связывает операции блокнотов с пулом или тестовой реализацией db.
 func NewNotebookRepository(db DB) *NotebookRepository { return &NotebookRepository{db: db} }
 
-const selectNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM notebooks WHERE id=$1 AND owner_id=$2`
+const selectNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM workspace.notebooks WHERE id=$1 AND owner_id=$2`
 
 // scanNotebook декодирует строку блокнота из PostgreSQL.
 func scanNotebook(row pgx.Row) (domain.Notebook, error) {
@@ -78,6 +78,10 @@ func (r *NotebookRepository) Create(ctx context.Context, n domain.Notebook) (dom
 		return domain.Notebook{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActor(ctx, tx, n.OwnerID); err != nil {
+		return domain.Notebook{}, err
+	}
+
 	n, err = createNotebookTx(ctx, tx, n)
 	if err != nil {
 		return domain.Notebook{}, err
@@ -92,7 +96,7 @@ func (r *NotebookRepository) Create(ctx context.Context, n domain.Notebook) (dom
 func createNotebookTx(ctx context.Context, tx pgx.Tx, n domain.Notebook) (domain.Notebook, error) {
 	var err error
 	n.Access = domain.AccessFor(n.OwnerID, n.OwnerID)
-	err = tx.QueryRow(ctx, `INSERT INTO notebooks(owner_id,name,revision,cells_count,preview_code,size_bytes,header_bytes,nbformat,nbformat_minor,metadata,extra) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,created_at,updated_at,sharing_mode`, n.OwnerID, n.Name, n.Revision, n.CellsCount, n.PreviewCode, n.SizeBytes, ipynb.HeaderSize(n.Document), n.Document.NBFormat, n.Document.NBFormatMinor, optionalJSON(n.Document.Metadata), rawMap(n.Document.Extra)).Scan(&n.ID, &n.CreatedAt, &n.UpdatedAt, &n.SharingMode)
+	err = tx.QueryRow(ctx, `INSERT INTO workspace.notebooks(owner_id,name,revision,cells_count,preview_code,size_bytes,header_bytes,nbformat,nbformat_minor,metadata,extra) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,created_at,updated_at,sharing_mode`, n.OwnerID, n.Name, n.Revision, n.CellsCount, n.PreviewCode, n.SizeBytes, ipynb.HeaderSize(n.Document), n.Document.NBFormat, n.Document.NBFormatMinor, optionalJSON(n.Document.Metadata), rawMap(n.Document.Extra)).Scan(&n.ID, &n.CreatedAt, &n.UpdatedAt, &n.SharingMode)
 	if err != nil {
 		return domain.Notebook{}, err
 	}
@@ -146,12 +150,12 @@ func prepare(n *domain.Notebook) error {
 // insertCell записывает новую ячейку с её порядком и метаданными.
 func insertCell(ctx context.Context, tx pgx.Tx, id int64, pos int, c *domain.Cell) error {
 	c.SourceVersion = uuid.NewString()
-	_, err := tx.Exec(ctx, `INSERT INTO notebook_cells(notebook_id,cell_id,position,kind,source,source_version,metadata,extra,edit_bytes,preview_candidate,runtime_metadata_overhead) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, c.ID, pos, c.Kind, c.Source, c.SourceVersion, optionalJSON(c.Metadata), rawMap(c.Extra), ipynb.LightSize(*c), domain.Preview(c.Source) != "", ipynb.RuntimeMetadataOverhead(*c))
+	_, err := tx.Exec(ctx, `INSERT INTO workspace.notebook_cells(notebook_id,cell_id,position,kind,source,source_version,metadata,extra,edit_bytes,preview_candidate,runtime_metadata_overhead) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, c.ID, pos, c.Kind, c.Source, c.SourceVersion, optionalJSON(c.Metadata), rawMap(c.Extra), ipynb.LightSize(*c), domain.Preview(c.Source) != "", ipynb.RuntimeMetadataOverhead(*c))
 	if err != nil {
 		return err
 	}
 	o, e, a := ipynb.DataSizes(*c)
-	_, err = tx.Exec(ctx, `INSERT INTO notebook_cell_data(notebook_id,cell_id,outputs,execution_count,has_execution_count,attachments,outputs_bytes,execution_bytes,attachments_bytes,output_truncated,has_runtime_metadata,runtime_metadata_bytes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, c.ID, optionalJSON(c.Outputs), c.ExecutionCount, c.HasExecutionCount, optionalJSON(c.Attachments), o, e, a, c.OutputTruncated, c.HasRuntimeMetadata || c.OutputTruncated, ipynb.RuntimeMetadataSize(*c))
+	_, err = tx.Exec(ctx, `INSERT INTO workspace.notebook_cell_data(notebook_id,cell_id,outputs,execution_count,has_execution_count,attachments,outputs_bytes,execution_bytes,attachments_bytes,output_truncated,has_runtime_metadata,runtime_metadata_bytes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, c.ID, optionalJSON(c.Outputs), c.ExecutionCount, c.HasExecutionCount, optionalJSON(c.Attachments), o, e, a, c.OutputTruncated, c.HasRuntimeMetadata || c.OutputTruncated, ipynb.RuntimeMetadataSize(*c))
 	return err
 }
 
@@ -186,11 +190,11 @@ var _ usecase.Results = (*NotebookRepository)(nil)
 func readContent(ctx context.Context, tx pgx.Tx, n domain.Notebook) (domain.Notebook, error) {
 	var err error
 
-	err = tx.QueryRow(ctx, `SELECT nbformat,nbformat_minor,metadata,extra FROM notebooks WHERE id=$1`, n.ID).Scan(&n.Document.NBFormat, &n.Document.NBFormatMinor, &n.Document.Metadata, &n.Document.Extra)
+	err = tx.QueryRow(ctx, `SELECT nbformat,nbformat_minor,metadata,extra FROM workspace.notebooks WHERE id=$1`, n.ID).Scan(&n.Document.NBFormat, &n.Document.NBFormatMinor, &n.Document.Metadata, &n.Document.Extra)
 	if err != nil {
 		return n, err
 	}
-	rows, err := tx.Query(ctx, `SELECT c.cell_id,c.kind,c.source,c.source_version,c.metadata,c.extra,d.outputs,d.execution_count,d.has_execution_count,d.attachments,d.output_truncated,d.has_runtime_metadata FROM notebook_cells c JOIN notebook_cell_data d USING(notebook_id,cell_id) WHERE c.notebook_id=$1 ORDER BY c.position`, n.ID)
+	rows, err := tx.Query(ctx, `SELECT c.cell_id,c.kind,c.source,c.source_version,c.metadata,c.extra,d.outputs,d.execution_count,d.has_execution_count,d.attachments,d.output_truncated,d.has_runtime_metadata FROM workspace.notebook_cells c JOIN workspace.notebook_cell_data d USING(notebook_id,cell_id) WHERE c.notebook_id=$1 ORDER BY c.position`, n.ID)
 	if err != nil {
 		return n, err
 	}

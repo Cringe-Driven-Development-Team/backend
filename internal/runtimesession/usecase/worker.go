@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/google/uuid"
 )
@@ -44,7 +45,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			l, err := w.store.Claim(ctx, w.id)
 			if err == nil {
 				if err = w.Step(ctx, l); err != nil && !errors.Is(err, D.ErrLeaseLost) {
-					slog.WarnContext(ctx, "runtime session step failed", "session_id", l.Session.ID, "error_code", "runtime_step_failed")
+					slog.WarnContext(sessionContext(ctx, l.Session), "runtime session step failed", "session_id", l.Session.ID, "error_code", "runtime_step_failed")
 				}
 			}
 			if err != nil && !errors.Is(err, D.ErrNotFound) && !errors.Is(err, D.ErrLeaseLost) && ctx.Err() == nil {
@@ -61,7 +62,7 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // Step выполняет один ограниченный по времени шаг жизненного цикла сессии и сохраняет его результат.
 func (w *Worker) Step(parent context.Context, l D.Lease) error {
-	ctx, cancel := context.WithTimeout(parent, 60*time.Second)
+	ctx, cancel := context.WithTimeout(D.WithFence(sessionContext(parent, l.Session), l.Session.ID, l.Version), 60*time.Second)
 	defer cancel()
 	v := l.Session
 	if v.StopOperation != "" && v.State == D.Ready {
@@ -88,6 +89,15 @@ func (w *Worker) Step(parent context.Context, l D.Lease) error {
 		return err
 	}
 	return w.store.Save(ctx, l, v)
+}
+
+// sessionContext возвращает сохранённый контекст работы с устойчивым fallback для прежних записей.
+func sessionContext(parent context.Context, session D.Session) context.Context {
+	id := session.CorrelationID
+	if !observability.ValidRequestID(id) {
+		id = session.ID.String()
+	}
+	return observability.WithRequestID(parent, id)
 }
 
 // reason пропускает только известные безопасные коды причин, скрывая внутренние ошибки сервисов.
@@ -133,7 +143,14 @@ func (w *Worker) provision(ctx context.Context, l D.Lease, v *D.Session) error {
 			v.Reason = "capacity_exceeded"
 			w.finish(v)
 			return nil
-		case errors.Is(err, D.ErrInvalid), errors.Is(err, D.ErrConflict):
+		case errors.Is(err, D.ErrConflict):
+			// Другой fingerprint означает, что окружение могло быть создано. Слот
+			// удерживается, пока Environments не подтвердит отсутствие ресурсов.
+			v.State = D.Stopping
+			v.Stage = "cleanup_pending"
+			v.Reason = "environment_failed"
+			return nil
+		case errors.Is(err, D.ErrInvalid):
 			v.Reason = "environment_failed"
 			w.finish(v)
 			return nil
@@ -194,7 +211,13 @@ func (w *Worker) provision(ctx context.Context, l D.Lease, v *D.Session) error {
 		v.CleanupError = env.State == "CLEANUP_PENDING"
 	case "DELETED", "FAILED":
 		v.Reason = "environment_failed"
-		w.finish(v)
+		if env.CleanupConfirmed {
+			w.finish(v)
+		} else {
+			v.State = D.Stopping
+			v.Stage = "deleting_environment"
+			v.CleanupError = true
+		}
 	default:
 		return D.ErrProtocol
 	}
@@ -377,6 +400,9 @@ func (w *Worker) dispatchCommand(ctx context.Context, l D.Lease, v *D.Session) e
 	if err = w.store.CheckLease(ctx, l); err != nil {
 		return err
 	}
+	if observability.ValidRequestID(x.CorrelationID) {
+		ctx = observability.WithRequestID(ctx, x.CorrelationID)
+	}
 	reply, callErr := w.agent.Execute(ctx, v.ID, D.Command{ExecutionID: x.ID, Code: x.Code, TimeoutSeconds: x.TimeoutSeconds, Kind: x.Kind})
 	switch {
 	case errors.Is(callErr, D.ErrQueueFull):
@@ -431,26 +457,17 @@ func (w *Worker) cleanup(ctx context.Context, l D.Lease, v *D.Session) error {
 	}
 	env, err := w.env.Get(ctx, v.ID)
 	if errors.Is(err, D.ErrNotFound) {
-		if v.CreateUnknown {
-			env, err = w.env.RequestCreate(ctx, D.EnvironmentRequest{SessionID: v.ID, Language: v.Language, Profile: "default"})
-			if err != nil {
-				return err
-			}
-			v.CreateUnknown = false
-		} else {
-			if v.AgentStarted {
-				v.JournalIncomplete = true
-			}
-			if err = w.markUnknown(ctx, l); err != nil {
-				return err
-			}
-			w.finish(v)
+		// Отсутствие записи не доказывает отсутствие принятого Create: фиксируем delete tombstone.
+		v.CleanupError = true
+		if deleteErr := w.env.RequestDelete(ctx, v.ID, reason(v.Reason)); deleteErr != nil {
 			return nil
 		}
+		v.DeleteSent = true
+		return nil
 	} else if err != nil {
 		return err
 	}
-	if env.State == "DELETED" || env.State == "FAILED" {
+	if env.CleanupConfirmed {
 		if v.AgentStarted && !v.JournalArchived {
 			v.JournalIncomplete = true
 		}
@@ -499,8 +516,9 @@ func (w *Worker) cleanup(ctx context.Context, l D.Lease, v *D.Session) error {
 	if err = w.markUnknown(ctx, l); err != nil {
 		return err
 	}
-	// Пользовательский слот освобождается после остановки и архивации, до ответа облака.
+	// Публичное terminal state не освобождает guard, пока Environments не подтвердит очистку.
 	w.finish(v)
+	v.Stage = "cleanup_pending"
 	v.CleanupError = true
 	v.JournalArchived = true
 	if err = w.store.Checkpoint(ctx, l, *v); err != nil {

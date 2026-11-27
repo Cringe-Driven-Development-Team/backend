@@ -39,7 +39,7 @@ func safe(e R.Environment) D.Environment {
 	if e.LastError != "" {
 		reason = "environment_failed"
 	}
-	return D.Environment{SessionID: e.SessionID, State: string(e.State), ReasonCode: reason}
+	return D.Environment{SessionID: e.SessionID, State: string(e.State), ReasonCode: reason, CleanupConfirmed: e.CleanupConfirmed()}
 }
 
 // RequestCreate сохраняет запрос подготовки окружения через готовый сервис #57, не ожидая создания VPS.

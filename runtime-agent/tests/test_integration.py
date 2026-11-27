@@ -212,7 +212,11 @@ def docker_settings(settings):
         labels={"ru.cellestial.test": "protocol"},
     )
     try:
-        yield replace(settings, kernel_network=network.name)
+        yield replace(
+            settings,
+            kernel_network=network.name,
+            python_image=os.environ.get("TEST_KERNEL_IMAGE", settings.python_image),
+        )
     finally:
         network.remove()
         client.close()

@@ -39,34 +39,34 @@ const (
 		COALESCE(server_id, ''), COALESCE(volume_id, ''), COALESCE(port_id, ''), COALESCE(private_ip, ''),
 		COALESCE(endpoint, ''), agent_version, COALESCE(last_error, ''), COALESCE(cleanup_result, ''),
 		COALESCE(pool_id, '00000000-0000-0000-0000-000000000000'), version, created_at, updated_at`
-	selectEnvSQL   = `SELECT ` + envColumns + ` FROM runtime_environments WHERE session_id = $1`
-	countActiveSQL = `SELECT count(*) FROM runtime_environments WHERE state NOT IN ('DELETED','FAILED')`
-	insertEnvSQL   = `INSERT INTO runtime_environments (session_id, operation_id, language, profile, state, desired_state, agent_version)
+	selectEnvSQL   = `SELECT ` + envColumns + ` FROM environments.runtime_environments WHERE session_id = $1`
+	countActiveSQL = `SELECT count(*) FROM environments.runtime_environments WHERE state NOT IN ('DELETED','FAILED')`
+	insertEnvSQL   = `INSERT INTO environments.runtime_environments (session_id, operation_id, language, profile, state, desired_state, agent_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (session_id) DO NOTHING
 		RETURNING version, created_at, updated_at`
-	insertJobSQL  = `INSERT INTO runtime_jobs (session_id, kind) VALUES ($1, $2)`
-	lockEnvSQL    = `SELECT state FROM runtime_environments WHERE session_id = $1 FOR UPDATE`
-	markDeleteSQL = `UPDATE runtime_environments SET desired_state = 'DELETED', delete_reason = $2,
+	insertJobSQL  = `INSERT INTO environments.runtime_jobs (session_id, kind) VALUES ($1, $2)`
+	lockEnvSQL    = `SELECT state FROM environments.runtime_environments WHERE session_id = $1 FOR UPDATE`
+	markDeleteSQL = `UPDATE environments.runtime_environments SET desired_state = 'DELETED', delete_reason = $2,
 		version = version + 1, updated_at = now()
 		WHERE session_id = $1`
-	convertJobSQL = `UPDATE runtime_jobs SET kind = 'delete' WHERE session_id = $1 AND status IN ('queued','running')`
-	saveSQL       = `UPDATE runtime_environments e SET state = $3,
+	convertJobSQL = `UPDATE environments.runtime_jobs SET kind = 'delete' WHERE session_id = $1 AND status IN ('queued','running')`
+	saveSQL       = `UPDATE environments.runtime_environments e SET state = $3,
 		desired_state = CASE WHEN e.desired_state = 'DELETED' THEN 'DELETED' ELSE $4 END, server_id = NULLIF($5, ''),
 		volume_id = NULLIF($6, ''), port_id = NULLIF($7, ''), private_ip = NULLIF($8, ''), endpoint = NULLIF($9, ''),
 		agent_version = $10, last_error = NULLIF($11, ''), cleanup_result = NULLIF($12, ''),
 		pool_id = NULLIF($14, '00000000-0000-0000-0000-000000000000'::uuid),
 		version = e.version + 1, updated_at = now()
 		WHERE e.session_id = $1 AND e.version = $2 AND EXISTS (
-			SELECT 1 FROM runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $13)
+			SELECT 1 FROM environments.runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $13)
 		RETURNING e.version, e.updated_at`
-	saveSecretsSQL = `UPDATE runtime_environments e SET token_sealed = $2, host_private_key_sealed = $3, host_public_key = $4,
+	saveSecretsSQL = `UPDATE environments.runtime_environments e SET token_sealed = $2, host_private_key_sealed = $3, host_public_key = $4,
 		updated_at = now()
 		WHERE e.session_id = $1 AND EXISTS (
-			SELECT 1 FROM runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $5)`
+			SELECT 1 FROM environments.runtime_jobs j WHERE j.session_id = e.session_id AND j.status = 'running' AND j.lease_owner = $5)`
 	loadSecretsSQL = `SELECT token_sealed, host_private_key_sealed, COALESCE(host_public_key, '')
-		FROM runtime_environments WHERE session_id = $1`
-	knownSQL       = `SELECT session_id, state FROM runtime_environments WHERE session_id = ANY($1)`
-	listByStateSQL = `SELECT ` + envColumns + ` FROM runtime_environments WHERE state = $1 ORDER BY updated_at`
+		FROM environments.runtime_environments WHERE session_id = $1`
+	knownSQL       = `SELECT session_id, state FROM environments.runtime_environments WHERE session_id = ANY($1)`
+	listByStateSQL = `SELECT ` + envColumns + ` FROM environments.runtime_environments WHERE state = $1 ORDER BY updated_at`
 )
 
 // scanEnv восстанавливает окружение из строки PostgreSQL.
@@ -96,6 +96,15 @@ func (r *Repository) CreateWithJob(ctx context.Context, env domain.Environment, 
 	if _, err = tx.Exec(ctx, capacityLockSQL); err != nil {
 		return domain.Environment{}, false, fmt.Errorf("capacity lock: %w", err)
 	}
+	result, created, err := createWithJob(ctx, tx, env, maxActive)
+	if err != nil || !created {
+		return result, created, err
+	}
+	return result, true, commit(ctx, tx)
+}
+
+// createWithJob сохраняет запись и задание в транзакции вызывающего.
+func createWithJob(ctx context.Context, tx pgx.Tx, env domain.Environment, maxActive int) (domain.Environment, bool, error) {
 	existing, err := scanEnv(tx.QueryRow(ctx, selectEnvSQL, env.SessionID))
 	switch {
 	case err == nil:
@@ -122,9 +131,6 @@ func (r *Repository) CreateWithJob(ctx context.Context, env domain.Environment, 
 	if _, err = tx.Exec(ctx, insertJobSQL, env.SessionID, string(usecase.JobCreate)); err != nil {
 		return domain.Environment{}, false, fmt.Errorf("insert job: %w", err)
 	}
-	if err = commit(ctx, tx); err != nil {
-		return domain.Environment{}, false, err
-	}
 	return env, true, nil
 }
 
@@ -140,16 +146,36 @@ func (r *Repository) MarkForDelete(ctx context.Context, id uuid.UUID, reason str
 		return fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = markForDelete(ctx, tx, id, reason, false); err != nil {
+		return err
+	}
+	return commit(ctx, tx)
+}
+
+// markForDelete может запланировать подтверждение очистки также для старой терминальной строки.
+func markForDelete(ctx context.Context, tx pgx.Tx, id uuid.UUID, reason string, verifyTerminal bool) error {
 	var state string
-	if err = tx.QueryRow(ctx, lockEnvSQL, id).Scan(&state); errors.Is(err, pgx.ErrNoRows) {
+	if err := tx.QueryRow(ctx, lockEnvSQL, id).Scan(&state); errors.Is(err, pgx.ErrNoRows) {
 		return usecase.ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("lock environment: %w", err)
 	}
 	if domain.State(state).Finished() {
-		return commit(ctx, tx)
+		if !verifyTerminal {
+			return nil
+		}
+		env, err := scanEnv(tx.QueryRow(ctx, selectEnvSQL, id))
+		if err != nil {
+			return err
+		}
+		if env.CleanupConfirmed() {
+			return nil
+		}
+		if _, err = tx.Exec(ctx, `UPDATE environments.runtime_environments SET state='CLEANUP_PENDING' WHERE session_id=$1`, id); err != nil {
+			return err
+		}
 	}
-	if _, err = tx.Exec(ctx, markDeleteSQL, id, reason); err != nil {
+	if _, err := tx.Exec(ctx, markDeleteSQL, id, reason); err != nil {
 		return fmt.Errorf("mark delete: %w", err)
 	}
 	tag, err := tx.Exec(ctx, convertJobSQL, id)
@@ -161,7 +187,7 @@ func (r *Repository) MarkForDelete(ctx context.Context, id uuid.UUID, reason str
 			return fmt.Errorf("insert delete job: %w", err)
 		}
 	}
-	return commit(ctx, tx)
+	return nil
 }
 
 // commit завершает транзакцию provisioning и сохраняет исходную ошибку.

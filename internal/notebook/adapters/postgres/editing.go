@@ -30,7 +30,7 @@ func findTarget(ctx context.Context, tx pgx.Tx, id int64, op usecase.Operation) 
 		predicate = "c.position=$2"
 		value = *op.Index
 	}
-	err := tx.QueryRow(ctx, `SELECT c.cell_id,c.kind,c.source,c.source_version,c.position,c.edit_bytes,d.outputs_bytes,d.execution_bytes,d.attachments_bytes,d.runtime_metadata_bytes,c.runtime_metadata_overhead,d.has_runtime_metadata FROM notebook_cells c JOIN notebook_cell_data d USING(notebook_id,cell_id) WHERE c.notebook_id=$1 AND `+predicate, id, value).Scan(&t.cell.ID, &t.cell.Kind, &t.cell.Source, &t.cell.SourceVersion, &t.position, &t.edit, &t.outputs, &t.execution, &t.attachments, &t.runtimeBytes, &t.runtimeOverhead, &t.cell.HasRuntimeMetadata)
+	err := tx.QueryRow(ctx, `SELECT c.cell_id,c.kind,c.source,c.source_version,c.position,c.edit_bytes,d.outputs_bytes,d.execution_bytes,d.attachments_bytes,d.runtime_metadata_bytes,c.runtime_metadata_overhead,d.has_runtime_metadata FROM workspace.notebook_cells c JOIN workspace.notebook_cell_data d USING(notebook_id,cell_id) WHERE c.notebook_id=$1 AND `+predicate, id, value).Scan(&t.cell.ID, &t.cell.Kind, &t.cell.Source, &t.cell.SourceVersion, &t.position, &t.edit, &t.outputs, &t.execution, &t.attachments, &t.runtimeBytes, &t.runtimeOverhead, &t.cell.HasRuntimeMetadata)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, usecase.ErrCellNotFound
 	}
@@ -44,6 +44,10 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 		return usecase.Change{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActor(ctx, tx, ownerID); err != nil {
+		return usecase.Change{}, err
+	}
+
 	n, err := scanNotebook(tx.QueryRow(ctx, selectNotebook+` FOR UPDATE`, id, ownerID))
 	if err != nil {
 		return usecase.Change{}, err
@@ -89,7 +93,7 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 		if n.SizeBytes > usecase.MaxNotebookBytes {
 			return result, usecase.ErrTooLarge
 		}
-		if _, err = tx.Exec(ctx, `UPDATE notebook_cells SET position=position+1 WHERE notebook_id=$1 AND position >= $2`, id, pos); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE workspace.notebook_cells SET position=position+1 WHERE notebook_id=$1 AND position >= $2`, id, pos); err != nil {
 			return result, err
 		}
 		if err = insertCell(ctx, tx, id, pos, &c); err != nil {
@@ -115,7 +119,7 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 			delta := int64(len(updated) - len(old))
 			t.cell.Source = op.Source
 			t.cell.SourceVersion = uuid.NewString()
-			if _, err = tx.Exec(ctx, `UPDATE notebook_cells SET source=$3,source_version=$4,edit_bytes=edit_bytes+$5,preview_candidate=$6 WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID, op.Source, t.cell.SourceVersion, delta, domain.Preview(op.Source) != ""); err != nil {
+			if _, err = tx.Exec(ctx, `UPDATE workspace.notebook_cells SET source=$3,source_version=$4,edit_bytes=edit_bytes+$5,preview_candidate=$6 WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID, op.Source, t.cell.SourceVersion, delta, domain.Preview(op.Source) != ""); err != nil {
 				return result, err
 			}
 			if t.cell.Kind == domain.CellKindCode {
@@ -127,7 +131,7 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 					runtimeBytes = t.runtimeOverhead + 5
 				}
 				delta += o + e - t.outputs - t.execution + runtimeBytes - t.runtimeBytes
-				_, err = tx.Exec(ctx, `UPDATE notebook_cell_data SET outputs='[]',output_truncated=false,execution_count=NULL,has_execution_count=true,outputs_bytes=$3,execution_bytes=$4,runtime_metadata_bytes=$5 WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID, o, e, runtimeBytes)
+				_, err = tx.Exec(ctx, `UPDATE workspace.notebook_cell_data SET outputs='[]',output_truncated=false,execution_count=NULL,has_execution_count=true,outputs_bytes=$3,execution_bytes=$4,runtime_metadata_bytes=$5 WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID, o, e, runtimeBytes)
 				if err != nil {
 					return result, err
 				}
@@ -143,18 +147,18 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 				return result, nil
 			}
 			if to < t.position {
-				_, err = tx.Exec(ctx, `UPDATE notebook_cells SET position=CASE WHEN cell_id=$2 THEN $3 ELSE position+1 END WHERE notebook_id=$1 AND position BETWEEN $3 AND $4`, id, t.cell.ID, to, t.position)
+				_, err = tx.Exec(ctx, `UPDATE workspace.notebook_cells SET position=CASE WHEN cell_id=$2 THEN $3 ELSE position+1 END WHERE notebook_id=$1 AND position BETWEEN $3 AND $4`, id, t.cell.ID, to, t.position)
 			} else {
-				_, err = tx.Exec(ctx, `UPDATE notebook_cells SET position=CASE WHEN cell_id=$2 THEN $3 ELSE position-1 END WHERE notebook_id=$1 AND position BETWEEN $4 AND $3`, id, t.cell.ID, to, t.position)
+				_, err = tx.Exec(ctx, `UPDATE workspace.notebook_cells SET position=CASE WHEN cell_id=$2 THEN $3 ELSE position-1 END WHERE notebook_id=$1 AND position BETWEEN $4 AND $3`, id, t.cell.ID, to, t.position)
 			}
 			if err != nil {
 				return result, err
 			}
 		case usecase.Delete:
-			if _, err = tx.Exec(ctx, `DELETE FROM notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID); err != nil {
+			if _, err = tx.Exec(ctx, `DELETE FROM workspace.notebook_cells WHERE notebook_id=$1 AND cell_id=$2`, id, t.cell.ID); err != nil {
 				return result, err
 			}
-			if _, err = tx.Exec(ctx, `UPDATE notebook_cells SET position=position-1 WHERE notebook_id=$1 AND position>$2`, id, t.position); err != nil {
+			if _, err = tx.Exec(ctx, `UPDATE workspace.notebook_cells SET position=position-1 WHERE notebook_id=$1 AND position>$2`, id, t.position); err != nil {
 				return result, err
 			}
 			n.SizeBytes -= t.edit + t.outputs + t.execution + t.attachments + t.runtimeBytes
@@ -186,7 +190,7 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 // preview рассчитывает результирующие размеры и поля перед записью ячеек.
 func preview(ctx context.Context, tx pgx.Tx, id int64) (string, error) {
 	var source string
-	err := tx.QueryRow(ctx, `SELECT source FROM notebook_cells WHERE notebook_id=$1 AND kind='code' AND preview_candidate ORDER BY position LIMIT 1`, id).Scan(&source)
+	err := tx.QueryRow(ctx, `SELECT source FROM workspace.notebook_cells WHERE notebook_id=$1 AND kind='code' AND preview_candidate ORDER BY position LIMIT 1`, id).Scan(&source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -202,6 +206,6 @@ func publish(ctx context.Context, tx pgx.Tx, n domain.Notebook) (string, error) 
 		return "", usecase.ErrTooLarge
 	}
 	revision := uuid.NewString()
-	_, err := tx.Exec(ctx, `UPDATE notebooks SET revision=$2,cells_count=$3,preview_code=$4,size_bytes=$5,updated_at=clock_timestamp() WHERE id=$1`, n.ID, revision, n.CellsCount, n.PreviewCode, n.SizeBytes)
+	_, err := tx.Exec(ctx, `UPDATE workspace.notebooks SET revision=$2,cells_count=$3,preview_code=$4,size_bytes=$5,updated_at=clock_timestamp() WHERE id=$1`, n.ID, revision, n.CellsCount, n.PreviewCode, n.SizeBytes)
 	return revision, err
 }

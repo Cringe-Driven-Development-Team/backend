@@ -40,12 +40,13 @@ type Change struct {
 // Repository задаёт операции хранения блокнотов и проверки редакций.
 type Repository interface {
 	CommentsRepository
+	CheckOwner(context.Context, int64, int64) error
 	Create(context.Context, domain.Notebook) (domain.Notebook, error)
 	ListPage(context.Context, int64, ListQuery) (ListRows, error)
 	Get(context.Context, int64, int64) (domain.Notebook, error)
 	GetReadable(ctx context.Context, id, userID int64, includeCommentCounts bool) (domain.Notebook, error)
 	CheckRead(ctx context.Context, id, userID int64) error
-	PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerLogins []string) (domain.SharingSettings, error)
+	PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerIDs []int64) (domain.SharingSettings, error)
 	Clone(ctx context.Context, id, userID int64, name string) (domain.Notebook, error)
 	GetSharing(ctx context.Context, id, ownerID int64) (domain.SharingSettings, error)
 	Rename(context.Context, int64, int64, string) (domain.Notebook, error)

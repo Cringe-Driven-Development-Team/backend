@@ -20,7 +20,7 @@ func TestClaimSkipsLeasedJob(t *testing.T) {
 	}
 	db := newPool(t)
 	db.ExpectBegin()
-	db.ExpectQuery(claimSelectSQL).WillReturnRows(pgxmock.NewRows([]string{"id", "session_id", "kind", "attempt"}).AddRow(int64(5), testID(), "create", 2))
+	db.ExpectQuery(claimSelectSQL).WillReturnRows(pgxmock.NewRows([]string{"id", "session_id", "kind", "attempt", "correlation_id"}).AddRow(int64(5), testID(), "create", 2, ""))
 	db.ExpectExec(claimUpdateSQL).WithArgs(int64(5), "w1", 30.0).WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 	db.ExpectCommit()
 	db.ExpectRollback()

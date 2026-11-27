@@ -1,0 +1,98 @@
+syntax = "proto3";
+package cellestial.agent.v1;
+option go_package = "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/agent/v1;agentv1";
+import "cellestial/common/v1/error.proto";
+
+// Control применяется напрямую Environments; пользовательские Bearer сюда не передаются.
+service Control {
+  rpc Assign(AssignRequest) returns (HealthResponse);
+  rpc Health(Target) returns (HealthResponse);
+  rpc Execute(ExecuteRequest) returns (stream ResultFrame);
+  rpc GetExecution(ExecutionRequest) returns (stream ResultFrame);
+  rpc ReadEvents(EventsRequest) returns (stream EventFrame);
+  rpc InspectVariables(ExecutionRequest) returns (stream ResultFrame);
+  rpc Activity(Target) returns (HealthResponse);
+  rpc Drain(Target) returns (HealthResponse);
+  rpc Stop(Target) returns (HealthResponse);
+  rpc Interrupt(Target) returns (ControlResponse);
+  rpc Restart(Target) returns (ControlResponse);
+  rpc StopExecutions(StopExecutionsRequest) returns (ControlResponse);
+}
+// Target проверяется против назначения агента; меньший fence отвергается.
+message Target {
+  string session_id = 1;
+  string generation = 2;
+  uint64 fence = 3;
+  string operation_id = 4;
+}
+message AssignRequest { Target target = 1; string language = 2; }
+message HealthResponse {
+  string session_id = 1;
+  string language = 2;
+  string state = 3;
+  string reason = 4;
+  string generation = 5;
+  bool ready = 6;
+  bool draining = 7;
+  optional string active_execution_id = 8;
+  uint32 queued = 9;
+}
+message ExecuteRequest {
+  Target target = 1;
+  string execution_id = 2;
+  string code = 3;
+  double timeout_seconds = 4;
+}
+message ExecutionRequest { Target target = 1; string execution_id = 2; }
+message StopExecutionsRequest { Target target = 1; repeated string execution_ids = 2; }
+message ControlResponse { string generation = 1; bool accepted = 2; }
+message ExecutionHeader {
+  string execution_id = 1;
+  string state = 2;
+  cellestial.common.v1.ObjectHeader object = 3;
+}
+// ExecutionPayload содержит произвольный JSON результата Jupyter; транспорт передаёт его chunks.
+message ExecutionPayload { bytes result_json = 1; }
+message ResultFrame {
+  oneof frame {
+    ExecutionHeader header = 1;
+    cellestial.common.v1.ObjectChunk chunk = 2;
+    cellestial.common.v1.ObjectEnd end = 3;
+  }
+}
+message EventsRequest {
+  Target target = 1;
+  int64 after = 2;
+  uint32 max_events = 3;
+  uint32 max_bytes = 4;
+}
+message EventHeader {
+  int64 seq = 1;
+  string session_id = 2;
+  string execution_id = 3;
+  string kind = 4;
+  string state = 5;
+  string reason = 6;
+  string generation = 7;
+  string channel = 8;
+  string parent_msg_id = 9;
+  string msg_type = 10;
+  double timestamp = 11;
+  cellestial.common.v1.ObjectHeader object = 12;
+}
+// EventPayload сохраняет исходные Jupyter content/metadata/result без потери unknown JSON fields.
+message EventPayload {
+  bytes content_json = 1;
+  bytes metadata_json = 2;
+  bytes result_json = 3;
+  repeated string buffers = 4;
+}
+message EventPageEnd { int64 next_seq = 1; bool has_more = 2; }
+message EventFrame {
+  oneof frame {
+    EventHeader header = 1;
+    cellestial.common.v1.ObjectChunk chunk = 2;
+    cellestial.common.v1.ObjectEnd end = 3;
+    EventPageEnd page_end = 4;
+  }
+}

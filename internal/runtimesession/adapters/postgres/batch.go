@@ -21,7 +21,7 @@ func (s *Store) Queue(ctx context.Context, owner int64, sid uuid.UUID) (D.Queue,
 		return q, err
 	}
 	rows, err := s.db.Query(ctx, `SELECT id,cell_id,CASE WHEN data->'Public'->>'state'='RUNNING' THEN 'RUNNING' ELSE 'QUEUED' END
- FROM runtime_executions WHERE session_id=$1 AND cell_id!=''
+ FROM workspace.runtime_executions WHERE session_id=$1 AND cell_id!=''
  AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')
  ORDER BY (data->'Public'->>'state'='RUNNING') DESC,admission_order`, sid)
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		return out, err
 	}
 	var nb int64
-	err = tx.QueryRow(ctx, "SELECT n.id FROM notebooks n JOIN runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
+	err = tx.QueryRow(ctx, "SELECT n.id FROM workspace.notebooks n JOIN workspace.runtime_sessions s ON s.notebook_id=n.id WHERE s.id=$1 AND s.owner_id=$2 AND n.owner_id=$2 FOR UPDATE OF n", sid, owner).Scan(&nb)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, D.ErrNotFound
 	}
@@ -66,7 +66,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		return out, err
 	}
 	var priorRequest, priorResult []byte
-	err = tx.QueryRow(ctx, "SELECT request,result FROM runtime_batches WHERE session_id=$1 AND request_id=$2", sid, r.RequestID).Scan(&priorRequest, &priorResult)
+	err = tx.QueryRow(ctx, "SELECT request,result FROM workspace.runtime_batches WHERE session_id=$1 AND request_id=$2", sid, r.RequestID).Scan(&priorRequest, &priorResult)
 	if err == nil {
 		var prior D.BatchRequest
 		if err = json.Unmarshal(priorRequest, &prior); err != nil {
@@ -84,7 +84,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return out, err
 	}
-	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM runtime_sessions WHERE id=$1 FOR UPDATE", sid))
+	v, err := readSession(tx.QueryRow(ctx, "SELECT data FROM workspace.runtime_sessions WHERE id=$1 FOR UPDATE", sid))
 	if err != nil {
 		return out, err
 	}
@@ -92,7 +92,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		return out, D.ErrConflict
 	}
 	var count int
-	err = tx.QueryRow(ctx, `SELECT count(*) FROM runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM workspace.runtime_executions WHERE session_id=$1 AND data->'Public'->>'state' NOT IN ('SUCCEEDED','FAILED','INTERRUPTED','TIMED_OUT','CANCELLED','UNKNOWN','REJECTED')`, sid).Scan(&count)
 	if err != nil {
 		return out, err
 	}
@@ -100,6 +100,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		return out, D.ErrQueueFull
 	}
 	previous := -1
+	correlation := newExecutionCorrelation(ctx)
 	for _, c := range r.Cells {
 		code, sourceVersion, position, readErr := readCell(ctx, tx, nb, c.CellID)
 		if readErr != nil {
@@ -118,11 +119,11 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		}
 		id := uuid.NewString()
 		var attempt int64
-		err = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM runtime_executions WHERE notebook_id=$1 AND cell_id=$2", nb, c.CellID).Scan(&attempt)
+		err = tx.QueryRow(ctx, "SELECT COALESCE(MAX(attempt),0)+1 FROM workspace.runtime_executions WHERE notebook_id=$1 AND cell_id=$2", nb, c.CellID).Scan(&attempt)
 		if err != nil {
 			return out, err
 		}
-		x := D.Execution{SessionID: sid, ID: id, OwnerID: owner, NotebookID: nb, CellID: c.CellID, SourceHash: c.SourceHash, SourceVersion: sourceVersion, Code: code, TimeoutSeconds: r.TimeoutSeconds, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "pending"}
+		x := D.Execution{CorrelationID: correlation, SessionID: sid, ID: id, OwnerID: owner, NotebookID: nb, CellID: c.CellID, SourceHash: c.SourceHash, SourceVersion: sourceVersion, Code: code, TimeoutSeconds: r.TimeoutSeconds, Attempt: attempt, Dispatch: "PENDING", State: "PENDING", Outputs: []json.RawMessage{}, Projection: "pending"}
 		if _, err = D.CommandPayload(D.Command{ExecutionID: id, Code: code, TimeoutSeconds: r.TimeoutSeconds}); err != nil {
 			return out, err
 		}
@@ -130,7 +131,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 		if encodeErr != nil {
 			return out, encodeErr
 		}
-		if _, err = tx.Exec(ctx, "INSERT INTO runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,$5,$6)", sid, id, nb, c.CellID, attempt, data); err != nil {
+		if _, err = tx.Exec(ctx, "INSERT INTO workspace.runtime_executions(session_id,id,notebook_id,cell_id,attempt,data) VALUES($1,$2,$3,$4,$5,$6)", sid, id, nb, c.CellID, attempt, data); err != nil {
 			return out, translate(err)
 		}
 		out.ExecutionIDs = append(out.ExecutionIDs, id)
@@ -139,7 +140,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 	if err != nil {
 		return out, err
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO runtime_batches(session_id,request_id,request,result) VALUES($1,$2,$3,$4)", sid, r.RequestID, payload, result); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO workspace.runtime_batches(session_id,request_id,request,result) VALUES($1,$2,$3,$4)", sid, r.RequestID, payload, result); err != nil {
 		return out, translate(err)
 	}
 	v.LastActivityAt = time.Now().UTC()
@@ -148,7 +149,7 @@ func (s *Store) AdmitBatch(ctx context.Context, owner int64, sid uuid.UUID, r D.
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.Exec(ctx, "UPDATE runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
+	_, err = tx.Exec(ctx, "UPDATE workspace.runtime_sessions SET data=$2,next_check=now(),lease_version=lease_version+1,lease_until='-infinity' WHERE id=$1", sid, raw)
 	if err != nil {
 		return out, err
 	}

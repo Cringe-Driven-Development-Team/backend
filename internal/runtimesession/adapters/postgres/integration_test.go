@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,9 +14,8 @@ import (
 	nbpg "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/adapters/postgres"
 	nbD "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,35 +23,10 @@ import (
 // для теста.
 func integrationStore(t *testing.T) (*Store, *pgxpool.Pool, int64, int64) {
 	t.Helper()
-	dsn := os.Getenv("RUNTIME_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("RUNTIME_TEST_DATABASE_URL is unset")
-	}
 	ctx := context.Background()
-	root, e := pgxpool.New(ctx, dsn)
-	if e != nil {
-		t.Fatal(e)
-	}
-	name := "runtime_" + uuid.NewString()[:8]
-	schema := pgx.Identifier{name}.Sanitize()
-	if _, e = root.Exec(ctx, "CREATE SCHEMA "+schema); e != nil {
-		t.Fatal(e)
-	}
-	cfg, e := pgxpool.ParseConfig(dsn)
-	if e != nil {
-		t.Fatal(e)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = name
-	pool, e := pgxpool.NewWithConfig(ctx, cfg)
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() { pool.Close(); _, _ = root.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); root.Close() })
-	if e = migrations.Up(ctx, pool); e != nil {
-		t.Fatal(e)
-	}
+	pool := pgtest.NewDatabase(t, "RUNTIME_TEST_DATABASE_URL")
 	var owner, nb int64
-	if e = pool.QueryRow(ctx, "INSERT INTO users(login,password_hash) VALUES('runtime-test','hash') RETURNING id").Scan(&owner); e != nil {
+	if e := pool.QueryRow(ctx, "INSERT INTO identity.users(login,password_hash) VALUES('runtime-test','hash') RETURNING id").Scan(&owner); e != nil {
 		t.Fatal(e)
 	}
 
@@ -160,7 +133,7 @@ func TestEventTransactionRollsBackCursorAndOutput(t *testing.T) {
 		t.Fatal(v, e)
 	}
 	var count int
-	_ = p.QueryRow(ctx, "SELECT count(*) FROM runtime_events").Scan(&count)
+	_ = p.QueryRow(ctx, "SELECT count(*) FROM workspace.runtime_events").Scan(&count)
 	if count != 0 {
 		t.Fatal("event committed before failed reducer")
 	}
@@ -216,10 +189,10 @@ func TestOversizedWireCommandRejectedBeforeAdmission(t *testing.T) {
 	}
 	code := strings.Repeat("😀", 600000)
 	// Намеренно портим одноразовую фикстуру, чтобы проверить защитный admission.
-	if _, e = p.Exec(ctx, `ALTER TABLE notebook_cells DROP CONSTRAINT notebook_cells_source_check`); e != nil {
+	if _, e = p.Exec(ctx, `ALTER TABLE workspace.notebook_cells DROP CONSTRAINT notebook_cells_source_check`); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = p.Exec(ctx, `UPDATE notebook_cells SET source=$2 WHERE notebook_id=$1 AND cell_id='cell'`, nb, code); e != nil {
+	if _, e = p.Exec(ctx, `UPDATE workspace.notebook_cells SET source=$2 WHERE notebook_id=$1 AND cell_id='cell'`, nb, code); e != nil {
 		t.Fatal(e)
 	}
 	h := sha256.Sum256([]byte(code))
@@ -228,7 +201,7 @@ func TestOversizedWireCommandRejectedBeforeAdmission(t *testing.T) {
 		t.Fatal(e)
 	}
 	var count int
-	_ = p.QueryRow(ctx, "SELECT count(*) FROM runtime_executions").Scan(&count)
+	_ = p.QueryRow(ctx, "SELECT count(*) FROM workspace.runtime_executions").Scan(&count)
 	if count != 0 {
 		t.Fatal("oversized immutable command persisted")
 	}

@@ -8,7 +8,7 @@ import time
 import uuid
 
 from .models import AgentError
-from .observability import LoggedConnection
+from .observability import LoggedConnection, request_id
 
 
 def encode(value):
@@ -76,6 +76,12 @@ class Journal:
             );
             CREATE INDEX IF NOT EXISTS session_events ON events(session_id, seq);
         """)
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(executions)")}
+        if "correlation_id" not in columns:
+            with self.db:
+                self.db.execute(
+                    "ALTER TABLE executions ADD COLUMN correlation_id TEXT NOT NULL DEFAULT ''"
+                )
         with self.db:
             self.db.execute(
                 "INSERT OR IGNORE INTO metadata VALUES ('instance_id', ?)", (str(uuid.uuid4()),)
@@ -254,12 +260,63 @@ class Journal:
         with self.db:
             self.db.execute(
                 "INSERT INTO executions "
-                "(session_id,id,fingerprint,command,state) VALUES (?,?,?,?, 'QUEUED')",
-                (session_id, command["execution_id"], self.fingerprint(command), encode(command)),
+                "(session_id,id,fingerprint,command,state,correlation_id)"
+                " VALUES (?,?,?,?, 'QUEUED',?)",
+                (
+                    session_id,
+                    command["execution_id"],
+                    self.fingerprint(command),
+                    encode(command),
+                    request_id.get() or str(uuid.uuid4()),
+                ),
             )
             self._event(
                 session_id, "execution_state", command["execution_id"], state="QUEUED", result=None
             )
+
+    def claim_rpc_fence(self, session_id, fence):
+        """Сохраните fence до внешнего эффекта; другое назначение и меньший fence отвергайте."""
+        if not 1 <= fence <= 2**63 - 1:
+            return False
+        with self.db:
+            row = self.db.execute("SELECT value FROM metadata WHERE key='rpc_binding'").fetchone()
+            old = json.loads(row[0]) if row else None
+            if old and (old["session_id"] != session_id or old["fence"] > fence):
+                return False
+            self.db.execute(
+                "INSERT INTO metadata(key,value) VALUES('rpc_binding',?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (encode({"session_id": session_id, "fence": fence}),),
+            )
+        return True
+
+    def execution_request_id(self, session_id, execution_id):
+        """Восстановите correlation команды, не включая его в fingerprint идемпотентности."""
+        row = self.db.execute(
+            "SELECT correlation_id FROM executions WHERE session_id=? AND id=?",
+            (session_id, execution_id),
+        ).fetchone()
+        if row is None:
+            raise AgentError(404, "Execution not found")
+        if row[0]:
+            return row[0]
+        identifier = str(uuid.uuid4())
+        with self.db:
+            self.db.execute(
+                "UPDATE executions SET correlation_id=? "
+                "WHERE session_id=? AND id=? AND correlation_id=''",
+                (identifier, session_id, execution_id),
+            )
+        return identifier
+
+    def has_events(self, session_id, after):
+        """Проверьте наличие следующей страницы без загрузки её payload."""
+        return (
+            self.db.execute(
+                "SELECT 1 FROM events WHERE session_id=? AND seq>? LIMIT 1", (session_id, after)
+            ).fetchone()
+            is not None
+        )
 
     def execution(self, session_id, execution_id):
         """Прочитайте состояние и результат команды execution_id в сессии session_id."""
@@ -411,7 +468,11 @@ class Journal:
             (session_id,),
         ).fetchall()
         for row in rows:
-            self.transition(session_id, row[0], state, {"reason": reason})
+            token = request_id.set(self.execution_request_id(session_id, row[0]))
+            try:
+                self.transition(session_id, row[0], state, {"reason": reason})
+            finally:
+                request_id.reset(token)
 
     def recover(self, resume=False, preserve_draining=False):
         """Пометьте команды UNKNOWN и подготовьте восстановление живого workspace.

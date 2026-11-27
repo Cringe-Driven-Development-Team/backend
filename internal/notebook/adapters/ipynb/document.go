@@ -292,34 +292,6 @@ func DocumentSize(headerBytes int64, cellBytes []int64) int64 {
 	return size
 }
 
-// EncodeDocument собирает полный документ только на границе экспорта.
-func EncodeDocument(doc domain.Document, cells []domain.Cell) ([]byte, error) {
-	m := header(doc)
-	out := make([]map[string]json.RawMessage, 0, len(cells))
-	for _, c := range cells {
-		if (c.HasRuntimeMetadata || c.OutputTruncated) && RuntimeMetadataOverhead(c) < 0 {
-			return nil, errors.New("runtime metadata namespace is occupied")
-		}
-		cm := runtimeMetadata(c, light(c))
-		if len(c.Outputs) > 0 {
-			cm["outputs"] = c.Outputs
-		}
-		if c.HasExecutionCount {
-			put(cm, "execution_count", c.ExecutionCount)
-		}
-		if len(c.Attachments) > 0 {
-			cm["attachments"] = c.Attachments
-		}
-		out = append(out, cm)
-	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		return nil, fmt.Errorf("encode cells: %w", err)
-	}
-	m["cells"] = b
-	return json.Marshal(m)
-}
-
 // ValidateOutputs обеспечивает общее представление для import/runtime/content.
 // Детально outputs по nbformat проверяет источник, но каждый элемент
 // должен быть JSON-объектом, чтобы сохранённые документы читались через content.

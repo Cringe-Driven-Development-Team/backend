@@ -48,7 +48,7 @@ func TestBatchConcurrentRetryAndStableQueue(t *testing.T) {
 		t.Fatal(q, err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, "SELECT count(*) FROM runtime_executions").Scan(&count); err != nil || count != 2 {
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM workspace.runtime_executions").Scan(&count); err != nil || count != 2 {
 		t.Fatal(count, err)
 	}
 	r.Cells[0].SourceHash = string(make([]byte, 64))
@@ -72,7 +72,7 @@ func TestBatchFailureRollsBackEveryExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, "SELECT count(*) FROM runtime_executions").Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM workspace.runtime_executions").Scan(&count); err != nil || count != 0 {
 		t.Fatal("partial batch admitted", count, err)
 	}
 	if _, err = s.Queue(ctx, owner+100, v.ID); !errors.Is(err, D.ErrNotFound) {
@@ -157,7 +157,7 @@ func TestTerminalAdmissionReplySchedulesOutputWithoutEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, "SELECT count(*) FROM runtime_projections WHERE session_id=$1 AND execution_id=$2", v.ID, x.ID).Scan(&count); err != nil || count != 1 {
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM workspace.runtime_projections WHERE session_id=$1 AND execution_id=$2", v.ID, x.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("silent execution projection lost", count, err)
 	}
 }

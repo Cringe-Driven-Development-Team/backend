@@ -34,11 +34,16 @@ type lockTx struct {
 
 //nolint:ireturn // Реализует pgx.Tx.QueryRow для наблюдения блокировки.
 func (tx lockTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	if !strings.Contains(sql, "FROM notebooks") || !strings.Contains(sql, "FOR UPDATE") {
-		return tx.Tx.QueryRow(ctx, sql, args...)
+	notebookLock := strings.Contains(sql, "FROM workspace.notebooks") && strings.Contains(sql, "FOR UPDATE")
+	guardLock := strings.Contains(sql, "FROM workspace.user_guards") && strings.Contains(sql, "FOR UPDATE")
+	if tx.gate.waiter != nil && (notebookLock || guardLock) {
+		select {
+		case tx.gate.waiter <- tx.Conn().PgConn().PID():
+		default:
+		}
 	}
-	if tx.gate.waiter != nil {
-		tx.gate.waiter <- tx.Conn().PgConn().PID()
+	if !notebookLock {
+		return tx.Tx.QueryRow(ctx, sql, args...)
 	}
 	return lockRow{Row: tx.Tx.QueryRow(ctx, sql, args...), ctx: ctx, gate: tx.gate}
 }
@@ -92,7 +97,7 @@ func awaitNotebookLock(ctx context.Context, t *testing.T, pool *pgxpool.Pool, pi
 		select {
 		case <-tick.C:
 		case <-ctx.Done():
-			t.Fatal("second operation did not wait for notebook lock", ctx.Err())
+			t.Fatal("second operation did not wait for Workspace guard/notebook lock", ctx.Err())
 		}
 	}
 }
@@ -246,7 +251,7 @@ func TestRenameNotebookCanceledWhileLocked(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var id int64
-	if err = tx.QueryRow(ctx, `SELECT id FROM notebooks WHERE id=$1 FOR UPDATE`, n.ID).Scan(&id); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT id FROM workspace.notebooks WHERE id=$1 FOR UPDATE`, n.ID).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	request, stop := context.WithCancel(ctx)

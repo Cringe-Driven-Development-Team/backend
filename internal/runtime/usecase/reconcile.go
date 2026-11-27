@@ -19,7 +19,7 @@ func (w *Worker) reconcileLoop(ctx context.Context) {
 	defer t.Stop()
 	for {
 		if err := w.reconcilePass(ctx); err != nil && ctx.Err() == nil {
-			w.log.Error("reconcile", "error", err)
+			w.log.Error("reconcile", "error_code", runtimeErrorCode(err))
 		}
 		select {
 		case <-ctx.Done():

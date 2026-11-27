@@ -7,28 +7,29 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 )
 
 func TestCommentRepositoryPermissions(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := t.Context()
-	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash'),(3,'other','hash')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(2,'reader','hash'),(3,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	n, err := uc.Create(ctx, 1, "comments")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cell := n.Cells[0].ID
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := repo.CreateComment(ctx, n.ID, cell, 2, "reader text")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.OwnerID != 1 || c.Comment.Author.ID != 2 || c.Comment.Author.Login != "reader" || !c.Comment.CreatedAt.Equal(c.Comment.UpdatedAt) {
+	if c.OwnerID != 1 || c.Comment.Author.ID != 2 || c.Comment.Author.Login != "" || !c.Comment.CreatedAt.Equal(c.Comment.UpdatedAt) {
 		t.Fatalf("invalid creation: %+v", c)
 	}
 	for _, visitor := range []int64{0, 3} {
@@ -54,11 +55,11 @@ func TestCommentRepositoryPermissions(t *testing.T) {
 		}
 		previous = c.Comment.UpdatedAt
 	}
-	if _, err = pool.Exec(ctx, `UPDATE users SET login='renamed' WHERE id=2`); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE identity.users SET login='renamed' WHERE id=2`); err != nil {
 		t.Fatal(err)
 	}
 	page, err := repo.ListComments(ctx, n.ID, cell, 2, usecase.CommentQuery{Limit: 20})
-	if err != nil || len(page.Items) != 1 || page.Items[0].Author.Login != "renamed" {
+	if err != nil || len(page.Items) != 1 || page.Items[0].Author.ID != 2 || page.Items[0].Author.Login != "" {
 		t.Fatalf("author login: %+v %v", page, err)
 	}
 	if _, err = repo.UpdateComment(ctx, n.ID, "missing", 2, c.Comment.ID, "x"); !errors.Is(err, usecase.ErrCellNotFound) {
@@ -100,7 +101,7 @@ func TestCommentRepositoryPermissions(t *testing.T) {
 func TestCellCommentsPreserveNotebook(t *testing.T) {
 	repo, pool, n, c := commentNotebook(t)
 	ctx := t.Context()
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	src, err := repo.ExecutionSource(ctx, n.ID, 1, c.CellID)
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +112,7 @@ func TestCellCommentsPreserveNotebook(t *testing.T) {
 	snapshot := func() string {
 		t.Helper()
 		var value string
-		snapshotErr := pool.QueryRow(ctx, `SELECT jsonb_build_object('notebook',to_jsonb(n),'cells',(SELECT jsonb_agg(to_jsonb(c) ORDER BY cell_id) FROM notebook_cells c WHERE notebook_id=n.id),'data',(SELECT jsonb_agg(to_jsonb(d) ORDER BY cell_id) FROM notebook_cell_data d WHERE notebook_id=n.id),'sessions',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM runtime_sessions s WHERE notebook_id=n.id))::text FROM notebooks n WHERE id=$1`, n.ID).Scan(&value)
+		snapshotErr := pool.QueryRow(ctx, `SELECT jsonb_build_object('notebook',to_jsonb(n),'cells',(SELECT jsonb_agg(to_jsonb(c) ORDER BY cell_id) FROM workspace.notebook_cells c WHERE notebook_id=n.id),'data',(SELECT jsonb_agg(to_jsonb(d) ORDER BY cell_id) FROM workspace.notebook_cell_data d WHERE notebook_id=n.id),'sessions',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM workspace.runtime_sessions s WHERE notebook_id=n.id))::text FROM workspace.notebooks n WHERE id=$1`, n.ID).Scan(&value)
 		if snapshotErr != nil {
 			t.Fatal(snapshotErr)
 		}
@@ -167,7 +168,7 @@ func TestCellCommentsPreserveNotebook(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE id=$1`, c.ID).Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE id=$1`, c.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("deleted cell comments", count, err)
 	}
 }
@@ -175,7 +176,7 @@ func TestCellCommentsPreserveNotebook(t *testing.T) {
 func TestCellCommentsCascade(t *testing.T) {
 	repo, pool, n, c := commentNotebook(t)
 	ctx := t.Context()
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	other, err := uc.Create(ctx, 1, "neighbor")
 	if err != nil {
 		t.Fatal(err)
@@ -184,14 +185,14 @@ func TestCellCommentsCascade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `DELETE FROM users WHERE id=2`); err != nil {
+	if _, err = pool.Exec(ctx, `DELETE FROM identity.users WHERE id=2`); err != nil {
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE id=$1`, c.ID).Scan(&count); err != nil || count != 0 {
-		t.Fatal("author cascade", count, err)
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE id=$1`, c.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatal("Identity delete must not cascade across service ownership", count, err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE id=$1`, own.Comment.ID).Scan(&count); err != nil || count != 1 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE id=$1`, own.Comment.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("neighbor lost", count, err)
 	}
 	if _, err = repo.CreateComment(ctx, n.ID, n.Cells[0].ID, 1, "delete with notebook"); err != nil {
@@ -200,10 +201,10 @@ func TestCellCommentsCascade(t *testing.T) {
 	if err = repo.DeleteNotebook(ctx, n.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE notebook_id=$1`, n.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("notebook cascade", count, err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM cell_comments WHERE id=$1`, own.Comment.ID).Scan(&count); err != nil || count != 1 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workspace.cell_comments WHERE id=$1`, own.Comment.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("neighbor changed", count, err)
 	}
 }
@@ -211,7 +212,7 @@ func TestCellCommentsCascade(t *testing.T) {
 func TestCommentRepositoryDatesAndPaging(t *testing.T) {
 	repo, pool := testRepository(t)
 	ctx := t.Context()
-	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
 	n, err := uc.Create(ctx, 1, "paging")
 	if err != nil {
 		t.Fatal(err)
@@ -222,7 +223,7 @@ func TestCommentRepositoryDatesAndPaging(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = pool.Exec(ctx, `UPDATE cell_comments SET created_at='2026-11-22T00:00:00Z',updated_at='2026-11-22T00:00:00Z' WHERE notebook_id=$1`, n.ID); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE workspace.cell_comments SET created_at='2026-11-22T00:00:00Z',updated_at='2026-11-22T00:00:00Z' WHERE notebook_id=$1`, n.ID); err != nil {
 		t.Fatal(err)
 	}
 	var after *usecase.CommentPosition

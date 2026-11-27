@@ -30,10 +30,11 @@ const (
 
 // Job — задание воркера.
 type Job struct {
-	ID        int64
-	SessionID uuid.UUID
-	Kind      JobKind
-	Attempt   int
+	CorrelationID string
+	ID            int64
+	SessionID     uuid.UUID
+	Kind          JobKind
+	Attempt       int
 }
 
 // SealedSecrets — зашифрованные секреты окружения.
@@ -120,7 +121,10 @@ type HostConfigurator interface {
 }
 
 // AgentEndpoint — адрес и токен агента; пустой Token — запрос без авторизации (агент в режиме ожидания).
-type AgentEndpoint struct{ BaseURL, Token string }
+type AgentEndpoint struct {
+	BaseURL, Token string
+	Target         AgentTarget
+}
 
 // AgentHealth — ответ /health агента.
 type AgentHealth struct {

@@ -21,32 +21,34 @@ func TestCommentRepositoryTransactionOrder(t *testing.T) {
 			if stage == "begin" {
 				begin.WillReturnError(failure)
 			} else {
-				lock := db.ExpectQuery(`SELECT owner_id FROM notebooks WHERE id=\$1 FOR UPDATE`).WithArgs(int64(7))
+				db.ExpectExec(`INSERT INTO workspace.user_guards`).WithArgs(int64(2)).WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				db.ExpectQuery(`SELECT deleting,active_session_id FROM workspace.user_guards`).WithArgs(int64(2)).WillReturnRows(pgxmock.NewRows([]string{"deleting", "active_session_id"}).AddRow(false, nil))
+				lock := db.ExpectQuery(`SELECT owner_id FROM workspace.notebooks WHERE id=\$1 FOR UPDATE`).WithArgs(int64(7))
 				if stage == "lock" {
 					lock.WillReturnError(failure)
 				} else {
 					lock.WillReturnRows(pgxmock.NewRows([]string{"owner_id"}).AddRow(int64(1)))
-					access := db.ExpectQuery(`SELECT id FROM notebooks WHERE id=\$1 AND`).WithArgs(int64(7), int64(2))
+					access := db.ExpectQuery(`SELECT id FROM workspace.notebooks WHERE id=\$1 AND`).WithArgs(int64(7), int64(2))
 					if stage == "access" {
 						access.WillReturnError(failure)
 					} else {
 						access.WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int64(7)))
-						cell := db.ExpectQuery(`SELECT cell_id FROM notebook_cells`).WithArgs(int64(7), "cell")
+						cell := db.ExpectQuery(`SELECT cell_id FROM workspace.notebook_cells`).WithArgs(int64(7), "cell")
 						if stage == "cell" {
 							cell.WillReturnError(failure)
 						} else {
 							cell.WillReturnRows(pgxmock.NewRows([]string{"cell_id"}).AddRow("cell"))
-							insert := db.ExpectQuery(`INSERT INTO cell_comments`).WithArgs(int64(7), "cell", int64(2), "text")
+							insert := db.ExpectQuery(`INSERT INTO workspace.cell_comments`).WithArgs(int64(7), "cell", int64(2), "text")
 							if stage == "insert" {
 								insert.WillReturnError(failure)
 							} else {
 								insert.WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int64(9)))
-								read := db.ExpectQuery(`SELECT .* FROM cell_comments c JOIN users`).WithArgs(int64(7), "cell", int64(9))
+								read := db.ExpectQuery(`SELECT .* FROM workspace.cell_comments c`).WithArgs(int64(7), "cell", int64(9))
 								if stage == "read" {
 									read.WillReturnError(failure)
 								} else {
 									now := time.Now()
-									read.WillReturnRows(pgxmock.NewRows([]string{"id", "book", "cell", "author", "login", "text", "created", "updated"}).AddRow(int64(9), int64(7), "cell", int64(2), "reader", "text", now, now))
+									read.WillReturnRows(pgxmock.NewRows([]string{"id", "book", "cell", "author", "text", "created", "updated"}).AddRow(int64(9), int64(7), "cell", int64(2), "text", now, now))
 									commit := db.ExpectCommit()
 									if stage == "commit" {
 										commit.WillReturnError(failure)

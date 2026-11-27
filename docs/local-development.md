@@ -1,5 +1,11 @@
 # Локальная разработка backend
 
+Запуск Identity, Workspace, Environments и gRPC-агента в этой версии
+описан в [руководстве по сервисам](microservices.md). Для переноса данных
+используйте [порядок миграции монолита](microservices-migration.md).
+Команды Compose и запуск `cmd/main` ниже относятся к выпущенной версии
+монолита до переноса схем.
+
 ## Запуск и проверки
 
 Нужны Go из `go.mod`, C-компилятор для `-race`, Make, Docker Compose и Node.js

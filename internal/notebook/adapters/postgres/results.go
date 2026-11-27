@@ -13,7 +13,7 @@ import (
 // ExecutionSource читает текущий исходник ячейки для будущей проверки результата исполнения.
 func (r *NotebookRepository) ExecutionSource(ctx context.Context, id, ownerID int64, cellID string) (usecase.ExecutionSource, error) {
 	var out usecase.ExecutionSource
-	err := r.db.QueryRow(ctx, `SELECT c.cell_id,c.source,c.source_version FROM notebook_cells c JOIN notebooks n ON n.id=c.notebook_id WHERE n.id=$1 AND n.owner_id=$2 AND c.cell_id=$3 AND c.kind='code'`, id, ownerID, cellID).Scan(&out.CellID, &out.Source, &out.SourceVersion)
+	err := r.db.QueryRow(ctx, `SELECT c.cell_id,c.source,c.source_version FROM workspace.notebook_cells c JOIN workspace.notebooks n ON n.id=c.notebook_id WHERE n.id=$1 AND n.owner_id=$2 AND c.cell_id=$3 AND c.kind='code'`, id, ownerID, cellID).Scan(&out.CellID, &out.Source, &out.SourceVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, usecase.ErrCellNotFound
 	}
@@ -80,7 +80,7 @@ func (r *NotebookRepository) SaveResultTx(ctx context.Context, tx pgx.Tx, id, ow
 		return "", usecase.ErrInvalidDocument
 	}
 	var same bool
-	err = tx.QueryRow(ctx, `SELECT COALESCE(outputs=$3::jsonb AND output_truncated=$5 AND has_runtime_metadata AND has_execution_count AND execution_count IS NOT DISTINCT FROM $4::bigint,false) FROM notebook_cell_data WHERE notebook_id=$1 AND cell_id=$2`, id, result.CellID, []byte(outputs), result.ExecutionCount, result.OutputTruncated).Scan(&same)
+	err = tx.QueryRow(ctx, `SELECT COALESCE(outputs=$3::jsonb AND output_truncated=$5 AND has_runtime_metadata AND has_execution_count AND execution_count IS NOT DISTINCT FROM $4::bigint,false) FROM workspace.notebook_cell_data WHERE notebook_id=$1 AND cell_id=$2`, id, result.CellID, []byte(outputs), result.ExecutionCount, result.OutputTruncated).Scan(&same)
 	// SQL NULL в outputs отличается от явного пустого результата.
 	if err != nil {
 		return "", err
@@ -98,11 +98,11 @@ func (r *NotebookRepository) SaveResultTx(ctx context.Context, tx pgx.Tx, id, ow
 	if n.SizeBytes > usecase.MaxNotebookBytes {
 		return "", usecase.ErrTooLarge
 	}
-	_, err = tx.Exec(ctx, `UPDATE notebook_cell_data SET outputs=$3,execution_count=$4,output_truncated=$7,has_runtime_metadata=true,runtime_metadata_bytes=$8,has_execution_count=true,outputs_bytes=$5,execution_bytes=$6 WHERE notebook_id=$1 AND cell_id=$2`, id, result.CellID, []byte(outputs), result.ExecutionCount, o, e, result.OutputTruncated, runtimeBytes)
+	_, err = tx.Exec(ctx, `UPDATE workspace.notebook_cell_data SET outputs=$3,execution_count=$4,output_truncated=$7,has_runtime_metadata=true,runtime_metadata_bytes=$8,has_execution_count=true,outputs_bytes=$5,execution_bytes=$6 WHERE notebook_id=$1 AND cell_id=$2`, id, result.CellID, []byte(outputs), result.ExecutionCount, o, e, result.OutputTruncated, runtimeBytes)
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.Exec(ctx, `UPDATE notebooks SET size_bytes=$2,updated_at=clock_timestamp() WHERE id=$1`, n.ID, n.SizeBytes)
+	_, err = tx.Exec(ctx, `UPDATE workspace.notebooks SET size_bytes=$2,updated_at=clock_timestamp() WHERE id=$1`, n.ID, n.SizeBytes)
 	if err != nil {
 		return "", err
 	}

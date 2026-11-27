@@ -39,6 +39,11 @@ type RuntimeConfig struct {
 	MaxConcurrentOps, MaxActive                  int
 }
 
+// LoadRuntimeFrom читает конфигурацию провайдера для отдельного Environments.
+func LoadRuntimeFrom(lookup func(string) (string, bool)) (RuntimeConfig, error) {
+	return loadRuntime(lookup)
+}
+
 // loadRuntime читает и проверяет настройки provisioning и сессий.
 func loadRuntime(lookup func(string) (string, bool)) (RuntimeConfig, error) {
 	get := func(key, fallback string) string {

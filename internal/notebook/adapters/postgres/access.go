@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const readableCondition = `(owner_id=$2 OR sharing_mode='public' OR (sharing_mode='restricted' AND $2>0 AND EXISTS (SELECT 1 FROM notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
-const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM notebooks WHERE id=$1 AND ` + readableCondition
-const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM notebooks WHERE id=$1 FOR UPDATE`
+const readableCondition = `(owner_id=$2 OR sharing_mode='public' OR (sharing_mode='restricted' AND $2>0 AND EXISTS (SELECT 1 FROM workspace.notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
+const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM workspace.notebooks WHERE id=$1 AND ` + readableCondition
+const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM workspace.notebooks WHERE id=$1 FOR UPDATE`
 
 // readQuerier позволяет проверять доступ через пул или уже открытую транзакцию.
 type readQuerier interface {
@@ -21,7 +21,7 @@ type readQuerier interface {
 // checkRead использует единую политику доступа, не открывая отдельную транзакцию.
 func checkRead(ctx context.Context, q readQuerier, id, userID int64) error {
 	var found int64
-	err := q.QueryRow(ctx, `SELECT id FROM notebooks WHERE id=$1 AND `+readableCondition, id, userID).Scan(&found)
+	err := q.QueryRow(ctx, `SELECT id FROM workspace.notebooks WHERE id=$1 AND `+readableCondition, id, userID).Scan(&found)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return usecase.ErrNotebookNotFound
 	}
@@ -77,12 +77,16 @@ func (r *NotebookRepository) Clone(ctx context.Context, id, userID int64, name s
 		return domain.Notebook{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockActor(ctx, tx, userID); err != nil {
+		return domain.Notebook{}, err
+	}
+
 	n, err := scanNotebook(tx.QueryRow(ctx, selectNotebookForClone, id))
 	if err != nil {
 		return domain.Notebook{}, err
 	}
 	var allowed bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM notebooks WHERE id=$1 AND `+readableCondition+`)`, id, userID).Scan(&allowed)
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workspace.notebooks WHERE id=$1 AND `+readableCondition+`)`, id, userID).Scan(&allowed)
 	if err != nil {
 		return domain.Notebook{}, err
 	}

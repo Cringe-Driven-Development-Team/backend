@@ -1,13 +1,11 @@
 package httptransport
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,11 +15,9 @@ import (
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	notebookusecase "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/testutil/pgtest"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	usersecurity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/user/adapters/security"
-	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/migrations"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,45 +31,12 @@ type commentsHTTPFixture struct {
 
 func newCommentsHTTPFixture(t *testing.T) commentsHTTPFixture {
 	t.Helper()
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("TEST_POSTGRES_DSN is not set")
-	}
 	ctx := t.Context()
-	admin, err := pgxpool.New(ctx, dsn)
-	if err != nil {
+	pool := pgtest.NewDatabase(t, "TEST_POSTGRES_DSN")
+	if _, err := pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash'),(2,'reader','hash'),(3,'other','hash')`); err != nil {
 		t.Fatal(err)
 	}
-	schema := "comments_http_" + uuid.NewString()
-	quoted := pgx.Identifier{schema}.Sanitize()
-	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_, e := admin.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE")
-		if e != nil {
-			t.Error(e)
-		}
-		admin.Close()
-	})
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err = migrations.Up(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = pool.Exec(ctx, `INSERT INTO users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES(1,'owner','hash'),(2,'reader','hash'),(3,'other','hash')`); err != nil {
-		t.Fatal(err)
-	}
-	uc := notebookusecase.NewNotebookUsecase(notebookdb.NewNotebookRepository(pool), notebookusecase.NoActiveSessions{}, notebookcursor.New([]byte("notebook-list-key")), notebookusecase.WithCommentCursor(notebookcursor.NewCommentCodec([]byte("comments-key"))))
+	uc := notebookusecase.NewNotebookUsecase(notebookdb.NewNotebookRepository(pool), notebookusecase.NoActiveSessions{}, notebookcursor.New([]byte("notebook-list-key")), notebookusecase.WithUsers(pgtest.UsersFixture{DB: pool}), notebookusecase.WithCommentCursor(notebookcursor.NewCommentCodec([]byte("comments-key"))))
 	n, err := uc.Create(ctx, 1, "comments")
 	if err != nil {
 		t.Fatal(err)
