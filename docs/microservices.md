@@ -120,3 +120,18 @@ status <operation_uuid>` возвращает этап. Нужен отдель�
 обычный набор переменных TLS. Identity отзывает сессии, Workspace закрывает
 новые записи и дожидается очистки VPS. После удаления ссылок в Workspace
 Identity удаляет аватар и профиль.
+
+### Подготовка HTTPS-входа метрик на runtime-VPS
+
+Environments с OpenStack включает подготовку входа, когда заданы обе переменные
+`RUNTIME_MONITORING_SCRAPER_IP` и `RUNTIME_MONITORING_CLIENT_CA_FILE`. Первая
+содержит приватный IPv4 VPS4, вторая указывает на смонтированный в Environments
+публичный `client-ca.pem` центра, выдавшего клиентский сертификат Prometheus.
+Приватный ключ Prometheus остаётся у scraper.
+
+При подготовке новой VPS, в том числе для warm pool, Environments выпускает
+отдельную серверную пару через действующий runtime CA с расширением
+`ServerAuth` и DNS SAN `runtime-metrics.internal.cellestial.ru`. Backend
+передаёт параметры в `runtime_monitoring` для Ansible. Роль infra настраивает
+HTTPS на приватном порту `9443` и доступ с VPS4. Уже подготовленные машины
+получают настройку при повторной подготовке или замене. [Контракт мониторинга](monitoring.md)

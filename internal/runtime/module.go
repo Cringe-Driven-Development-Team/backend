@@ -118,12 +118,23 @@ func BuildIndependent(ctx context.Context, cfg config.RuntimeConfig, pool *pgxpo
 	if cfg.Provider != "openstack" {
 		return Independent{}, errors.New("runtime: invalid provider")
 	}
+	var monitoringCA []byte
+	if cfg.MonitoringClientCAFile != "" {
+		var err error
+		monitoringCA, err = os.ReadFile(cfg.MonitoringClientCAFile)
+		if err != nil || !x509.NewCertPool().AppendCertsFromPEM(monitoringCA) {
+			return Independent{}, errors.New("runtime: cannot load monitoring client CA")
+		}
+	}
 	adapters, err := buildOpenStack(ctx, cfg, systemClock{}, true, metrics...)
 	if err != nil {
 		return Independent{}, err
 	}
 	p := parts{cfg: cfg, repo: postgres.NewRepository(pool), cloud: adapters.cloud, host: adapters.host, sec: adapters.secrets}
-	transport := &usecase.AgentGRPCSettings{IssueCertificate: adapters.secrets.IssueAgentCertificate, JobFence: p.repo.AgentJobFence}
+	transport := &usecase.AgentGRPCSettings{
+		IssueCertificate: adapters.secrets.IssueAgentCertificate, JobFence: p.repo.AgentJobFence,
+		MonitoringScraperIP: cfg.MonitoringScraperIP, MonitoringClientCA: monitoringCA,
+	}
 	worker := p.workerWithAgent(ownerName(), workerLease, agentrpc.NewProvisioning(dialer), transport)
 	return Independent{Control: usecase.NewIntentService(p.repo, newService(p.repo, cfg), serviceSettings(cfg)), Targets: p.repo, Worker: worker}, nil
 }
