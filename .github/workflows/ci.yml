@@ -137,6 +137,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [runtime-agent]
     timeout-minutes: 30
+    concurrency:
+      group: backend-kernel-${{ github.sha }}
+      cancel-in-progress: false
     outputs:
       python_ref: ${{ steps.refs.outputs.python_ref }}
     permissions:
@@ -154,8 +157,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve previously published Python kernel
+        id: existing
+        if: env.PUBLISH == 'true'
+        run: python3 scripts/release/service_artifacts.py kernel-digest
       - name: Build and publish Python kernel
         id: python
+        if: steps.existing.outputs.digest == ''
         uses: docker/build-push-action@v7
         with:
           context: runtime-agent
@@ -168,7 +176,7 @@ jobs:
       - name: Export image references
         id: refs
         env:
-          PYTHON_DIGEST: ${{ steps.python.outputs.digest }}
+          PYTHON_DIGEST: ${{ steps.existing.outputs.digest || steps.python.outputs.digest }}
         run: |
           if [[ "$PUBLISH" == "true" ]]; then
             [[ "$PYTHON_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -184,6 +192,7 @@ jobs:
     outputs:
       image_ref: ${{ steps.deployment.outputs.image_ref || steps.preflight.outputs.image_ref }}
       release_tag: ${{ steps.preflight.outputs.release_tag }}
+      source_kind: ${{ steps.source.outputs.kind }}
     permissions:
       contents: write
       packages: write
@@ -192,15 +201,19 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+      - name: Check source for monolith release
+        id: source
+        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: bash scripts/classify-backend-source.sh
       - name: Reuse published release or draft checkpoint
         id: preflight
-        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.source.outputs.kind == 'monolith'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/release/artifacts.py preflight
       - uses: docker/setup-buildx-action@v4
       - name: Login to GHCR
-        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.source.outputs.kind == 'monolith'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -228,18 +241,18 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=pr-${{ steps.ref.outputs.name }}-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=raw,value=main,enable=${{ github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=raw,value=main,enable=${{ steps.source.outputs.kind == 'monolith' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
       - name: Build and publish
-        if: steps.preflight.outputs.build != 'false'
+        if: steps.source.outputs.kind != 'services' && steps.preflight.outputs.build != 'false'
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: build/main.Dockerfile
           platforms: linux/amd64
-          push: ${{ github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: ${{ steps.source.outputs.kind == 'monolith' }}
           build-args: |
             RUNTIME_PYTHON_IMAGE=${{ needs.kernel-images.outputs.python_ref }}
             RUNTIME_AGENT_VERSION=${{ github.sha }}
@@ -250,7 +263,7 @@ jobs:
 
       - name: Export deployment image reference
         id: deployment
-        if: (github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main') && steps.preflight.outputs.build != 'false'
+        if: steps.source.outputs.kind == 'monolith' && steps.preflight.outputs.build != 'false'
         env:
           IMAGE_NAME: ${{ steps.image.outputs.name }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
@@ -260,7 +273,7 @@ jobs:
           echo "image_ref=$IMAGE_NAME@$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Verify public package and anonymous digest access
-        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.source.outputs.kind == 'monolith'
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_REPOSITORY: ${{ github.repository }}
@@ -276,7 +289,7 @@ jobs:
           docker --config "$docker_config" pull --platform linux/amd64 "$BACKEND_IMAGE_REF"
 
       - name: Publish verified immutable Release
-        if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.source.outputs.kind == 'monolith'
         env:
           GH_TOKEN: ${{ github.token }}
           BACKEND_IMAGE_REF: ${{ steps.deployment.outputs.image_ref || steps.preflight.outputs.image_ref }}
@@ -285,7 +298,7 @@ jobs:
   dispatch-cd:
     name: dispatch-cd
     needs: docker
-    if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PRODUCTION_ENABLED == 'true'
+    if: needs.docker.outputs.source_kind == 'monolith' && needs.docker.outputs.release_tag != '' && vars.PRODUCTION_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -303,8 +316,39 @@ jobs:
           fi
           printf '## CD dispatched\n\nRelease: %s. Follow the separate CD run and production Deployment for its result.\n' "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
 
+  service-checks:
+    uses: ./.github/workflows/service-checks.yml
+    permissions:
+      contents: read
+
+  publish-services:
+    name: Publish microservice release
+    needs: [docker, service-checks, kernel-images]
+    if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.docker.outputs.source_kind == 'services'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: backend-release-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and publish release v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_KERNEL_REF: ${{ needs.kernel-images.outputs.python_ref }}
+        run: python3 scripts/release/service_artifacts.py publish
+
   course-sync:
-    needs: [lint, test, docker]
+    needs: [lint, test, docker, service-checks]
     if: github.repository == 'Cringe-Driven-Development-Team/backend' && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.COURSE_SYNC_ENABLED == 'true'
     permissions:
       contents: read

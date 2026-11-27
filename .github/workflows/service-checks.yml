@@ -1,0 +1,121 @@
+name: Service checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: Classify backend source
+    runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.source.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check service entrypoints
+        id: source
+        run: bash scripts/classify-backend-source.sh
+
+  images:
+    needs: source
+    if: needs.source.outputs.kind == 'services'
+    name: Build ${{ matrix.service }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [identity, workspace, environments]
+    env:
+      SERVICE: ${{ matrix.service }}
+      IMAGE: cellestial-${{ matrix.service }}:sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and load locally
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: build/services.Dockerfile
+          target: ${{ matrix.service }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            RUNTIME_PYTHON_IMAGE=cellestial-kernel-python:local
+            RUNTIME_AGENT_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=service-${{ matrix.service }}
+          cache-to: type=gha,scope=service-${{ matrix.service }},mode=max
+      - name: Check packaged service
+        run: |
+          bash scripts/check-service-image.sh "$SERVICE" "$IMAGE"
+          revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE")
+          source=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$IMAGE")
+          [[ "$revision" == "$GITHUB_SHA" ]]
+          [[ "$source" == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" ]]
+
+  smoke:
+    needs: source
+    if: needs.source.outputs.kind == 'services'
+    name: Service contracts and mTLS smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: services-test
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      SERVICE_TEST_DATABASE_URL: postgres://postgres:services-test@127.0.0.1:5432/postgres?sslmode=disable
+      REDIS_TEST_ADDR: 127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: spec/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            runtime-agent/requirements-dev.txt
+            tools/proto/requirements.txt
+      - name: Check OpenAPI and Protobuf generation
+        run: |
+          proto_env="$RUNNER_TEMP/proto"
+          python -m venv "$proto_env"
+          "$proto_env/bin/python" -m pip install --require-hashes -r tools/proto/requirements.txt
+          PROTO_PYTHON="$proto_env/bin/python" make contract-check-services proto-check
+      - name: Check HTTP and gRPC between services
+        run: |
+          make agent-setup
+          make services-test

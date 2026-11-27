@@ -366,10 +366,25 @@ func verifyAgentRetry(ctx context.Context, t *testing.T, client *http.Client, ad
 	if !bytes.Contains(failed, []byte(`"code":"internal"`)) || !bytes.Contains(failed, []byte(errorID)) || bytes.Contains(failed, []byte("private-check-error")) {
 		t.Fatalf("unexpected public error: %s", failed)
 	}
+	// HTTP-ответ может прийти раньше, чем os/exec скопирует строку процесса в буфер.
+	logContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
 	for _, process := range []*runningService{identity, workspace, environments, agent} {
-		logs := process.logs.String()
-		if !strings.Contains(logs, retryID) || !strings.Contains(logs, errorID) || strings.Contains(logs, "private-check-error") {
-			t.Fatalf("lost correlation or leaked dependency error in %s", process.cmd.Path)
+		for {
+			logs := process.logs.String()
+			if strings.Contains(logs, "private-check-error") {
+				t.Fatalf("leaked dependency error in %s", process.cmd.Path)
+			}
+			if strings.Contains(logs, retryID) && strings.Contains(logs, errorID) {
+				break
+			}
+			select {
+			case <-logContext.Done():
+				t.Fatalf("missing retry or error correlation in %s", process.cmd.Path)
+			case <-ticker.C:
+			}
 		}
 	}
 	retried := false
