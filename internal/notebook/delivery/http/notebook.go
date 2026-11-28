@@ -134,7 +134,7 @@ func toAPINotebook(n domain.Notebook) api.Notebook {
 	return api.Notebook{
 		CommentsCount:     n.CommentsCount,
 		CellCommentsCount: cellCommentsCount,
-		Access:            api.NotebookAccess{IsOwner: n.Access.IsOwner, CanEdit: n.Access.CanEdit, CanManageSharing: n.Access.CanManageSharing, CanClone: n.Access.CanClone},
+		Access:            api.NotebookAccess{IsOwner: n.Access.IsOwner, CanEdit: n.Access.CanEdit, CanManageSharing: n.Access.CanManageSharing, CanClone: n.Access.CanClone, CanComment: n.Access.CanComment},
 		Id:                n.ID,
 		Name:              n.Name,
 		Cells:             cells,

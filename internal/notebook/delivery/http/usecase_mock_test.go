@@ -218,6 +218,21 @@ func (mr *MockUsecaseMockRecorder) Get(ctx, id, ownerID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockUsecase)(nil).Get), ctx, id, ownerID)
 }
 
+// GetShared mocks base method.
+func (m *MockUsecase) GetShared(ctx context.Context, token string, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShared", ctx, token, userID, includeCommentCounts)
+	ret0, _ := ret[0].(domain.Notebook)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShared indicates an expected call of GetShared.
+func (mr *MockUsecaseMockRecorder) GetShared(ctx, token, userID, includeCommentCounts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShared", reflect.TypeOf((*MockUsecase)(nil).GetShared), ctx, token, userID, includeCommentCounts)
+}
+
 // GetSharing mocks base method.
 func (m *MockUsecase) GetSharing(ctx context.Context, id, ownerID int64) (domain.SharingSettings, error) {
 	m.ctrl.T.Helper()
@@ -295,18 +310,18 @@ func (mr *MockUsecaseMockRecorder) MoveCell(ctx, id, ownerID, hash, cellID, inde
 }
 
 // PutSharing mocks base method.
-func (m *MockUsecase) PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerLogins []string) (domain.SharingSettings, error) {
+func (m *MockUsecase) PutSharing(ctx context.Context, id, ownerID int64, link bool, readers []domain.NotebookReader) (domain.SharingSettings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutSharing", ctx, id, ownerID, mode, readerLogins)
+	ret := m.ctrl.Call(m, "PutSharing", ctx, id, ownerID, link, readers)
 	ret0, _ := ret[0].(domain.SharingSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PutSharing indicates an expected call of PutSharing.
-func (mr *MockUsecaseMockRecorder) PutSharing(ctx, id, ownerID, mode, readerLogins any) *gomock.Call {
+func (mr *MockUsecaseMockRecorder) PutSharing(ctx, id, ownerID, link, readers any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutSharing", reflect.TypeOf((*MockUsecase)(nil).PutSharing), ctx, id, ownerID, mode, readerLogins)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutSharing", reflect.TypeOf((*MockUsecase)(nil).PutSharing), ctx, id, ownerID, link, readers)
 }
 
 // RemoveCell mocks base method.

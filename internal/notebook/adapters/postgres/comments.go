@@ -34,7 +34,7 @@ func lockCommentWall(ctx context.Context, tx pgx.Tx, notebookID int64, cellID st
 }
 
 // withCommentWall держит блокировку до успешного commit, откатывая любой ранний выход.
-func (r *NotebookRepository) withCommentWall(ctx context.Context, notebookID int64, cellID string, visitorID int64, operation func(pgx.Tx, int64) error) error {
+func (r *NotebookRepository) withCommentWall(ctx context.Context, notebookID int64, cellID string, visitorID int64, write bool, operation func(pgx.Tx, int64, bool) error) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -50,7 +50,14 @@ func (r *NotebookRepository) withCommentWall(ctx context.Context, notebookID int
 	if err != nil {
 		return err
 	}
-	if err = operation(tx, ownerID); err != nil {
+	access, err := notebookAccess(ctx, tx, notebookID, ownerID, visitorID)
+	if err != nil {
+		return err
+	}
+	if write && !access.CanComment {
+		return usecase.ErrCommentForbidden
+	}
+	if err = operation(tx, ownerID, access.CanComment); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -79,7 +86,8 @@ func (r *NotebookRepository) ListComments(ctx context.Context, notebookID int64,
 		return usecase.CommentRows{}, usecase.ErrInvalidCommentList
 	}
 	result := usecase.CommentRows{Items: []domain.Comment{}}
-	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
+	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, false, func(tx pgx.Tx, ownerID int64, canComment bool) error {
+		result.CanComment = canComment
 		result.OwnerID = ownerID
 		sql := `SELECT ` + commentColumns + ` FROM workspace.cell_comments c WHERE c.notebook_id=$1 AND c.cell_id=$2`
 		args := []any{notebookID, cellID}
@@ -119,7 +127,7 @@ func (r *NotebookRepository) CreateComment(ctx context.Context, notebookID int64
 		return usecase.CommentRecord{}, usecase.ErrCommentForbidden
 	}
 	var result usecase.CommentRecord
-	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
+	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, true, func(tx pgx.Tx, ownerID int64, _ bool) error {
 		result.OwnerID = ownerID
 		var id int64
 		err := tx.QueryRow(ctx, `INSERT INTO workspace.cell_comments(notebook_id,cell_id,author_id,text,created_at,updated_at) VALUES($1,$2,$3,$4,statement_timestamp(),statement_timestamp()) RETURNING id`, notebookID, cellID, visitorID, text).Scan(&id)
@@ -141,7 +149,7 @@ func (r *NotebookRepository) UpdateComment(ctx context.Context, notebookID int64
 		return usecase.CommentRecord{}, usecase.ErrCommentForbidden
 	}
 	var result usecase.CommentRecord
-	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
+	err := r.withCommentWall(ctx, notebookID, cellID, visitorID, true, func(tx pgx.Tx, ownerID int64, _ bool) error {
 		c, err := readComment(ctx, tx, notebookID, cellID, commentID)
 		if err != nil {
 			return err
@@ -167,7 +175,7 @@ func (r *NotebookRepository) DeleteComment(ctx context.Context, notebookID int64
 	if visitorID <= 0 {
 		return usecase.ErrCommentForbidden
 	}
-	return r.withCommentWall(ctx, notebookID, cellID, visitorID, func(tx pgx.Tx, ownerID int64) error {
+	return r.withCommentWall(ctx, notebookID, cellID, visitorID, true, func(tx pgx.Tx, ownerID int64, _ bool) error {
 		c, err := readComment(ctx, tx, notebookID, cellID, commentID)
 		if err != nil {
 			return err

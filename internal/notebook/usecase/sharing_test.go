@@ -29,24 +29,19 @@ func TestNotebookNameUnicodeLimit(t *testing.T) {
 	}
 }
 
-func TestValidateSharingModes(t *testing.T) {
+func TestValidateSharingRoles(t *testing.T) {
 	for _, tc := range []struct {
-		mode   domain.SharingMode
-		logins []string
-		valid  bool
+		input []domain.NotebookReader
+		valid bool
 	}{
-		{domain.SharingModePrivate, []string{}, true},
-		{domain.SharingModePublic, []string{}, true},
-		{domain.SharingModeRestricted, []string{}, true},
-		{domain.SharingModeRestricted, []string{"Reader_1", "READER_1"}, true},
-		{domain.SharingModePrivate, []string{"reader"}, false},
-		{domain.SharingModePublic, []string{"reader"}, false},
-		{"unknown", nil, false},
-		{domain.SharingModeRestricted, []string{"bad login"}, false},
+		{nil, true},
+		{[]domain.NotebookReader{{Login: "Reader_1", Role: domain.RoleViewer}}, true},
+		{[]domain.NotebookReader{{Login: "reader", Role: "owner"}}, false},
+		{[]domain.NotebookReader{{Login: "bad login", Role: domain.RoleCommenter}}, false},
+		{make([]domain.NotebookReader, 101), false},
 	} {
-		err := ValidateSharing(tc.mode, tc.logins)
-		if (err == nil) != tc.valid {
-			t.Fatalf("%s %+v: %v", tc.mode, tc.logins, err)
+		if err := ValidateSharing(tc.input); (err == nil) != tc.valid {
+			t.Errorf("ValidateSharing(%v) = %v", tc.input, err)
 		}
 	}
 }
@@ -55,7 +50,7 @@ func TestCloneValidatesNameAndPassesIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	repo := NewMockRepository(ctrl)
 	uc := NewNotebookUsecase(repo, NoActiveSessions{}, nil)
-	repo.EXPECT().Clone(gomock.Any(), int64(42), int64(7), "копия").Return(domain.Notebook{ID: 43, OwnerID: 7, Name: "копия", SharingMode: domain.SharingModePrivate}, nil)
+	repo.EXPECT().Clone(gomock.Any(), int64(42), int64(7), "копия").Return(domain.Notebook{ID: 43, OwnerID: 7, Name: "копия"}, nil)
 	copy, err := uc.Clone(t.Context(), 42, 7, "  копия  ")
 	if err != nil || copy.ID != 43 || !copy.Access.CanManageSharing {
 		t.Fatal(copy, err)

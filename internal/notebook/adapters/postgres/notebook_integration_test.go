@@ -42,8 +42,8 @@ func TestNotebookTransactionsAndResults(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if n.SharingMode != domain.SharingModePrivate {
-		t.Fatalf("created notebook mode: got %q, want private", n.SharingMode)
+	if n.LinkToken != nil {
+		t.Fatalf("created notebook token: got %v, want nil", n.LinkToken)
 	}
 	id := n.Cells[0].ID
 	s, e := uc.Content(ctx, n.ID, 1)
@@ -88,8 +88,8 @@ func TestNotebookTransactionsAndResults(t *testing.T) {
 	if noop.Hash != moved || !got.UpdatedAt.Equal(before) {
 		t.Fatal("no-op changed revision/date")
 	}
-	if got.SharingMode != domain.SharingModePrivate {
-		t.Fatalf("loaded notebook mode: got %q, want private", got.SharingMode)
+	if got.LinkToken != nil {
+		t.Fatalf("loaded notebook token: got %v, want nil", got.LinkToken)
 	}
 	// У двух записей в одну ревизию ноутбука ровно один победитель.
 	var wg sync.WaitGroup

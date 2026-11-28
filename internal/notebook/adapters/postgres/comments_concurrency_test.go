@@ -26,7 +26,7 @@ func commentNotebook(t *testing.T) (*NotebookRepository, *pgxpool.Pool, domain.N
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{ID: 2, Role: domain.RoleCommenter}}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := repo.CreateComment(ctx, n.ID, n.Cells[0].ID, 2, "before")
@@ -63,7 +63,7 @@ func TestCellCommentsSerializeWithAccessAndDeletion(t *testing.T) {
 					change := func(r *NotebookRepository) error {
 						switch changeKind {
 						case "revoke":
-							_, e := r.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{})
+							_, e := r.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{})
 							return e
 						case "cell":
 							_, e := r.Apply(ctx, n.ID, 1, n.Revision, usecase.Operation{Kind: usecase.Delete, CellID: cell})

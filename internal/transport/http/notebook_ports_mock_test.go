@@ -188,6 +188,21 @@ func (mr *MockRepositoryMockRecorder) GetReadable(ctx, id, userID, includeCommen
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReadable", reflect.TypeOf((*MockRepository)(nil).GetReadable), ctx, id, userID, includeCommentCounts)
 }
 
+// GetShared mocks base method.
+func (m *MockRepository) GetShared(ctx context.Context, token string, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShared", ctx, token, userID, includeCommentCounts)
+	ret0, _ := ret[0].(domain.Notebook)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShared indicates an expected call of GetShared.
+func (mr *MockRepositoryMockRecorder) GetShared(ctx, token, userID, includeCommentCounts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShared", reflect.TypeOf((*MockRepository)(nil).GetShared), ctx, token, userID, includeCommentCounts)
+}
+
 // GetSharing mocks base method.
 func (m *MockRepository) GetSharing(ctx context.Context, id, ownerID int64) (domain.SharingSettings, error) {
 	m.ctrl.T.Helper()
@@ -234,18 +249,18 @@ func (mr *MockRepositoryMockRecorder) ListPage(arg0, arg1, arg2 any) *gomock.Cal
 }
 
 // PutSharing mocks base method.
-func (m *MockRepository) PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerIDs []int64) (domain.SharingSettings, error) {
+func (m *MockRepository) PutSharing(ctx context.Context, id, ownerID int64, link bool, readers []domain.NotebookReader) (domain.SharingSettings, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutSharing", ctx, id, ownerID, mode, readerIDs)
+	ret := m.ctrl.Call(m, "PutSharing", ctx, id, ownerID, link, readers)
 	ret0, _ := ret[0].(domain.SharingSettings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PutSharing indicates an expected call of PutSharing.
-func (mr *MockRepositoryMockRecorder) PutSharing(ctx, id, ownerID, mode, readerIDs any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) PutSharing(ctx, id, ownerID, link, readers any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutSharing", reflect.TypeOf((*MockRepository)(nil).PutSharing), ctx, id, ownerID, mode, readerIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutSharing", reflect.TypeOf((*MockRepository)(nil).PutSharing), ctx, id, ownerID, link, readers)
 }
 
 // Rename mocks base method.

@@ -70,8 +70,7 @@ func AuthenticateBearer(tokens TokenParser, sessions AccessSessions) func(http.H
 					}
 				}
 			}
-			// Гостевой запрос отличается от запроса с недействительным Bearer.
-			if notebookRead(r) && len(values) > 0 {
+			if notebookRead(r) {
 				if _, ok := principal.UserIDFromContext(r.Context()); !ok {
 					httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")
 					return
@@ -82,9 +81,15 @@ func AuthenticateBearer(tokens TokenParser, sessions AccessSessions) func(http.H
 	}
 }
 
-// notebookRead выделяет чтение метаданных, содержимого и стены с optional Bearer.
+// notebookRead выделяет чтение метаданных, содержимого и стены для обязательной проверки сессии.
 func notebookRead(r *http.Request) bool {
-	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/api/v1/notebooks/") {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/shared/") {
+		return true
+	}
+	if !strings.HasPrefix(r.URL.Path, "/api/v1/notebooks/") {
 		return false
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/notebooks/"), "/")

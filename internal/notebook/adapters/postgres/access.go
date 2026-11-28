@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const readableCondition = `(owner_id=$2 OR sharing_mode='public' OR (sharing_mode='restricted' AND $2>0 AND EXISTS (SELECT 1 FROM workspace.notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
-const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM workspace.notebooks WHERE id=$1 AND ` + readableCondition
-const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,sharing_mode FROM workspace.notebooks WHERE id=$1 FOR UPDATE`
+const readableCondition = `($2>0 AND (owner_id=$2 OR EXISTS (SELECT 1 FROM workspace.notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
+const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,link_token FROM workspace.notebooks WHERE id=$1 AND ` + readableCondition
+const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,link_token FROM workspace.notebooks WHERE id=$1 FOR UPDATE`
 
 // readQuerier позволяет проверять доступ через пул или уже открытую транзакцию.
 type readQuerier interface {
@@ -34,6 +34,19 @@ func (r *NotebookRepository) CheckRead(ctx context.Context, id, userID int64) er
 
 // GetReadable читает доступный пользователю снимок, при необходимости со счётчиками комментариев.
 func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
+	return r.readNotebookSnapshot(ctx, userID, includeCommentCounts, selectReadableNotebook, id, userID)
+}
+
+// GetShared проверяет токен и читает документ в одном снимке.
+func (r *NotebookRepository) GetShared(ctx context.Context, token string, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
+	if userID <= 0 || token == "" {
+		return domain.Notebook{}, usecase.ErrNotebookNotFound
+	}
+	const query = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,link_token FROM workspace.notebooks WHERE link_token=$1`
+	return r.readNotebookSnapshot(ctx, userID, includeCommentCounts, query, token)
+}
+
+func (r *NotebookRepository) readNotebookSnapshot(ctx context.Context, userID int64, includeCommentCounts bool, query string, args ...any) (domain.Notebook, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return domain.Notebook{}, err
@@ -42,7 +55,7 @@ func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64, 
 	if _, err = tx.Exec(ctx, `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY`); err != nil {
 		return domain.Notebook{}, err
 	}
-	n, err := scanNotebook(tx.QueryRow(ctx, selectReadableNotebook, id, userID))
+	n, err := scanNotebook(tx.QueryRow(ctx, query, args...))
 	if err != nil {
 		return domain.Notebook{}, err
 	}
@@ -50,7 +63,11 @@ func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64, 
 	if err != nil {
 		return domain.Notebook{}, err
 	}
-	if includeCommentCounts {
+	n.Access, err = notebookAccess(ctx, tx, n.ID, n.OwnerID, userID)
+	if err != nil {
+		return domain.Notebook{}, err
+	}
+	if includeCommentCounts && n.Access.CanClone {
 		if err = readCommentCounts(ctx, tx, &n); err != nil {
 			return domain.Notebook{}, err
 		}
@@ -58,7 +75,6 @@ func (r *NotebookRepository) GetReadable(ctx context.Context, id, userID int64, 
 	if err = tx.Commit(ctx); err != nil {
 		return domain.Notebook{}, err
 	}
-	n.Access = domain.AccessFor(n.OwnerID, userID)
 	return n, nil
 }
 
@@ -112,4 +128,16 @@ func (r *NotebookRepository) Clone(ctx context.Context, id, userID int64, name s
 	}
 	n.Access = domain.AccessFor(n.OwnerID, userID)
 	return n, nil
+}
+
+// notebookAccess читает роль в снимке вызывающей транзакции.
+func notebookAccess(ctx context.Context, q readQuerier, id, ownerID, userID int64) (domain.NotebookAccess, error) {
+	var role domain.ShareRole
+	if userID > 0 && userID != ownerID {
+		err := q.QueryRow(ctx, `SELECT role FROM workspace.notebook_readers WHERE notebook_id=$1 AND user_id=$2`, id, userID).Scan(&role)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return domain.NotebookAccess{}, err
+		}
+	}
+	return domain.AccessForRole(ownerID, userID, role), nil
 }

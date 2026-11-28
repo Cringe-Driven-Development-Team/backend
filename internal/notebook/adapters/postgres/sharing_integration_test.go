@@ -25,67 +25,31 @@ func TestSharingReadMatrixAndAtomicReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []domain.SharingMode{domain.SharingModePrivate, domain.SharingModeRestricted, domain.SharingModePublic} {
-		logins := []string{}
-		if mode == domain.SharingModeRestricted {
-			logins = []string{"reader", "READER", "owner"}
+	grants := []domain.NotebookReader{{Login: "reader", Role: domain.RoleViewer}, {Login: "READER", Role: domain.RoleCommenter}, {Login: "owner", Role: domain.RoleViewer}}
+	settings, err := uc.PutSharing(ctx, n.ID, 1, true, grants)
+	if err != nil || settings.LinkToken == nil || len(settings.Readers) != 1 || settings.Readers[0].Role != domain.RoleCommenter {
+		t.Fatalf("sharing: %+v %v", settings, err)
+	}
+	for _, user := range []int64{0, 1, 2, 3} {
+		want := user == 1 || user == 2
+		got, e := uc.Get(ctx, n.ID, user)
+		if (e == nil) != want || (want && (!got.Access.CanClone || !got.Access.CanComment || got.Access.CanEdit != (user == 1))) {
+			t.Fatalf("user %d: %+v %v", user, got.Access, e)
 		}
-		settings, putErr := uc.PutSharing(ctx, n.ID, 1, mode, logins)
-		if putErr != nil {
-			t.Fatal(putErr)
-		}
-		wantReaders := 0
-		if mode == domain.SharingModeRestricted {
-			wantReaders = 1
-		}
-		if len(settings.Readers) != wantReaders {
-			t.Fatalf("dedup/owner exclusion: %+v", settings)
-		}
-		for _, user := range []int64{0, 1, 2, 3} {
-			want := user == 1 || mode == domain.SharingModePublic || (mode == domain.SharingModeRestricted && user == 2)
-			got, e := uc.Get(ctx, n.ID, user)
-			if want {
-				if e != nil {
-					t.Fatalf("mode %s user %d: %v", mode, user, e)
-				}
-				if got.Access.IsOwner != (user == 1) || got.Access.CanEdit != (user == 1) || got.Access.CanManageSharing != (user == 1) || got.Access.CanClone != (user != 0) {
-					t.Fatalf("wrong access: %+v", got.Access)
-				}
-			} else if !errors.Is(e, usecase.ErrNotebookNotFound) {
-				t.Fatalf("mode %s user %d: %v", mode, user, e)
-			}
-			_, e = uc.Content(ctx, n.ID, user)
-			if (e == nil) != want {
-				t.Fatalf("content mode %s user %d: %v", mode, user, e)
-			}
-			if e = uc.CheckRead(ctx, n.ID, user); (e == nil) != want {
-				t.Fatalf("permission check mode %s user %d: %v", mode, user, e)
-			}
-			if user != 1 {
-				if _, e = repo.Apply(ctx, n.ID, user, n.Revision, usecase.Operation{Kind: usecase.Edit, CellID: n.Cells[0].ID, Source: "forbidden"}); !errors.Is(e, usecase.ErrNotebookNotFound) {
-					t.Fatal("editing allowed", e)
-				}
-				if _, e = repo.GetSharing(ctx, n.ID, user); !errors.Is(e, usecase.ErrNotebookNotFound) {
-					t.Fatal("settings leaked", e)
-				}
-				if _, e = repo.Rename(ctx, n.ID, user, "forbidden"); !errors.Is(e, usecase.ErrNotebookNotFound) {
-					t.Fatal("rename allowed", e)
-				}
-				if e = repo.DeleteNotebook(ctx, n.ID, user); !errors.Is(e, usecase.ErrNotebookNotFound) {
-					t.Fatal("delete allowed", e)
-				}
-			}
+		shared, e := uc.GetShared(ctx, *settings.LinkToken, user, true)
+		if (e == nil) != (user > 0) || (user == 3 && shared.Access != (domain.NotebookAccess{})) {
+			t.Fatalf("shared user %d: %+v %v", user, shared.Access, e)
 		}
 	}
-	before, err := uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"Reader"})
+	before, err := uc.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{Login: "Reader", Role: domain.RoleViewer}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	repeated, err := uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"Reader", "READER"})
+	repeated, err := uc.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{Login: "Reader", Role: domain.RoleCommenter}, {Login: "READER", Role: domain.RoleViewer}})
 	if err != nil || !reflect.DeepEqual(before, repeated) {
 		t.Fatalf("non-idempotent PUT: %+v %v", repeated, err)
 	}
-	if _, err = uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"Other", "missing"}); !errors.Is(err, usecase.ErrInvalidSharing) {
+	if _, err = uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{Login: "Other", Role: domain.RoleViewer}, {Login: "missing", Role: domain.RoleViewer}}); !errors.Is(err, usecase.ErrUnknownLogin) {
 		t.Fatal(err)
 	}
 	after, err := uc.GetSharing(ctx, n.ID, 1)
@@ -102,7 +66,7 @@ func TestSharingReadMatrixAndAtomicReplacement(t *testing.T) {
 	if _, err = uc.Get(ctx, n.ID, 2); err != nil {
 		t.Fatal("rename lost access", err)
 	}
-	if _, err = uc.PutSharing(ctx, n.ID, 1, domain.SharingModePrivate, []string{}); err != nil {
+	if _, err = uc.PutSharing(ctx, n.ID, 1, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = uc.Get(ctx, n.ID, 2); !errors.Is(err, usecase.ErrNotebookNotFound) {
@@ -126,14 +90,14 @@ func TestCloneCompleteIndependentDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil, usecase.WithUsers(pgtest.UsersFixture{DB: repo.db}))
-	if _, err = uc.PutSharing(ctx, src.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
+	if _, err = uc.PutSharing(ctx, src.ID, 1, false, []domain.NotebookReader{{Login: "reader", Role: domain.RoleViewer}}); err != nil {
 		t.Fatal(err)
 	}
 	clone, err := uc.Clone(ctx, src.ID, 2, "  копия 😀  ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.ID == src.ID || clone.OwnerID != 2 || clone.Name != "копия 😀" || clone.Revision == src.Revision || clone.SharingMode != domain.SharingModePrivate {
+	if clone.ID == src.ID || clone.OwnerID != 2 || clone.Name != "копия 😀" || clone.Revision == src.Revision || clone.LinkToken != nil {
 		t.Fatalf("clone identity: %+v", clone)
 	}
 	got, err := repo.Get(ctx, clone.ID, 2)
@@ -192,17 +156,27 @@ func TestSharingMigrationPreservesExistingNotebook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Восстанавливаем структуру непосредственно до новой миграции.
-	if _, err = pool.Exec(ctx, `DROP TABLE workspace.notebook_readers; ALTER TABLE workspace.notebooks DROP COLUMN sharing_mode`); err != nil {
-		t.Fatal(err)
-	}
-	sql, err := os.ReadFile("../../../../migrations/20261117225455_add_notebook_sharing.sql")
+	// Временно возвращаем прежнюю структуру и добавляем адресного читателя.
+	sql, err := os.ReadFile("../../../../migrations/workspace/00005_notebook_access.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	up, _, _ := strings.Cut(string(sql), "-- +goose Down")
+	up, down, _ := strings.Cut(string(sql), "-- +goose Down")
+	if _, err = pool.Exec(ctx, down); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE workspace.notebooks SET sharing_mode='restricted' WHERE id=$1`, before.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO workspace.notebook_readers(notebook_id,user_id) VALUES($1,2)`, before.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = pool.Exec(ctx, up); err != nil {
 		t.Fatal(err)
+	}
+	grant, err := repo.GetSharing(ctx, before.ID, 1)
+	if err != nil || grant.LinkToken != nil || len(grant.Readers) != 1 || grant.Readers[0].Role != domain.RoleViewer {
+		t.Fatalf("migrated grant: %+v %v", grant, err)
 	}
 	after, err := repo.Get(ctx, before.ID, 1)
 	if err != nil || !reflect.DeepEqual(before, after) {

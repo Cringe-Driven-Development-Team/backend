@@ -60,14 +60,14 @@ func TestNotebookSharingHTTPPostgres(t *testing.T) {
 		return rec
 	}
 	path := fmt.Sprintf("/notebooks/%d", n.ID)
-	request(http.MethodPut, path+"/sharing", `{"mode":"restricted","reader_logins":["READER"]}`, 1, 200)
+	request(http.MethodPut, path+"/sharing", `{"link":false,"readers":[{"login":"READER","role":"viewer"}]}`, 1, 200)
 	for _, suffix := range []string{"", "/content"} {
 		rec := request(http.MethodGet, path+suffix, "", 2, 200)
 		if rec.Header().Get("Cache-Control") != "no-store" {
 			t.Fatal("reader response is cacheable")
 		}
 		request(http.MethodGet, path+suffix, "", 3, 404)
-		request(http.MethodGet, path+suffix, "", 0, 404)
+		request(http.MethodGet, path+suffix, "", 0, 401)
 	}
 	request(http.MethodGet, path+"/sharing", "", 2, 404)
 	request(http.MethodPatch, path, `{"name":"Forbidden"}`, 2, 404)
@@ -89,17 +89,38 @@ func TestNotebookSharingHTTPPostgres(t *testing.T) {
 	copyPath := fmt.Sprintf("/notebooks/%d", copyBody.ID)
 	request(http.MethodGet, copyPath, "", 2, 200)
 	sharingResponse := request(http.MethodGet, copyPath+"/sharing", "", 2, 200)
-	if !strings.Contains(sharingResponse.Body.String(), `"mode":"private"`) {
+	if !strings.Contains(sharingResponse.Body.String(), `"link_token":null`) {
 		t.Fatal(sharingResponse.Body.String())
 	}
 	listResponse := request(http.MethodGet, "/notebooks", "", 2, 200)
 	if !strings.Contains(listResponse.Body.String(), `"name":"My copy"`) {
 		t.Fatal(listResponse.Body.String())
 	}
-	request(http.MethodPut, path+"/sharing", `{"mode":"public","reader_logins":[]}`, 1, 200)
-	for _, suffix := range []string{"", "/content"} {
-		request(http.MethodGet, path+suffix, "", 0, 200)
+	enableLink := func() string {
+		rec := request(http.MethodPut, path+"/sharing", `{"link":true,"readers":[{"login":"reader","role":"viewer"}]}`, 1, 200)
+		var result struct {
+			Token string `json:"link_token"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || result.Token == "" {
+			t.Fatalf("invalid link: %s, %v", rec.Body.String(), err)
+		}
+		return result.Token
 	}
+	token := enableLink()
+	if enableLink() != token {
+		t.Fatal("repeated PUT changed token")
+	}
+	for _, suffix := range []string{"", "/content"} {
+		request(http.MethodGet, "/shared/"+token+suffix, "", 0, 401)
+		request(http.MethodGet, "/shared/"+token+suffix, "", 3, 200)
+		request(http.MethodGet, path+suffix, "", 3, 404)
+	}
+	request(http.MethodPost, path+"/clone", `{"name":"Link copy"}`, 3, 404)
+	unknown := request(http.MethodPut, path+"/sharing", `{"link":false,"readers":[{"login":"missing","role":"viewer"}]}`, 1, 400)
+	if !strings.Contains(unknown.Body.String(), `"code":"unknown_login"`) {
+		t.Fatal(unknown.Body.String())
+	}
+	request(http.MethodGet, "/shared/"+token, "", 3, 200)
 	request(http.MethodPost, path+"/clone", `{"name":"Anonymous copy"}`, 0, 401)
 	tokens[99] = "invalid-token"
 	request(http.MethodGet, path, "", 99, 401)
@@ -109,10 +130,19 @@ func TestNotebookSharingHTTPPostgres(t *testing.T) {
 	if rec.Code != 403 {
 		t.Fatalf("missing BFF: got %d", rec.Code)
 	}
-	request(http.MethodPut, path+"/sharing", `{"mode":"private","reader_logins":[]}`, 1, 200)
+	request(http.MethodPut, path+"/sharing", `{"link":false,"readers":[{"login":"reader","role":"viewer"}]}`, 1, 200)
+	request(http.MethodGet, "/shared/"+token, "", 3, 404)
+	request(http.MethodGet, path, "", 2, 200)
+	if enableLink() == token {
+		t.Fatal("revoked token was reissued")
+	}
+	request(http.MethodPut, path+"/sharing", `{"link":false,"readers":[]}`, 1, 200)
 	for _, suffix := range []string{"", "/content"} {
-		request(http.MethodGet, path+suffix, "", 0, 404)
+		request(http.MethodGet, path+suffix, "", 0, 401)
 		request(http.MethodGet, path+suffix, "", 2, 404)
+	}
+	for _, suffix := range []string{"", "/content"} {
+		request(http.MethodGet, "/shared/"+token+suffix, "", 3, 404)
 	}
 	request(http.MethodDelete, path, "", 1, 204)
 	request(http.MethodGet, copyPath, "", 2, 200)
