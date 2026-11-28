@@ -76,8 +76,8 @@ func TestNotebookEditingBFFPipeline(t *testing.T) {
 		{"PATCH", "/cells/cell", `{"source":"print(2)"}`, 200, true, true, false},
 		{"POST", "/cells/cell/move", `{"index":0}`, 200, true, true, false},
 		{"DELETE", "/cells/cell", "", 200, true, true, false},
-		{"GET", "", ``, 401, false, true, false},
-		{"GET", "", ``, 401, false, true, true},
+		{"GET", "", ``, 404, false, true, false},
+		{"GET", "", ``, 404, false, true, true},
 		{"GET", "", ``, 403, true, false, false},
 		{"POST", "/cells", `{"kind":"markdown","source":"# text"}`, 401, false, true, false},
 		{"POST", "/cells", `{"kind":"markdown","source":"# text"}`, 401, false, true, true},
@@ -126,6 +126,10 @@ func TestNotebookEditingBFFPipeline(t *testing.T) {
 				}
 				if tc.method != "GET" && notebooks.hash != "old-hash" {
 					t.Fatal("hash not forwarded")
+				}
+			case tc.method == "GET" && tc.want == 404:
+				if notebooks.calls != before+1 {
+					t.Fatal("guest read did not reach access check")
 				}
 			default:
 				if notebooks.calls != before {

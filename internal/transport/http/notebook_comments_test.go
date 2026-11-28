@@ -14,10 +14,9 @@ import (
 
 func TestCellCommentsHTTPContract(t *testing.T) {
 	f := newRouterFixture(t)
-	f.notebooks.EXPECT().ListComments(gomock.Any(), int64(42), "cell-1", int64(1), notebookusecase.CommentListInput{}).Return(notebookusecase.CommentPage{}, nil)
+	f.notebooks.EXPECT().ListComments(gomock.Any(), int64(42), "cell-1", int64(0), notebookusecase.CommentListInput{}).Return(notebookusecase.CommentPage{}, nil)
 	req := httptest.NewRequest("GET", "/api/v1/notebooks/42/content/cells/cell-1/comments", nil)
 	req.Header.Set("X-BFF-Key", "test-key")
-	req.Header.Set("Authorization", "Bearer "+f.access)
 	rec := httptest.NewRecorder()
 	f.handler.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -36,7 +35,6 @@ func TestCellCommentsMalformedQuery(t *testing.T) {
 		f := newRouterFixture(t)
 		req := httptest.NewRequest("GET", "/api/v1/notebooks/42/content/cells/cell/comments"+query, nil)
 		req.Header.Set("X-BFF-Key", "test-key")
-		req.Header.Set("Authorization", "Bearer "+f.access)
 		// Некорректный query не должен превращаться в обычный запрос первой страницы.
 		f.notebooks.EXPECT().ListComments(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(notebookusecase.CommentPage{}, nil).AnyTimes()
 		rec := httptest.NewRecorder()
@@ -60,8 +58,8 @@ func TestCellCommentsAuthenticationOrder(t *testing.T) {
 		{"empty auth header", "GET", "/api/v1/notebooks/42/content/cells/cell/comments", "", "empty", true, 401},
 		{"duplicate auth", "GET", "/api/v1/notebooks/42/content/cells/cell/comments", "", "duplicate", true, 401},
 		{"valid auth invalid id", "POST", "/api/v1/notebooks/no/content/cells/cell/comments", `{"text":"ok"}`, "valid", true, 400},
-		{"empty limit", "GET", "/api/v1/notebooks/42/content/cells/cell/comments?limit=", "", "valid", true, 400},
-		{"empty cursor", "GET", "/api/v1/notebooks/42/content/cells/cell/comments?cursor=", "", "valid", true, 400},
+		{"empty limit", "GET", "/api/v1/notebooks/42/content/cells/cell/comments?limit=", "", "", true, 400},
+		{"empty cursor", "GET", "/api/v1/notebooks/42/content/cells/cell/comments?cursor=", "", "", true, 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRouterFixture(t)
@@ -145,7 +143,7 @@ func TestCellCommentAuthorAvatarHTTP(t *testing.T) {
 			path, body, status := wall, "", 200
 			switch method {
 			case "GET":
-				f.notebooks.EXPECT().ListComments(gomock.Any(), int64(42), "cell", int64(1), notebookusecase.CommentListInput{}).
+				f.notebooks.EXPECT().ListComments(gomock.Any(), int64(42), "cell", int64(0), notebookusecase.CommentListInput{}).
 					Return(notebookusecase.CommentPage{Items: []domain.Comment{comment}}, nil)
 			case "POST":
 				body, status = `{"text":"ok"}`, 201
@@ -158,8 +156,8 @@ func TestCellCommentAuthorAvatarHTTP(t *testing.T) {
 			req.Header.Set("X-BFF-Key", "test-key")
 			if body != "" {
 				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+f.access)
 			}
-			req.Header.Set("Authorization", "Bearer "+f.access)
 			rec := httptest.NewRecorder()
 			f.handler.ServeHTTP(rec, req)
 			want := `"avatar_url":null`

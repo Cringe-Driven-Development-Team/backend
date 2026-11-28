@@ -61,7 +61,7 @@ func TestRenameNotebookHTTP(t *testing.T) {
 	if err := json.Unmarshal(r.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := api.Notebook{CellCommentsCount: map[string]int64{}, Access: api.NotebookAccess{IsOwner: true, CanEdit: true, CanManageSharing: true, CanComment: true, CanClone: true}, Id: 42, Name: "Новое название", CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, Cells: []api.Cell{{Id: "cell", Kind: api.CellKindCode, Source: "print(42)"}}}
+	want := api.Notebook{CellCommentsCount: map[string]int64{}, Access: api.NotebookAccess{IsOwner: true, CanEdit: true, CanManageSharing: true, CanClone: true}, Id: 42, Name: "Новое название", CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, Cells: []api.Cell{{Id: "cell", Kind: api.CellKindCode, Source: "print(42)"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("full notebook: %+v", got)
 	}

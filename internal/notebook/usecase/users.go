@@ -92,7 +92,6 @@ func decorateSharing(settings domain.SharingSettings, users map[int64]domain.Not
 		if !ok || user.Login == "" {
 			return domain.SharingSettings{}, false
 		}
-		user.Role = settings.Readers[i].Role
 		settings.Readers[i] = user
 	}
 	sort.Slice(settings.Readers, func(i, j int) bool {

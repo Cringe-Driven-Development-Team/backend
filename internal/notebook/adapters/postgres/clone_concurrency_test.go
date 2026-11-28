@@ -30,7 +30,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err = repo.PutSharing(ctx, source.ID, 1, false, []domain.NotebookReader{{ID: 2, Role: domain.RoleCommenter}}); err != nil {
+				if _, err = repo.PutSharing(ctx, source.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
 					t.Fatal(err)
 				}
 				var copy domain.Notebook
@@ -38,7 +38,7 @@ func TestCloneSerializesWithSourceChanges(t *testing.T) {
 				change := func(r *NotebookRepository) error {
 					switch operation {
 					case "revoke":
-						_, e := r.PutSharing(ctx, source.ID, 1, false, []domain.NotebookReader{})
+						_, e := r.PutSharing(ctx, source.ID, 1, domain.SharingModePrivate, []int64{})
 						return e
 					case "delete":
 						return r.DeleteNotebook(ctx, source.ID, 1)

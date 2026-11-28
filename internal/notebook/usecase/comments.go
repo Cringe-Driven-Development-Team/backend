@@ -74,9 +74,7 @@ func (uc *NotebookUsecase) ListComments(ctx context.Context, notebookID int64, c
 		page.Items = []domain.Comment{}
 	}
 	for i, c := range page.Items {
-		if rows.CanComment || rows.OwnerID == visitorID {
-			page.Items[i] = commentForVisitor(c, rows.OwnerID, visitorID)
-		}
+		page.Items[i] = commentForVisitor(c, rows.OwnerID, visitorID)
 	}
 	return page, nil
 }

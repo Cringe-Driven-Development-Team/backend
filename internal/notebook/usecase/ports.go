@@ -46,9 +46,8 @@ type Repository interface {
 	Get(context.Context, int64, int64) (domain.Notebook, error)
 	GetReadable(ctx context.Context, id, userID int64, includeCommentCounts bool) (domain.Notebook, error)
 	CheckRead(ctx context.Context, id, userID int64) error
-	PutSharing(ctx context.Context, id, ownerID int64, link bool, readers []domain.NotebookReader) (domain.SharingSettings, error)
+	PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerIDs []int64) (domain.SharingSettings, error)
 	Clone(ctx context.Context, id, userID int64, name string) (domain.Notebook, error)
-	GetShared(ctx context.Context, token string, userID int64, includeCommentCounts bool) (domain.Notebook, error)
 	GetSharing(ctx context.Context, id, ownerID int64) (domain.SharingSettings, error)
 	Rename(context.Context, int64, int64, string) (domain.Notebook, error)
 	DeleteNotebook(context.Context, int64, int64) error

@@ -141,7 +141,7 @@ func TestEditingHTTPMapsFailures(t *testing.T) {
 	}
 	f = &editingFake{err: usecase.ErrNotebookNotFound}
 	rec = editingRequest(t, f, "GET", "", "", nil, false)
-	if rec.Code != http.StatusUnauthorized || f.calls != 0 {
+	if rec.Code != http.StatusNotFound || f.calls != 1 || f.owner != 0 {
 		t.Fatalf("unauthenticated: %d calls=%d", rec.Code, f.calls)
 	}
 }

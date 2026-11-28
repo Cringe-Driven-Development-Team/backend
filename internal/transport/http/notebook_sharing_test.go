@@ -17,7 +17,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestNotebookReadRequiresBearerAndNoStore(t *testing.T) {
+func TestNotebookReadOptionalBearerAndNoStore(t *testing.T) {
 	for _, content := range []bool{false, true} {
 		for _, tc := range []struct {
 			name, auth        string
@@ -25,7 +25,8 @@ func TestNotebookReadRequiresBearerAndNoStore(t *testing.T) {
 			allowed, validBFF bool
 			status            int
 		}{
-			{"missing bearer", "", 0, false, true, 401},
+			{"guest public", "", 0, true, true, 200},
+			{"guest private", "", 0, false, true, 404},
 			{"owner", "valid", 1, true, true, 200},
 			{"reader", "valid", 1, true, true, 200},
 			{"reader denied", "valid", 1, false, true, 404},
@@ -50,7 +51,7 @@ func TestNotebookReadRequiresBearerAndNoStore(t *testing.T) {
 					if tc.name == "owner" {
 						ownerID = 1
 					}
-					f.notebooks.EXPECT().Get(gomock.Any(), int64(42), tc.user).Return(domain.Notebook{ID: 42, Name: "shared", Access: domain.AccessForRole(ownerID, tc.user, domain.RoleViewer)}, err)
+					f.notebooks.EXPECT().Get(gomock.Any(), int64(42), tc.user).Return(domain.Notebook{ID: 42, Name: "shared", Access: domain.AccessFor(ownerID, tc.user)}, err)
 				}
 				req := httptest.NewRequest("GET", path, nil)
 				if tc.validBFF {
@@ -97,9 +98,9 @@ func TestNotebookSharingAndCloneHandlers(t *testing.T) {
 	}{
 		{"get sharing", "GET", "/sharing", "", nil, 200},
 		{"get denied", "GET", "/sharing", "", notebookusecase.ErrNotebookNotFound, 404},
-		{"put sharing", "PUT", "/sharing", `{"link":false,"readers":[{"login":"reader","role":"commenter"}]}`, nil, 200},
-		{"put unknown login", "PUT", "/sharing", `{"link":false,"readers":[{"login":"reader","role":"commenter"}]}`, notebookusecase.ErrUnknownLogin, 400},
-		{"put denied", "PUT", "/sharing", `{"link":false,"readers":[{"login":"reader","role":"commenter"}]}`, notebookusecase.ErrNotebookNotFound, 404},
+		{"put sharing", "PUT", "/sharing", `{"mode":"restricted","reader_logins":["reader"]}`, nil, 200},
+		{"put unknown login", "PUT", "/sharing", `{"mode":"restricted","reader_logins":["reader"]}`, notebookusecase.ErrInvalidSharing, 400},
+		{"put denied", "PUT", "/sharing", `{"mode":"restricted","reader_logins":["reader"]}`, notebookusecase.ErrNotebookNotFound, 404},
 		{"clone", "POST", "/clone", `{"name":"copy"}`, nil, 201},
 		{"clone denied", "POST", "/clone", `{"name":"copy"}`, notebookusecase.ErrNotebookNotFound, 404},
 		{"clone invalid name", "POST", "/clone", `{"name":"copy"}`, notebookusecase.ErrInvalidName, 400},
@@ -108,12 +109,12 @@ func TestNotebookSharingAndCloneHandlers(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRouterFixture(t)
-			settings := domain.SharingSettings{Readers: []domain.NotebookReader{{ID: 2, Login: "reader", Role: domain.RoleCommenter}}}
+			settings := domain.SharingSettings{Mode: domain.SharingModeRestricted, Readers: []domain.NotebookReader{{ID: 2, Login: "reader"}}}
 			switch tc.method {
 			case "GET":
 				f.notebooks.EXPECT().GetSharing(gomock.Any(), int64(42), int64(1)).Return(settings, tc.err)
 			case "PUT":
-				f.notebooks.EXPECT().PutSharing(gomock.Any(), int64(42), int64(1), false, []domain.NotebookReader{{Login: "reader", Role: domain.RoleCommenter}}).Return(settings, tc.err)
+				f.notebooks.EXPECT().PutSharing(gomock.Any(), int64(42), int64(1), domain.SharingModeRestricted, []string{"reader"}).Return(settings, tc.err)
 			default:
 				f.notebooks.EXPECT().Clone(gomock.Any(), int64(42), int64(1), "copy").Return(domain.Notebook{ID: 43, Name: "copy", Access: domain.AccessFor(1, 1)}, tc.err)
 			}
@@ -138,7 +139,7 @@ func TestNotebookSharingAndCloneHandlers(t *testing.T) {
 
 func TestNotebookSharingAndCloneRequireSession(t *testing.T) {
 	for _, tc := range []struct{ method, path, body string }{
-		{"GET", "/sharing", ""}, {"PUT", "/sharing", `{"link":false,"readers":[]}`}, {"POST", "/clone", `{"name":"copy"}`},
+		{"GET", "/sharing", ""}, {"PUT", "/sharing", `{"mode":"private","reader_logins":[]}`}, {"POST", "/clone", `{"name":"copy"}`},
 	} {
 		f := newRouterFixture(t)
 		req := httptest.NewRequest(tc.method, BaseURL+"/notebooks/42"+tc.path, strings.NewReader(tc.body))
@@ -152,7 +153,7 @@ func TestNotebookSharingAndCloneRequireSession(t *testing.T) {
 	}
 }
 
-// Expiry is checked by the real token parser before notebook access.
+// Expiry is checked by the real token parser before optional guest fallback.
 func TestNotebookExpiredBearerCannotBecomeGuest(t *testing.T) {
 	tokens := usersecurity.NewAccessToken([]byte("expiry-test"), -time.Minute)
 	token, err := tokens.Issue(testClaims(1))
@@ -203,46 +204,5 @@ func TestCloneNameTrimmedBeforeLengthValidation(t *testing.T) {
 	rec := serveRouter(f.handler, req)
 	if rec.Code != 201 {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
-	}
-}
-
-func TestSharedNotebookHTTP(t *testing.T) {
-	const token = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
-	for _, suffix := range []string{"", "/content"} {
-		for _, tc := range []struct {
-			name   string
-			auth   bool
-			err    error
-			status int
-		}{
-			{"missing session", false, nil, 401},
-			{"valid link", true, nil, 200},
-			{"unknown or revoked", true, notebookusecase.ErrNotebookNotFound, 404},
-		} {
-			t.Run(tc.name+suffix, func(t *testing.T) {
-				f := newRouterFixture(t)
-				req := httptest.NewRequest("GET", BaseURL+"/shared/"+token+suffix, nil)
-				req.Header.Set("X-BFF-Key", "test-key")
-				if tc.auth {
-					req.Header.Set("Authorization", "Bearer "+f.access)
-					f.notebooks.EXPECT().GetShared(gomock.Any(), token, int64(1), suffix == "").
-						Return(domain.Notebook{ID: 42, Revision: "rev"}, tc.err)
-				}
-				rec := httptest.NewRecorder()
-				f.handler.ServeHTTP(rec, req)
-				if rec.Code != tc.status || rec.Header().Get("Cache-Control") != "no-store" {
-					t.Fatalf("status=%d cache=%q body=%s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
-				}
-				if tc.status == 200 && suffix == "" {
-					var notebook api.Notebook
-					if err := json.Unmarshal(rec.Body.Bytes(), &notebook); err != nil {
-						t.Fatal(err)
-					}
-					if notebook.Access != (api.NotebookAccess{}) || notebook.CommentsCount != 0 || len(notebook.CellCommentsCount) != 0 {
-						t.Fatalf("link-only access: %+v", notebook)
-					}
-				}
-			})
-		}
 	}
 }
