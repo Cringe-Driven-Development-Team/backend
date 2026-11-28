@@ -97,7 +97,8 @@ API использует другую DB-role: без SUPERUSER/CREATEDB/CREATER
 Identity отклоняет запуск, если app-роль может менять назначения.
 RPC `OnlineConfAccess.Authorize` доступен mTLS-принципалу
 `onlineconf.internal.cellestial.ru` и проверяет действующую сессию и роль
-при каждом запросе. Назначение и отзыв описаны в
+при каждом запросе. RPC возвращает подтверждённый `user_id`, который
+OnlineConf передаёт административному обработчику через контекст запроса. Назначение и отзыв описаны в
 [локальной разработке](local-development.md#onlineconf).
 
 Права на чужие schemas не выдаются; межсхемных FK в baseline нет.

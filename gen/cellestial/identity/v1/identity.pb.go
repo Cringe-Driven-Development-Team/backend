@@ -612,7 +612,9 @@ func (*UserResolution_User) isUserResolution_Outcome() {}
 func (*UserResolution_NotFound) isUserResolution_Outcome() {}
 
 type OnlineConfAuthorization struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Идентификатор пользователя из проверенной сессии.
+	UserId        int64 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -645,6 +647,13 @@ func (x *OnlineConfAuthorization) ProtoReflect() protoreflect.Message {
 // Deprecated: Use OnlineConfAuthorization.ProtoReflect.Descriptor instead.
 func (*OnlineConfAuthorization) Descriptor() ([]byte, []int) {
 	return file_cellestial_identity_v1_identity_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OnlineConfAuthorization) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
 }
 
 var File_cellestial_identity_v1_identity_proto protoreflect.FileDescriptor
@@ -690,8 +699,9 @@ const file_cellestial_identity_v1_identity_proto_rawDesc = "" +
 	"\x0frequested_login\x18\x02 \x01(\tR\x0erequestedLogin\x122\n" +
 	"\x04user\x18\x03 \x01(\v2\x1c.cellestial.identity.v1.UserH\x00R\x04user\x12\x1d\n" +
 	"\tnot_found\x18\x04 \x01(\bH\x00R\bnotFoundB\t\n" +
-	"\aoutcome\"\x19\n" +
-	"\x17OnlineConfAuthorization2}\n" +
+	"\aoutcome\"2\n" +
+	"\x17OnlineConfAuthorization\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x03R\x06userId2}\n" +
 	"\aSession\x12r\n" +
 	"\x0fValidateSession\x12..cellestial.identity.v1.ValidateSessionRequest\x1a/.cellestial.identity.v1.ValidateSessionResponse2\xdb\x01\n" +
 	"\x05Users\x12d\n" +

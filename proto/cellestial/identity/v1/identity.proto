@@ -75,4 +75,7 @@ service OnlineConfAccess {
   rpc Authorize(ValidateSessionRequest) returns (OnlineConfAuthorization);
 }
 
-message OnlineConfAuthorization {}
+message OnlineConfAuthorization {
+  // Идентификатор пользователя из проверенной сессии.
+  int64 user_id = 1;
+}

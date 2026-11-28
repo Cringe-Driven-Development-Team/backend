@@ -36,13 +36,18 @@
    ```sh
    ONLINECONF_HTTP_ADDR=127.0.0.1:8085 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
      TLS_CERT_FILE=/path/to/onlineconf.crt TLS_KEY_FILE=/path/to/onlineconf.key \
-     TLS_CA_FILE=/path/to/ca.crt go run ./cmd/onlineconf
+     TLS_CA_FILE=/path/to/ca.crt BFF_API_KEY="$BFF_API_KEY" go run ./cmd/onlineconf
    ```
 
 3. Проверьте `GET http://127.0.0.1:8085/health` для проверки процесса.
-   Получите пользовательский access token через Identity. Передайте его в
+   Настройте одинаковый непустой `BFF_API_KEY` у OnlineConf и вызывающего BFF.
+   Для локального запроса передайте его в `X-BFF-Key`. Получите
+   пользовательский access token через Identity и передайте его в
    `Authorization: Bearer …` на `GET http://127.0.0.1:8085/admin/access`.
-   Без действующей сессии ответ `401`, без роли `403`, с ролью `204`.
+   Без правильного ключа ответ `403 s2s_forbidden`. С правильным ключом
+   без действующей сессии ответ `401 unauthorized`, без роли `403 forbidden`,
+   с ролью `204`. Ошибки доступа возвращаются в JSON.
+   BFF добавляет ключ на сервере и хранит его вне браузера.
    При недоступном Identity административный запрос с токеном получает `503`.
 
 Назначение роли `onlineconf_admin` выполняет оператор БД Identity. В `psql`

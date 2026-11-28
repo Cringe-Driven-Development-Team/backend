@@ -98,5 +98,7 @@ class UserResolution(_message.Message):
     def __init__(self, requested_id: _Optional[int] = ..., requested_login: _Optional[str] = ..., user: _Optional[_Union[User, _Mapping]] = ..., not_found: bool = ...) -> None: ...
 
 class OnlineConfAuthorization(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("user_id",)
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    def __init__(self, user_id: _Optional[int] = ...) -> None: ...

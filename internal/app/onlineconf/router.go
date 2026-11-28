@@ -6,13 +6,16 @@ import (
 	"strings"
 
 	identityv1 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/security"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // newRouter закрывает всю административную ветку проверкой сессии и роли в Identity.
-func newRouter(identity identityv1.OnlineConfAccessClient, admin http.Handler) http.Handler {
+func newRouter(identity identityv1.OnlineConfAccessClient, admin http.Handler, bffKey string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -29,25 +32,31 @@ func newRouter(identity identityv1.OnlineConfAccessClient, admin http.Handler) h
 			return
 		}
 
-		_, err := identity.Authorize(r.Context(), &identityv1.ValidateSessionRequest{AccessToken: token})
+		authorization, err := identity.Authorize(r.Context(), &identityv1.ValidateSessionRequest{AccessToken: token})
 		switch status.Code(err) {
 		case codes.OK:
-			admin.ServeHTTP(w, r)
+			userID := authorization.GetUserId()
+			if userID <= 0 {
+				httperr.Write(w, http.StatusServiceUnavailable, "dependency_unavailable", "authorization unavailable")
+				return
+			}
+			admin.ServeHTTP(w, r.WithContext(principal.WithUserID(r.Context(), userID)))
 		case codes.Unauthenticated, codes.InvalidArgument:
 			unauthenticated(w)
 		case codes.PermissionDenied:
-			http.Error(w, "onlineconf_admin role required", http.StatusForbidden)
+			httperr.Write(w, http.StatusForbidden, "forbidden", "onlineconf_admin role required")
 		default:
-			http.Error(w, "authorization unavailable", http.StatusServiceUnavailable)
+			httperr.Write(w, http.StatusServiceUnavailable, "dependency_unavailable", "authorization unavailable")
 		}
 	})
-	mux.Handle("/admin", protected)
-	mux.Handle("/admin/", protected)
+	requireAccess := security.S2S(bffKey, "/admin")(protected)
+	mux.Handle("/admin", requireAccess)
+	mux.Handle("/admin/", requireAccess)
 	return middleware.RequestID(middleware.Logging(middleware.Recover(mux)))
 }
 
 // unauthenticated сообщает клиенту требуемую схему аутентификации.
 func unauthenticated(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", "Bearer")
-	http.Error(w, "authentication required", http.StatusUnauthorized)
+	httperr.Write(w, http.StatusUnauthorized, "unauthorized", "authentication required")
 }

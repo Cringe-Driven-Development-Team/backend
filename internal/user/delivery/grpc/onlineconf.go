@@ -38,5 +38,5 @@ func (s *OnlineConfAccessServer) Authorize(ctx context.Context, req *identityv1.
 	if !granted {
 		return nil, status.Error(codes.PermissionDenied, "onlineconf_admin role required")
 	}
-	return &identityv1.OnlineConfAuthorization{}, nil
+	return &identityv1.OnlineConfAuthorization{UserId: session.GetUserId()}, nil
 }

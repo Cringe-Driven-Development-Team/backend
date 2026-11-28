@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	identityv1 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1"
@@ -17,6 +18,10 @@ import (
 
 // Run читает настройки процесса из окружения и обслуживает HTTP до отмены ctx.
 func Run(ctx context.Context, logger *slog.Logger) error {
+	bffKey := os.Getenv("BFF_API_KEY")
+	if strings.TrimSpace(bffKey) == "" {
+		return errors.New("missing BFF_API_KEY")
+	}
 	addr := os.Getenv("ONLINECONF_HTTP_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8085"
@@ -53,7 +58,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	server := &http.Server{
-		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin),
+		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey),
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,
