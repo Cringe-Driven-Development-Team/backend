@@ -21,6 +21,7 @@ type keyRecord struct {
 	Data                           map[string]json.RawMessage
 	CreatedAt, UpdatedAt           time.Time
 	CreatedBy, UpdatedBy           userRef
+	RolloutStartedAt               *time.Time
 }
 
 // card возвращает полную карточку с датами в UTC.
@@ -32,6 +33,9 @@ func (k keyRecord) card() map[string]any {
 	out["updated_by"] = k.UpdatedBy
 	for field, value := range k.Data {
 		out[field] = value
+	}
+	if k.Type == "flag" {
+		out["rollout_policy"] = k.policy()
 	}
 	return out
 }
@@ -51,12 +55,12 @@ func (k keyRecord) item() map[string]any {
 // keyStore выполняет атомарные операции над ключами PostgreSQL.
 type keyStore struct{ pool *pgxpool.Pool }
 
-const keyColumns = "name, scope, type, description, data, created_at, updated_at, created_by, updated_by"
+const keyColumns = "name, scope, type, description, data, created_at, updated_at, created_by, updated_by, rollout_started_at"
 
 // scanKey читает запись с полным набором метаданных.
 func scanKey(row pgx.Row) (keyRecord, error) {
 	var k keyRecord
-	err := row.Scan(&k.Name, &k.Scope, &k.Type, &k.Description, &k.Data, &k.CreatedAt, &k.UpdatedAt, &k.CreatedBy, &k.UpdatedBy)
+	err := row.Scan(&k.Name, &k.Scope, &k.Type, &k.Description, &k.Data, &k.CreatedAt, &k.UpdatedAt, &k.CreatedBy, &k.UpdatedBy, &k.RolloutStartedAt)
 	return k, err
 }
 
@@ -106,9 +110,42 @@ func (s keyStore) get(ctx context.Context, name string) (keyRecord, error) {
 
 // update заменяет редактируемые поля и возвращает карточку.
 func (s keyStore) update(ctx context.Context, k keyRecord) (keyRecord, error) {
+	if k.Type == "flag" {
+		return s.updateFlag(ctx, k)
+	}
 	return scanKey(s.pool.QueryRow(ctx, `UPDATE onlineconf.keys SET description = $3, data = $4,
  updated_by = $5, updated_at = clock_timestamp() WHERE name = $1 AND type = $2 RETURNING `+keyColumns,
 		k.Name, k.Type, k.Description, k.Data, k.UpdatedBy))
+}
+
+// updateFlag проверяет переход под блокировкой строки и сохраняет карточку целиком.
+func (s keyStore) updateFlag(ctx context.Context, k keyRecord) (keyRecord, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return keyRecord{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Блокировка сериализует проверки конкурентных запросов для одного флага.
+	current, err := scanKey(tx.QueryRow(ctx, "SELECT "+keyColumns+" FROM onlineconf.keys WHERE name = $1 AND type = 'flag' FOR UPDATE", k.Name))
+	if err != nil {
+		return keyRecord{}, err
+	}
+	var now time.Time
+	if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
+		return keyRecord{}, err
+	}
+	startedAt, err := rolloutStart(current, k, now)
+	if err != nil {
+		return keyRecord{}, err
+	}
+	stored, err := scanKey(tx.QueryRow(ctx, `UPDATE onlineconf.keys SET description = $2, data = $3,
+ updated_by = $4, updated_at = $5, rollout_started_at = $6 WHERE name = $1 RETURNING `+keyColumns,
+		k.Name, k.Description, k.Data, k.UpdatedBy, now, startedAt))
+	if err != nil {
+		return keyRecord{}, err
+	}
+	return stored, tx.Commit(ctx)
 }
 
 // delete удаляет ключ по полному имени.

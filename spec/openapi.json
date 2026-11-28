@@ -7285,7 +7285,7 @@
         ],
         "operationId": "onlineConfUpdateKey",
         "summary": "Сохранить карточку ключа",
-        "description": "Атомарно заменяет все редактируемые поля выбранного типа. Значение конфига допускает null. ID должны существовать в Identity, списки не пересекаются. При выключении флага процент и списки сохраняются.",
+        "description": "Атомарно заменяет все редактируемые поля выбранного типа. Значение конфига допускает null. ID должны существовать в Identity, списки не пересекаются. При выключении флага процент и списки сохраняются. Повышение возможно только на ближайшую ступень. После первого шага требуется 60 секунд на текущем включённом проценте.",
         "security": [
           {
             "BFFSession": []
@@ -7334,6 +7334,20 @@
           },
           "404": {
             "$ref": "#/components/responses/OnlineConf404"
+          },
+          "409": {
+            "description": "Переход между процентами запрещён. Перечитайте карточку флага.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineConfError"
+                },
+                "example": {
+                  "code": "rollout_step_not_allowed",
+                  "message": "Переход на этот процент раскатки пока недоступен"
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/OnlineConf500"
@@ -9378,7 +9392,8 @@
           "created_by",
           "updated_by",
           "include_users",
-          "exclude_users"
+          "exclude_users",
+          "rollout_policy"
         ],
         "properties": {
           "name": {
@@ -9431,6 +9446,9 @@
             "items": {
               "$ref": "#/components/schemas/OnlineConfUser"
             }
+          },
+          "rollout_policy": {
+            "$ref": "#/components/schemas/OnlineConfRolloutPolicy"
           }
         }
       },
@@ -9571,6 +9589,55 @@
             "$ref": "#/components/schemas/OnlineConfFlagUpdate"
           }
         ]
+      },
+      "OnlineConfRolloutPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stages",
+          "next_percent",
+          "next_allowed_at"
+        ],
+        "properties": {
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [
+                0,
+                10,
+                25,
+                50,
+                100
+              ]
+            },
+            "minItems": 5,
+            "maxItems": 5,
+            "description": "Фиксированные ступени в порядке повышения.",
+            "example": [
+              0,
+              10,
+              25,
+              50,
+              100
+            ]
+          },
+          "next_percent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Ближайшая большая ступень. Для выключенного флага и на 100% равно null."
+          },
+          "next_allowed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Начало текущей положительной ступени плюс 60 секунд, в UTC. Равно null на 0% или когда следующей ступени нет."
+          }
+        }
       }
     },
     "responses": {
