@@ -411,3 +411,109 @@ var UserAdministration_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "cellestial/identity/v1/identity.proto",
 }
+
+const (
+	OnlineConfAccess_Authorize_FullMethodName = "/cellestial.identity.v1.OnlineConfAccess/Authorize"
+)
+
+// OnlineConfAccessClient is the client API for OnlineConfAccess service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+type OnlineConfAccessClient interface {
+	Authorize(ctx context.Context, in *ValidateSessionRequest, opts ...grpc.CallOption) (*OnlineConfAuthorization, error)
+}
+
+type onlineConfAccessClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewOnlineConfAccessClient(cc grpc.ClientConnInterface) OnlineConfAccessClient {
+	return &onlineConfAccessClient{cc}
+}
+
+func (c *onlineConfAccessClient) Authorize(ctx context.Context, in *ValidateSessionRequest, opts ...grpc.CallOption) (*OnlineConfAuthorization, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OnlineConfAuthorization)
+	err := c.cc.Invoke(ctx, OnlineConfAccess_Authorize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// OnlineConfAccessServer is the server API for OnlineConfAccess service.
+// All implementations must embed UnimplementedOnlineConfAccessServer
+// for forward compatibility.
+//
+// OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+type OnlineConfAccessServer interface {
+	Authorize(context.Context, *ValidateSessionRequest) (*OnlineConfAuthorization, error)
+	mustEmbedUnimplementedOnlineConfAccessServer()
+}
+
+// UnimplementedOnlineConfAccessServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedOnlineConfAccessServer struct{}
+
+func (UnimplementedOnlineConfAccessServer) Authorize(context.Context, *ValidateSessionRequest) (*OnlineConfAuthorization, error) {
+	return nil, status.Error(codes.Unimplemented, "method Authorize not implemented")
+}
+func (UnimplementedOnlineConfAccessServer) mustEmbedUnimplementedOnlineConfAccessServer() {}
+func (UnimplementedOnlineConfAccessServer) testEmbeddedByValue()                          {}
+
+// UnsafeOnlineConfAccessServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to OnlineConfAccessServer will
+// result in compilation errors.
+type UnsafeOnlineConfAccessServer interface {
+	mustEmbedUnimplementedOnlineConfAccessServer()
+}
+
+func RegisterOnlineConfAccessServer(s grpc.ServiceRegistrar, srv OnlineConfAccessServer) {
+	// If the following call panics, it indicates UnimplementedOnlineConfAccessServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&OnlineConfAccess_ServiceDesc, srv)
+}
+
+func _OnlineConfAccess_Authorize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OnlineConfAccessServer).Authorize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OnlineConfAccess_Authorize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OnlineConfAccessServer).Authorize(ctx, req.(*ValidateSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// OnlineConfAccess_ServiceDesc is the grpc.ServiceDesc for OnlineConfAccess service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var OnlineConfAccess_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "cellestial.identity.v1.OnlineConfAccess",
+	HandlerType: (*OnlineConfAccessServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Authorize",
+			Handler:    _OnlineConfAccess_Authorize_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "cellestial/identity/v1/identity.proto",
+}

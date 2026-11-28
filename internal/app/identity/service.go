@@ -123,7 +123,7 @@ func Build(ctx context.Context, c Config, logger *slog.Logger) (result *Service,
 	})
 	s.http = &http.Server{Handler: bounded, TLSConfig: tlsConfig, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: c.HTTPTimeout, WriteTimeout: c.HTTPTimeout, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
 	s.health = health.NewServer()
-	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, grpcdelivery.NewUsersServer(usecase.NewDirectory(repo), c.AvatarsPublicURL), s.health, rpcMetrics, s.deletions)
+	s.rpc, e = newRPCServer(c.SessionConfig, usecase.NewSessionValidator(tokens, access), logger, grpcdelivery.NewUsersServer(usecase.NewDirectory(repo), c.AvatarsPublicURL), s.health, rpcMetrics, s.deletions, repo)
 	if e != nil {
 		return nil, e
 	}

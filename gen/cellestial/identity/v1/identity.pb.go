@@ -611,6 +611,42 @@ func (*UserResolution_User) isUserResolution_Outcome() {}
 
 func (*UserResolution_NotFound) isUserResolution_Outcome() {}
 
+type OnlineConfAuthorization struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OnlineConfAuthorization) Reset() {
+	*x = OnlineConfAuthorization{}
+	mi := &file_cellestial_identity_v1_identity_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OnlineConfAuthorization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OnlineConfAuthorization) ProtoMessage() {}
+
+func (x *OnlineConfAuthorization) ProtoReflect() protoreflect.Message {
+	mi := &file_cellestial_identity_v1_identity_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OnlineConfAuthorization.ProtoReflect.Descriptor instead.
+func (*OnlineConfAuthorization) Descriptor() ([]byte, []int) {
+	return file_cellestial_identity_v1_identity_proto_rawDescGZIP(), []int{10}
+}
+
 var File_cellestial_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_cellestial_identity_v1_identity_proto_rawDesc = "" +
@@ -654,7 +690,8 @@ const file_cellestial_identity_v1_identity_proto_rawDesc = "" +
 	"\x0frequested_login\x18\x02 \x01(\tR\x0erequestedLogin\x122\n" +
 	"\x04user\x18\x03 \x01(\v2\x1c.cellestial.identity.v1.UserH\x00R\x04user\x12\x1d\n" +
 	"\tnot_found\x18\x04 \x01(\bH\x00R\bnotFoundB\t\n" +
-	"\aoutcome2}\n" +
+	"\aoutcome\"\x19\n" +
+	"\x17OnlineConfAuthorization2}\n" +
 	"\aSession\x12r\n" +
 	"\x0fValidateSession\x12..cellestial.identity.v1.ValidateSessionRequest\x1a/.cellestial.identity.v1.ValidateSessionResponse2\xdb\x01\n" +
 	"\x05Users\x12d\n" +
@@ -662,7 +699,9 @@ const file_cellestial_identity_v1_identity_proto_rawDesc = "" +
 	"\x11BatchResolveUsers\x120.cellestial.identity.v1.BatchResolveUsersRequest\x1a%.cellestial.identity.v1.UsersResponse2\xee\x01\n" +
 	"\x12UserAdministration\x12o\n" +
 	"\x13RequestUserDeletion\x122.cellestial.identity.v1.RequestUserDeletionRequest\x1a$.cellestial.identity.v1.UserDeletion\x12g\n" +
-	"\x0fGetUserDeletion\x12..cellestial.identity.v1.GetUserDeletionRequest\x1a$.cellestial.identity.v1.UserDeletionBcZagithub.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1;identityv1b\x06proto3"
+	"\x0fGetUserDeletion\x12..cellestial.identity.v1.GetUserDeletionRequest\x1a$.cellestial.identity.v1.UserDeletion2\x80\x01\n" +
+	"\x10OnlineConfAccess\x12l\n" +
+	"\tAuthorize\x12..cellestial.identity.v1.ValidateSessionRequest\x1a/.cellestial.identity.v1.OnlineConfAuthorizationBcZagithub.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1;identityv1b\x06proto3"
 
 var (
 	file_cellestial_identity_v1_identity_proto_rawDescOnce sync.Once
@@ -676,7 +715,7 @@ func file_cellestial_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_cellestial_identity_v1_identity_proto_rawDescData
 }
 
-var file_cellestial_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_cellestial_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_cellestial_identity_v1_identity_proto_goTypes = []any{
 	(*ValidateSessionRequest)(nil),     // 0: cellestial.identity.v1.ValidateSessionRequest
 	(*ValidateSessionResponse)(nil),    // 1: cellestial.identity.v1.ValidateSessionResponse
@@ -688,10 +727,11 @@ var file_cellestial_identity_v1_identity_proto_goTypes = []any{
 	(*GetUserDeletionRequest)(nil),     // 7: cellestial.identity.v1.GetUserDeletionRequest
 	(*UserDeletion)(nil),               // 8: cellestial.identity.v1.UserDeletion
 	(*UserResolution)(nil),             // 9: cellestial.identity.v1.UserResolution
-	(*timestamppb.Timestamp)(nil),      // 10: google.protobuf.Timestamp
+	(*OnlineConfAuthorization)(nil),    // 10: cellestial.identity.v1.OnlineConfAuthorization
+	(*timestamppb.Timestamp)(nil),      // 11: google.protobuf.Timestamp
 }
 var file_cellestial_identity_v1_identity_proto_depIdxs = []int32{
-	10, // 0: cellestial.identity.v1.ValidateSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 0: cellestial.identity.v1.ValidateSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
 	4,  // 1: cellestial.identity.v1.UsersResponse.users:type_name -> cellestial.identity.v1.User
 	9,  // 2: cellestial.identity.v1.UsersResponse.results:type_name -> cellestial.identity.v1.UserResolution
 	4,  // 3: cellestial.identity.v1.UserResolution.user:type_name -> cellestial.identity.v1.User
@@ -700,13 +740,15 @@ var file_cellestial_identity_v1_identity_proto_depIdxs = []int32{
 	3,  // 6: cellestial.identity.v1.Users.BatchResolveUsers:input_type -> cellestial.identity.v1.BatchResolveUsersRequest
 	6,  // 7: cellestial.identity.v1.UserAdministration.RequestUserDeletion:input_type -> cellestial.identity.v1.RequestUserDeletionRequest
 	7,  // 8: cellestial.identity.v1.UserAdministration.GetUserDeletion:input_type -> cellestial.identity.v1.GetUserDeletionRequest
-	1,  // 9: cellestial.identity.v1.Session.ValidateSession:output_type -> cellestial.identity.v1.ValidateSessionResponse
-	5,  // 10: cellestial.identity.v1.Users.BatchGetUsers:output_type -> cellestial.identity.v1.UsersResponse
-	5,  // 11: cellestial.identity.v1.Users.BatchResolveUsers:output_type -> cellestial.identity.v1.UsersResponse
-	8,  // 12: cellestial.identity.v1.UserAdministration.RequestUserDeletion:output_type -> cellestial.identity.v1.UserDeletion
-	8,  // 13: cellestial.identity.v1.UserAdministration.GetUserDeletion:output_type -> cellestial.identity.v1.UserDeletion
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
+	0,  // 9: cellestial.identity.v1.OnlineConfAccess.Authorize:input_type -> cellestial.identity.v1.ValidateSessionRequest
+	1,  // 10: cellestial.identity.v1.Session.ValidateSession:output_type -> cellestial.identity.v1.ValidateSessionResponse
+	5,  // 11: cellestial.identity.v1.Users.BatchGetUsers:output_type -> cellestial.identity.v1.UsersResponse
+	5,  // 12: cellestial.identity.v1.Users.BatchResolveUsers:output_type -> cellestial.identity.v1.UsersResponse
+	8,  // 13: cellestial.identity.v1.UserAdministration.RequestUserDeletion:output_type -> cellestial.identity.v1.UserDeletion
+	8,  // 14: cellestial.identity.v1.UserAdministration.GetUserDeletion:output_type -> cellestial.identity.v1.UserDeletion
+	10, // 15: cellestial.identity.v1.OnlineConfAccess.Authorize:output_type -> cellestial.identity.v1.OnlineConfAuthorization
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -727,9 +769,9 @@ func file_cellestial_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cellestial_identity_v1_identity_proto_rawDesc), len(file_cellestial_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_cellestial_identity_v1_identity_proto_goTypes,
 		DependencyIndexes: file_cellestial_identity_v1_identity_proto_depIdxs,

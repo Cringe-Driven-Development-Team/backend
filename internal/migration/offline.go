@@ -399,6 +399,9 @@ func applyGrants(ctx context.Context, tx pgx.Tx, schema string, roles Roles) err
 		}
 	}
 	if schema == "identity" {
+		if _, err := tx.Exec(ctx, "REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON identity.onlineconf_admins FROM "+app); err != nil {
+			return errors.New("cannot protect OnlineConf role assignments")
+		}
 		if _, err := tx.Exec(ctx, "REVOKE ALL ON identity.refresh_sessions FROM "+app); err != nil {
 			return errors.New("cannot protect legacy refresh table")
 		}

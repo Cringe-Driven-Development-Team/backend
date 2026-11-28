@@ -80,7 +80,7 @@ func TestIdentityService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, sql := range []string{"GRANT USAGE ON SCHEMA identity TO " + ident, "GRANT SELECT,INSERT,UPDATE,DELETE ON identity.users,identity.user_deletions TO " + ident, "GRANT SELECT ON identity.goose_db_version TO " + ident, "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA identity TO " + ident, "CREATE SCHEMA workspace", "CREATE TABLE workspace.private_data(id bigint)"} {
+	for _, sql := range []string{"GRANT USAGE ON SCHEMA identity TO " + ident, "GRANT SELECT,INSERT,UPDATE,DELETE ON identity.users,identity.user_deletions TO " + ident, "GRANT SELECT ON identity.goose_db_version,identity.onlineconf_admins TO " + ident, "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA identity TO " + ident, "CREATE SCHEMA workspace", "CREATE TABLE workspace.private_data(id bigint)"} {
 		if _, err = owner.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -266,6 +266,43 @@ func TestIdentityService(t *testing.T) {
 	if err != nil || verified.GetUserId() != userID {
 		t.Fatalf("session verification: %v", err)
 	}
+	roleRequest := &identityv1.ValidateSessionRequest{AccessToken: token}
+	if _, callErr := identityv1.NewOnlineConfAccessClient(conn).Authorize(rpcCtx, roleRequest); status.Code(callErr) != codes.PermissionDenied {
+		t.Fatalf("Workspace principal reached OnlineConf authorization: %v", callErr)
+	}
+	onlineconfConn, err := grpc.NewClient(rpcListener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(tlsFor("onlineconf.internal.cellestial.ru"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer onlineconfConn.Close()
+	onlineconfAccess := identityv1.NewOnlineConfAccessClient(onlineconfConn)
+	if _, callErr := identityv1.NewSessionClient(onlineconfConn).ValidateSession(rpcCtx, roleRequest); status.Code(callErr) != codes.PermissionDenied {
+		t.Fatalf("OnlineConf principal reached Workspace session RPC: %v", callErr)
+	}
+	if _, callErr := onlineconfAccess.Authorize(rpcCtx, &identityv1.ValidateSessionRequest{AccessToken: "invalid"}); status.Code(callErr) != codes.Unauthenticated {
+		t.Fatalf("invalid session result: %v", callErr)
+	}
+	if _, writeErr := appDB.Exec(ctx, "INSERT INTO identity.onlineconf_admins VALUES ($1)", userID); writeErr == nil {
+		t.Fatal("Identity application role can grant OnlineConf administrator access")
+	}
+	for _, tc := range []struct {
+		change string
+		want   codes.Code
+	}{
+		{"", codes.PermissionDenied},
+		{"INSERT INTO identity.onlineconf_admins VALUES ($1)", codes.OK},
+		{"DELETE FROM identity.onlineconf_admins WHERE user_id=$1", codes.PermissionDenied},
+	} {
+		if tc.change != "" {
+			if _, writeErr := owner.Exec(ctx, tc.change, userID); writeErr != nil {
+				t.Fatal(writeErr)
+			}
+		}
+		if _, callErr := onlineconfAccess.Authorize(rpcCtx, roleRequest); status.Code(callErr) != tc.want {
+			t.Fatalf("authorization after %q = %v, want %v", tc.change, callErr, tc.want)
+		}
+	}
+
 	users := identityv1.NewUsersClient(conn)
 	batch, err := users.BatchGetUsers(rpcCtx, &identityv1.BatchGetUsersRequest{UserIds: []int64{userID, userID, 999999}})
 	if err != nil || len(batch.GetUsers()) != 1 {
@@ -297,6 +334,9 @@ func TestIdentityService(t *testing.T) {
 	_, err = sessionClient.ValidateSession(rpcCtx, &identityv1.ValidateSessionRequest{AccessToken: token})
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatal("revoked session remains valid")
+	}
+	if _, callErr := onlineconfAccess.Authorize(rpcCtx, roleRequest); status.Code(callErr) != codes.Unauthenticated {
+		t.Fatalf("revoked session reached OnlineConf authorization: %v", callErr)
 	}
 	request("GET", "/api/v1/users/me", cfg.BFFAPIKey, token, "", 401)
 	request("POST", "/api/v1/auth/login", cfg.BFFAPIKey, "", `{"login":"reader","password":"long-test-password"}`, 200)

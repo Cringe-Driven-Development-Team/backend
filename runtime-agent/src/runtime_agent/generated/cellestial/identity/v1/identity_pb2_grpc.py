@@ -334,3 +334,78 @@ class UserAdministration(object):
             timeout,
             metadata,
             _registered_method=True)
+
+
+class OnlineConfAccessStub(object):
+    """OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Authorize = channel.unary_unary(
+                '/cellestial.identity.v1.OnlineConfAccess/Authorize',
+                request_serializer=cellestial_dot_identity_dot_v1_dot_identity__pb2.ValidateSessionRequest.SerializeToString,
+                response_deserializer=cellestial_dot_identity_dot_v1_dot_identity__pb2.OnlineConfAuthorization.FromString,
+                _registered_method=True)
+
+
+class OnlineConfAccessServicer(object):
+    """OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+    """
+
+    def Authorize(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_OnlineConfAccessServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Authorize': grpc.unary_unary_rpc_method_handler(
+                    servicer.Authorize,
+                    request_deserializer=cellestial_dot_identity_dot_v1_dot_identity__pb2.ValidateSessionRequest.FromString,
+                    response_serializer=cellestial_dot_identity_dot_v1_dot_identity__pb2.OnlineConfAuthorization.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'cellestial.identity.v1.OnlineConfAccess', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('cellestial.identity.v1.OnlineConfAccess', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class OnlineConfAccess(object):
+    """OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+    """
+
+    @staticmethod
+    def Authorize(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cellestial.identity.v1.OnlineConfAccess/Authorize',
+            cellestial_dot_identity_dot_v1_dot_identity__pb2.ValidateSessionRequest.SerializeToString,
+            cellestial_dot_identity_dot_v1_dot_identity__pb2.OnlineConfAuthorization.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
