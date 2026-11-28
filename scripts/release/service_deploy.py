@@ -7,7 +7,9 @@ import re
 import subprocess
 import tempfile
 
-from release import GitHub, REPOSITORY, RUN_ROOT, ReleaseError, HistoricalRunMissing, md, save, source_guard, validate_sha
+from release import GitHub, REPOSITORY, RUN_ROOT, SELECTION, ReleaseError, HistoricalRunMissing, md, save, source_guard, validate_sha
+
+SOURCE_URL = 'https://github.com/' + REPOSITORY
 
 SERVICES = ('identity', 'workspace', 'environments')
 CHECKS = ('image', 'ready')
@@ -200,7 +202,13 @@ def choose_rollback(api, rows, before, selected, target):
 
 
 def prepare(api, state):
-    from artifacts import forward_guard, tag_sha
+    """Выбирает и проверяет выпуск до доступа к VPS и, если состояние известно, строит план операции.
+
+    Если отчёт последней операции не содержит все сервисы, план откладывается до
+    сверки VPS2 (команда reconcile): в state['interrupted'] сохраняются проверенные
+    before и desired прерванной операции.
+    """
+    from artifacts import select_release
     from service_artifacts import check_image, pull_anonymous, resolve
 
     selected = state['selected_services']
@@ -227,21 +235,112 @@ def prepare(api, state):
                 raise ReleaseError('Confirmed rollback version conflicts with immutable Release')
             candidates[name] = verified
     else:
-        target = tag_sha(state['requested_tag'])
+        target, automatic = select_release(api, state['requested_tag'])
+        state['release_selection'] = 'automatic' if automatic else 'explicit'
         candidates = manifest_versions(resolve(api, 'release-' + target))
-        for name in selected:
-            if name in before:
-                forward_guard(before[name]['source_sha'], candidates[name]['source_sha'],
-                              lambda base, goal: api.get(f'/compare/{base}...{goal}').get('status'))
-    desired = {**before, **{name: candidates[name] for name in selected}}
-    check_compatibility(before, desired, selected, first=first)
-    state.update(before=before, desired=desired, target_sha=target, release_tag='release-' + target)
-    for name in selected:
-        version = desired[name]
+    candidates = {name: candidates[name] for name in selected}
+    state.update(candidates=candidates, target_sha=target, release_tag='release-' + target)
+    for name, version in candidates.items():
         check_image(name, version['image_ref'], version['source_sha'],
                     kernel_ref=version.get('kernel_ref'), image_id=version['image_id'])
         if name == 'environments':
             pull_anonymous(version['kernel_ref'])
+    if prior and not first and set(before) != set(SERVICES):
+        state['interrupted'] = {key: prior[key] for key in ('run_id', 'run_attempt', 'before', 'desired')}
+        return
+    plan(api, state, before)
+
+
+def plan(api, state, before):
+    """Строит desired операции из подтверждённого before и проверенных кандидатов выпуска.
+
+    before — версии, работающие на VPS2: из полного отчёта прошлой операции или из сверки.
+    Для CD проверяет направление каждого выбранного сервиса; для всех операций — совместимость.
+    """
+    from artifacts import forward_guard
+
+    selected = state['selected_services']
+    candidates = state['candidates']
+    if state['action'] == 'deploy':
+        for name in selected:
+            if name in before:
+                forward_guard(before[name]['source_sha'], candidates[name]['source_sha'],
+                              lambda base, goal: api.get(f'/compare/{base}...{goal}').get('status'))
+    desired = {**before, **candidates}
+    check_compatibility(before, desired, selected, first=state['first_cutover'])
+    state.update(before=before, desired=desired)
+
+
+def running_version(fact, version):
+    """Сообщает, совпадает ли запущенный контейнер с проверенной версией сервиса.
+
+    fact — сведения сверки VPS2 об одном сервисе; version — запись inventory с image_ref,
+    image_id и source_sha. Требуются запущенный контейнер, тот же digest, image ID и метки
+    исходников backend.
+    """
+    return (fact.get('running') is True and bool(version.get('image_id'))
+            and fact.get('image_ref') == version['image_ref'] and fact.get('image_id') == version['image_id']
+            and fact.get('revision') == version['source_sha'] and fact.get('source') == SOURCE_URL)
+
+
+def reconciled_inventory(facts, interrupted):
+    """Собирает полный before новой операции из сверки VPS2 после прерванной операции.
+
+    facts — сведения сверки по сервисам: running, image_ref, image_id, revision, source,
+    schema_version; interrupted — проверенные before и desired прерванной операции.
+    Сервис подтверждается, только если контейнер совпал с одной из этих версий и версия
+    схемы Goose равна её migration_version. Иначе ReleaseError с именем сервиса и
+    расхождением; на VPS2 к этому моменту ничего не изменено.
+    """
+    confirmed, problems = {}, []
+    facts = facts if isinstance(facts, dict) else {}
+    for name in SERVICES:
+        fact = facts.get(name) if isinstance(facts.get(name), dict) else {}
+        options = [version for version in (interrupted['desired'].get(name), interrupted['before'].get(name)) if version]
+        matched = [version for version in options if running_version(fact, version)]
+        if not fact.get('running'):
+            problems.append(f'{name}: контейнер не найден или не запущен')
+        elif not matched:
+            problems.append(f'{name}: запущен {md(fact.get("image_ref") or "неизвестный образ")}, '
+                            'он не совпадает с версиями прерванной операции')
+        elif any(not same_version(matched[0], version) for version in matched[1:]):
+            problems.append(f'{name}: версия контейнера определяется неоднозначно')
+        elif fact.get('schema_version') != matched[0]['migration_version']:
+            problems.append(f'{name}: версия схемы {fact.get("schema_version")}, '
+                            f'ожидалась {matched[0]["migration_version"]}')
+        else:
+            confirmed[name] = matched[0]
+    if problems:
+        raise ReleaseError('VPS2 reconciliation stopped before changes: ' + '; '.join(problems))
+    return confirmed
+
+
+def inspect_vps(state):
+    """Читает состояние сервисов VPS2 через Ansible без изменений и возвращает сведения сверки."""
+    with tempfile.TemporaryDirectory(prefix='backend-reconcile-') as directory:
+        report = Path(directory) / 'facts.json'
+        settings = Path(directory) / 'extra-vars.json'
+        save(settings, {
+            'reconcile_script': str(Path(__file__).parent / 'inspect_services.py'),
+            'reconcile_result_path': str(report),
+            'deploy_key_path': os.environ['DEPLOY_KEY_PATH'], 'jump_known_hosts': os.environ['JUMP_KNOWN_HOSTS'],
+        })
+        result = subprocess.run([
+            'ansible-playbook', '-i', 'inventory/ci.yml', str(Path(__file__).parent / 'reconcile.yml'),
+            '-e', '@' + str(settings),
+            '--ssh-common-args=-o UserKnownHostsFile=' + os.environ['JUMP_KNOWN_HOSTS'] + ' -o StrictHostKeyChecking=yes',
+        ], cwd=os.environ['ANSIBLE_DIR'], check=False)
+        if result.returncode or not report.is_file() or report.stat().st_size >= 262144:
+            raise ReleaseError('VPS2 reconciliation evidence unavailable; nothing was changed')
+        return json.loads(report.read_text())
+
+
+def reconcile(api, state):
+    """Подтверждает работающие версии после прерванной операции и достраивает план."""
+    if 'interrupted' not in state:
+        return
+    state['reconciled'] = reconciled_inventory(inspect_vps(state), state['interrupted'])
+    plan(api, state, state['reconciled'])
 
 
 def ensure_deployment(api, state):
@@ -319,6 +418,8 @@ def run_playbook(state):
 def summary(state):
     lines = ['## Выкладка микросервисов', '',
              f'- Операция: {state["action"]}', f'- Выпуск: {md(state.get("release_tag") or "не выбран")}',
+             f'- Target SHA: {state.get("target_sha") or "не определён"}',
+             '- Выбор выпуска: ' + SELECTION.get(state.get('release_selection'), 'не выполнялся'),
              f'- Deployment: {state.get("deployment_id") or "не создан"}',
              f'- Infra SHA: {state.get("infra_sha") or "не определён"}',
              f'- Записанный результат: {state.get("terminal_status") or "не подтверждён"}', '',
@@ -335,6 +436,14 @@ def summary(state):
         if ca and cb and ca != cb:
             a, b = (cb, ca) if state['action'] == 'rollback' else (ca, cb)
             lines.append(f'| ↳ {name} | [Изменения](https://github.com/{REPOSITORY}/compare/{a}...{b}) | | | |')
+    if 'interrupted' in state:
+        interrupted = state['interrupted']
+        lines += ['', f'Сверка VPS2 после прерванной операции [{interrupted["run_id"]}/{interrupted["run_attempt"]}]'
+                  f'({RUN_ROOT}{interrupted["run_id"]}/attempts/{interrupted["run_attempt"]}): '
+                  + ('подтверждены ' + ', '.join(f'{name} {md(version["image_ref"])}' for name, version in state['reconciled'].items())
+                     if 'reconciled' in state else 'не завершена, VPS2 не изменялся')]
+    if state.get('reconcile_error'):
+        lines.append('Расхождения: ' + md(state['reconcile_error']))
     if state['error_stage']:
         lines += ['', f'Сбой: {md(state["error_stage"])}. Сверьте наблюдения и используйте runbook восстановления.']
     return '\n'.join(lines) + '\n'
@@ -363,11 +472,15 @@ def execute(command, path):
         raise ReleaseError('Release state belongs to a different attempt')
     source_guard(state['action'])
     try:
-        if command in ('prepare', 'begin', 'finalize'):
+        if command in ('prepare', 'reconcile', 'begin', 'finalize'):
             api = GitHub(os.environ.get('GH_TOKEN', ''))
         if command == 'prepare':
             prepare(api, state)
+        elif command == 'reconcile':
+            reconcile(api, state)
         elif command == 'begin':
+            if not state['desired']:
+                raise ReleaseError('Operation plan is incomplete; reconcile VPS2 first')
             state['infra_sha'] = validate_sha(os.environ['RELEASE_INFRA_SHA'])
             state['deployment_id'] = ensure_deployment(api, state)
             save(path, state)
@@ -400,6 +513,8 @@ def execute(command, path):
                 output.write(summary(state))
     except (ReleaseError, OSError, subprocess.SubprocessError, KeyError, TypeError, ValueError) as error:
         state['error_stage'] = state['error_stage'] or command
+        if command == 'reconcile' and isinstance(error, ReleaseError):
+            state['reconcile_error'] = str(error)
         save(path, state)
         print('::error::Backend services ' + command + ': ' + (
             str(error) if isinstance(error, ReleaseError) else 'operation failed; inspect stage logs'))

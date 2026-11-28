@@ -20,6 +20,10 @@ if __name__ == '__main__':
 CHECKS = ('image', 'ready')
 
 
+SELECTION = {'automatic': 'автоматически, последний опубликованный Release основной цепочки main',
+             'explicit': 'задан явно'}
+
+
 class ReleaseError(Exception):
     """Safe diagnostic without credentials or upstream response bodies."""
 
@@ -276,6 +280,7 @@ def summary(state, api=None):
     run = RUN_ROOT + str(state['run_id'])
     lines = ['# Backend production: ' + state['action'], '',
              f'- Запрошенный Release: {md(state.get("requested_tag") or "не указан")}',
+             '- Выбор выпуска: ' + SELECTION.get(state.get('release_selection'), 'не выполнялся'),
              f'- Запрошенный SHA: {md(state.get("requested_sha") or "автоматический выбор")}',
              f'- Release: `{state.get("release_tag") or "не определён"}`',
              f'- Infra SHA: `{state.get("infra_sha") or os.environ.get("RELEASE_INFRA_SHA") or "не определён"}`',
@@ -346,7 +351,7 @@ def source_guard(action):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=('init', 'prepare', 'begin', 'switch', 'health', 'observation', 'finalize', 'report'))
+    parser.add_argument('command', choices=('init', 'prepare', 'reconcile', 'begin', 'switch', 'health', 'observation', 'finalize', 'report'))
     args = parser.parse_args(argv)
     path = Path(os.environ['RELEASE_STATE_FILE'])
     if os.environ.get('RELEASE_MODE') == 'services':
@@ -374,8 +379,9 @@ def main(argv=None):
                     raise ReleaseError('Rollback digest must come from Deployments')
                 target, image = select_target(history, os.environ.get('RELEASE_TARGET_SHA', ''))
             else:
-                from artifacts import tag_sha
-                target = tag_sha(os.environ.get('RELEASE_TAG', ''))
+                from artifacts import select_release
+                target, automatic = select_release(api, state['requested_tag'])
+                state['release_selection'] = 'automatic' if automatic else 'explicit'
                 image = None
             from artifacts import resolve, forward_guard
             tag = 'release-' + target

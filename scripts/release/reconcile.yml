@@ -1,0 +1,27 @@
+---
+# Сверка VPS2 после прерванной выкладки (backend#117): только чтение контейнеров и версий схем.
+# Запускается из каталога infra/ansible с его inventory; переменные — от service_deploy.inspect_vps.
+- name: Read the running backend services without changes
+  hosts: backend
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require exactly one backend host
+      ansible.builtin.assert:
+        that:
+          - groups.get('backend', []) | length == 1
+
+    - name: Read containers and Goose schema versions
+      ansible.builtin.script:
+        cmd: "{{ reconcile_script }} {{ app_compose_dir }}/microservices"
+        executable: python3
+      register: reconcile_facts
+      changed_when: false
+
+    - name: Write the controller report
+      ansible.builtin.copy:
+        dest: "{{ reconcile_result_path }}"
+        content: "{{ reconcile_facts.stdout | from_json | to_json }}\n"
+        mode: "0600"
+      delegate_to: localhost
+      become: false

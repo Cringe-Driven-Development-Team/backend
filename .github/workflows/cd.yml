@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Подготовленный неизменяемый выпуск release-<полный SHA>; для старых версий используйте Rollback'
-        required: true
+        description: 'Тег выпуска (необязательно). Пусто — последний подготовленный выпуск. Для конкретного выпуска скопируйте тег release-… со страницы Releases: https://github.com/Cringe-Driven-Development-Team/backend/releases. Для старых версий используйте Rollback'
+        required: false
+        default: ''
         type: string
       services:
         description: 'all или список identity,workspace,environments через запятую'
@@ -82,6 +83,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Select deployment format
         id: source
@@ -102,7 +104,10 @@ jobs:
         id: target
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release/release.py prepare
+        # Пустой release_tag выбирает выпуск по актуальной main внутри общей очереди backend-production
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          python3 scripts/release/release.py prepare
       - name: Checkout deployment infrastructure
         uses: actions/checkout@v7
         with:
@@ -140,6 +145,14 @@ jobs:
           ssh-keygen -y -f "$RUNNER_TEMP/backend-deploy/ci-key" > "$RUNNER_TEMP/backend-deploy/ci-key.pub"
           ssh-keygen -F cellestial.ru -f "$RUNNER_TEMP/backend-deploy/known_hosts" > /dev/null
           echo "ANSIBLE_VAULT_PASSWORD_FILE=$RUNNER_TEMP/backend-deploy/vault-pass" >> "$GITHUB_ENV"
+      - name: Reconcile VPS2 after an interrupted operation
+        if: steps.source.outputs.kind == 'services'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANSIBLE_DIR: ${{ github.workspace }}/infra/ansible
+          DEPLOY_KEY_PATH: ${{ runner.temp }}/backend-deploy/ci-key
+          JUMP_KNOWN_HOSTS: ${{ runner.temp }}/backend-deploy/known_hosts
+        run: python3 scripts/release/release.py reconcile
       - name: Record Deployment in progress
         id: begin
         env:
