@@ -32,12 +32,12 @@ func run(args []string) error {
 	}
 	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	name := flags.String("service", "", "identity|workspace|environments")
+	name := flags.String("service", "", "identity|workspace|environments|onlineconf")
 	if err := flags.Parse(args); err != nil {
-		return errors.New("usage: migrate --service identity|workspace|environments up|status")
+		return errors.New("usage: migrate --service identity|workspace|environments|onlineconf up|status")
 	}
 	s := migration.Service(*name)
-	if s != migration.Identity && s != migration.Workspace && s != migration.Environments {
+	if s != migration.Identity && s != migration.Workspace && s != migration.Environments && s != migration.OnlineConf {
 		return errors.New("unknown migration service")
 	}
 	if flags.NArg() != 1 || (flags.Arg(0) != "up" && flags.Arg(0) != "status") {

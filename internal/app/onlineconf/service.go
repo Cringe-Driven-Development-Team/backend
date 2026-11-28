@@ -11,8 +11,11 @@ import (
 	"time"
 
 	identityv1 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/migration"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/mtls"
 	rpctransport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpc"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 )
 
@@ -42,7 +45,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		Version:    os.Getenv("VERSION"),
 		Logger:     logger,
 		Timeout:    2 * time.Second,
-		Methods:    map[string]rpctransport.MethodPolicy{identityv1.OnlineConfAccess_Authorize_FullMethodName: {}},
+		Methods: map[string]rpctransport.MethodPolicy{
+			identityv1.OnlineConfAccess_Authorize_FullMethodName: {},
+			identityv1.Users_BatchGetUsers_FullMethodName:        {},
+			identityv1.Users_BatchResolveUsers_FullMethodName:    {},
+		},
 	})
 	if err != nil {
 		return err
@@ -53,10 +60,12 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer conn.Close()
 
-	admin := http.NewServeMux()
-	admin.HandleFunc("GET /admin/access", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
+	pool, err := openKeyPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	admin := newKeysHandler(keyStore{pool: pool}, identityv1.NewUsersClient(conn))
 	server := &http.Server{
 		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey),
 		ReadHeaderTimeout: 2 * time.Second,
@@ -84,4 +93,28 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	<-serveErr
 	return err
+}
+
+// openKeyPool открывает пул приложения и проверяет миграции без изменения схемы.
+func openKeyPool(ctx context.Context) (*pgxpool.Pool, error) {
+	dsn := os.Getenv("ONLINECONF_DATABASE_URL")
+	if strings.TrimSpace(dsn) == "" {
+		return nil, errors.New("missing ONLINECONF_DATABASE_URL")
+	}
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.New("invalid OnlineConf database configuration")
+	}
+	config.ConnConfig.Tracer = observability.PostgresTracer{}
+	startup, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	pool, err := pgxpool.NewWithConfig(startup, config)
+	if err != nil {
+		return nil, errors.New("OnlineConf database unavailable")
+	}
+	if err := migration.CheckCompatible(startup, pool, migration.OnlineConf); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
 }

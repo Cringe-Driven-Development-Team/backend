@@ -15,7 +15,7 @@ import (
 )
 
 // newRouter закрывает всю административную ветку проверкой сессии и роли в Identity.
-func newRouter(identity identityv1.OnlineConfAccessClient, admin http.Handler, bffKey string) http.Handler {
+func newRouter(identity identityv1.OnlineConfAccessClient, admin *http.ServeMux, bffKey string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -52,7 +52,18 @@ func newRouter(identity identityv1.OnlineConfAccessClient, admin http.Handler, b
 	requireAccess := security.S2S(bffKey, "/admin")(protected)
 	mux.Handle("/admin", requireAccess)
 	mux.Handle("/admin/", requireAccess)
-	return middleware.RequestID(middleware.Logging(middleware.Recover(mux)))
+	route := func(r *http.Request) string {
+		_, pattern := admin.Handler(r)
+		if r.URL.Path == "/health" {
+			_, pattern = mux.Handler(r)
+		}
+		if pattern == "" {
+			return "unmatched"
+		}
+		_, path, _ := strings.Cut(pattern, " ")
+		return path
+	}
+	return middleware.RequestID(middleware.ObserveHTTP(middleware.Recover(mux), nil, nil, route))
 }
 
 // unauthenticated сообщает клиенту требуемую схему аутентификации.
