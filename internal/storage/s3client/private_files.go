@@ -16,6 +16,7 @@ type PrivateFiles struct {
 	bucket string
 }
 
+// NewPrivateFiles связывает существующий S3-клиент с приватным бакетом.
 func NewPrivateFiles(client *awss3.Client, bucket string) (*PrivateFiles, error) {
 	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
@@ -24,11 +25,18 @@ func NewPrivateFiles(client *awss3.Client, bucket string) (*PrivateFiles, error)
 	return &PrivateFiles{client: client, bucket: bucket}, nil
 }
 
+// Put сохраняет содержимое body под указанным ключом.
 func (s *PrivateFiles) Put(ctx context.Context, key string, body io.ReadSeeker) error {
+	return s.put(ctx, key, body, nil)
+}
+
+// put записывает объект и при необходимости указывает его тип содержимого.
+func (s *PrivateFiles) put(ctx context.Context, key string, body io.ReadSeeker, contentType *string) error {
 	_, err := s.client.PutObject(ctx, &awss3.PutObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-		Body:   body,
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(key),
+		Body:        body,
+		ContentType: contentType,
 	}, func(options *awss3.Options) {
 		options.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	})

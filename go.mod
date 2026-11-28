@@ -25,6 +25,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.57.0
+	golang.org/x/image v0.43.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
