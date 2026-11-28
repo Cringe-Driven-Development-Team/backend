@@ -66,6 +66,15 @@ func TestHTTPOperationOwnership(t *testing.T) {
 		}
 		delete(legacy, id)
 	}
+	for _, id := range []string{
+		"onlineConfListKeys", "onlineConfCreateKey", "onlineConfGetKey",
+		"onlineConfUpdateKey", "onlineConfDeleteKey", "onlineConfResolveUser",
+	} {
+		if !legacy[id] {
+			t.Errorf("missing or multiply assigned OnlineConf operation: %s", id)
+		}
+		delete(legacy, id)
+	}
 	if len(legacy) != 0 {
 		t.Fatalf("unassigned HTTP operations: %v", legacy)
 	}

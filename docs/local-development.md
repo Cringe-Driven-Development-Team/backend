@@ -31,10 +31,20 @@
    `onlineconf.internal.cellestial.ru` и EKU ClientAuth от CA, которому доверяет
    Identity. Сертификат сервера Identity должен содержать DNS SAN
    `identity.internal.cellestial.ru`. В отдельном терминале укажите пути к
-   клиентским TLS-файлам и запустите процесс:
+   клиентским TLS-файлам. Подготовьте отдельную схему OnlineConf. Примените
+   миграции с подключением владельца через `DATABASE_URL`:
 
    ```sh
-   ONLINECONF_HTTP_ADDR=127.0.0.1:8085 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
+   go run ./cmd/migrate --service onlineconf up
+   ```
+
+   Выдайте прикладной роли `USAGE` схемы `onlineconf`, права
+   `SELECT, INSERT, UPDATE, DELETE` на `onlineconf.keys` и `SELECT` на
+   `onlineconf.goose_db_version`. Используйте подключение этой роли при запуске:
+
+   ```sh
+   ONLINECONF_DATABASE_URL="$ONLINECONF_DATABASE_URL" \
+     ONLINECONF_HTTP_ADDR=127.0.0.1:8085 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
      TLS_CERT_FILE=/path/to/onlineconf.crt TLS_KEY_FILE=/path/to/onlineconf.key \
      TLS_CA_FILE=/path/to/ca.crt BFF_API_KEY="$BFF_API_KEY" go run ./cmd/onlineconf
    ```
@@ -49,6 +59,12 @@
    с ролью `204`. Ошибки доступа возвращаются в JSON.
    BFF добавляет ключ на сервере и хранит его вне браузера.
    При недоступном Identity административный запрос с токеном получает `503`.
+
+С теми же заголовками проверьте `GET /admin/keys` и CRUD по [контракту](../spec/openapi.json).
+Публичный BFF направляет `/api/v1/onlineconf/admin/...` в `/admin/...`.
+Чтобы проверить сохранность данных, создайте ключ, перезапустите OnlineConf
+с тем же подключением к БД и прочитайте карточку. Identity должен разрешать
+сертификату OnlineConf и проверку роли, и обращения к каталогу пользователей.
 
 Назначение роли `onlineconf_admin` выполняет оператор БД Identity. В `psql`
 установите переменную `user_id` в ID нужного пользователя и выполните:

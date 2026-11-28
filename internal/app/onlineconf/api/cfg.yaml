@@ -1,0 +1,12 @@
+package: api
+output: api.gen.go
+generate:
+  models: true
+output-options:
+  include-operation-ids:
+    - onlineConfListKeys
+    - onlineConfCreateKey
+    - onlineConfGetKey
+    - onlineConfUpdateKey
+    - onlineConfDeleteKey
+    - onlineConfResolveUser

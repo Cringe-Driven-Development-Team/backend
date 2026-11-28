@@ -22,6 +22,7 @@ const (
 	Identity     Service = "identity"
 	Workspace    Service = "workspace"
 	Environments Service = "environments"
+	OnlineConf   Service = "onlineconf"
 )
 
 // State сообщает текущую и ожидаемую версии без неявной миграции схемы.

@@ -276,6 +276,16 @@ func TestIdentityService(t *testing.T) {
 	}
 	defer onlineconfConn.Close()
 	onlineconfAccess := identityv1.NewOnlineConfAccessClient(onlineconfConn)
+	onlineconfUsers := identityv1.NewUsersClient(onlineconfConn)
+	byID, lookupErr := onlineconfUsers.BatchGetUsers(rpcCtx, &identityv1.BatchGetUsersRequest{UserIds: []int64{userID}})
+	if lookupErr != nil || len(byID.GetUsers()) != 1 || byID.GetUsers()[0].GetId() != userID {
+		t.Fatalf("OnlineConf directory lookup by ID: %v", lookupErr)
+	}
+	byLogin, lookupErr := onlineconfUsers.BatchResolveUsers(rpcCtx, &identityv1.BatchResolveUsersRequest{Logins: []string{"READER"}})
+	if lookupErr != nil || len(byLogin.GetUsers()) != 1 || byLogin.GetUsers()[0].GetId() != userID {
+		t.Fatalf("OnlineConf directory lookup by login: %v", lookupErr)
+	}
+
 	if _, callErr := identityv1.NewSessionClient(onlineconfConn).ValidateSession(rpcCtx, roleRequest); status.Code(callErr) != codes.PermissionDenied {
 		t.Fatalf("OnlineConf principal reached Workspace session RPC: %v", callErr)
 	}

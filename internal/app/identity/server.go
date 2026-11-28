@@ -42,8 +42,8 @@ func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger
 	}
 	allowed := map[string][]string{identityv1.Session_ValidateSession_FullMethodName: {"workspace.internal.cellestial.ru"}}
 	if users != nil {
-		allowed[identityv1.Users_BatchGetUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru"}
-		allowed[identityv1.Users_BatchResolveUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru"}
+		allowed[identityv1.Users_BatchGetUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru", "onlineconf.internal.cellestial.ru"}
+		allowed[identityv1.Users_BatchResolveUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru", "onlineconf.internal.cellestial.ru"}
 	}
 	if healthServer != nil {
 		for _, method := range []string{healthv1.Health_Check_FullMethodName, healthv1.Health_Watch_FullMethodName} {

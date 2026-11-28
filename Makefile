@@ -70,6 +70,7 @@ contract-lint: $(REDOCLY)
 
 generate: contract-lint
 	cd internal/transport/http/api && go tool oapi-codegen -config cfg.yaml ../../../../spec/openapi.json
+	cd internal/app/onlineconf/api && go tool oapi-codegen -config cfg.yaml ../../../../spec/openapi.json
 
 # Сверяем с повторной генерацией, включая ещё не добавленные в index изменения.
 contract-check: contract-lint
@@ -78,6 +79,11 @@ contract-check: contract-lint
 	sed "s|^output:.*|output: $$generated|" internal/transport/http/api/cfg.yaml > "$$config"; \
 	(cd internal/transport/http/api && go tool oapi-codegen -config "$$config" ../../../../spec/openapi.json) && \
 	diff -u internal/transport/http/api/api.gen.go "$$generated"
+	@generated="$$(mktemp)"; config="$$(mktemp)"; \
+	trap 'rm -f "$$generated" "$$config"' EXIT; \
+	sed "s|^output:.*|output: $$generated|" internal/app/onlineconf/api/cfg.yaml > "$$config"; \
+	(cd internal/app/onlineconf/api && go tool oapi-codegen -config "$$config" ../../../../spec/openapi.json) && \
+	diff -u internal/app/onlineconf/api/api.gen.go "$$generated"
 
 -include .env
 
