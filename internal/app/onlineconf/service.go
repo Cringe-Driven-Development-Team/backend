@@ -11,16 +11,22 @@ import (
 	"time"
 
 	identityv1 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/lifecycle"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/migration"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/mtls"
 	rpctransport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpc"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 )
 
 // Run читает настройки процесса из окружения и обслуживает HTTP до отмены ctx.
-func Run(ctx context.Context, logger *slog.Logger) error {
+func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
+	redisConfig, err := snapshotRedisOptions(os.LookupEnv)
+	if err != nil {
+		return err
+	}
 	bffKey := os.Getenv("BFF_API_KEY")
 	if strings.TrimSpace(bffKey) == "" {
 		return errors.New("missing BFF_API_KEY")
@@ -58,14 +64,27 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return errors.New("cannot initialize Identity gRPC client")
 	}
-	defer conn.Close()
+	defer func() {
+		if !errors.Is(runErr, lifecycle.ErrDrainTimeout) {
+			_ = conn.Close()
+		}
+	}()
 
 	pool, err := openKeyPool(ctx)
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
-	admin := newKeysHandler(keyStore{pool: pool}, identityv1.NewUsersClient(conn))
+	cacheClient := redis.NewClient(redisConfig)
+	defer func() {
+		if !errors.Is(runErr, lifecycle.ErrDrainTimeout) {
+			_ = cacheClient.Close()
+			pool.Close()
+		}
+	}()
+	store := keyStore{pool: pool}
+	cache := &redisSnapshots{client: cacheClient, prefix: "{onlineconf:v1}"}
+	refresher := newSnapshotRefresher(store, cache, logger)
+	admin := newKeysHandler(store, identityv1.NewUsersClient(conn), refresher.RequestRefresh)
 	server := &http.Server{
 		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey),
 		ReadHeaderTimeout: 2 * time.Second,
@@ -74,25 +93,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return errors.New("cannot listen on OnlineConf HTTP address")
-	}
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- server.Serve(listener) }()
-	select {
-	case <-serveErr:
-		return errors.New("OnlineConf HTTP listener failed")
-	case <-ctx.Done():
-	}
-	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err = server.Shutdown(shutdown)
-	if err != nil {
-		_ = server.Close()
-	}
-	<-serveErr
-	return err
+	return lifecycle.Run(ctx, 5*time.Second, []lifecycle.Endpoint{lifecycle.HTTP(addr, server)}, func() {}, refresher.Run)
 }
 
 // openKeyPool открывает пул приложения и проверяет миграции без изменения схемы.

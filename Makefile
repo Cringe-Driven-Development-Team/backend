@@ -217,6 +217,7 @@ migration-test:
 services-test: build-services
 	@test -n "$(SERVICE_TEST_DATABASE_URL)" -a -n "$(REDIS_TEST_ADDR)" || \
 		(echo 'set disposable SERVICE_TEST_DATABASE_URL and REDIS_TEST_ADDR'; exit 1)
+	$(GO) test -race -count=1 ./internal/app/onlineconf
 	MICROSERVICES_BIN_DIR="$(abspath $(BIN_DIR))" MICROSERVICES_AGENT_PYTHON="$(abspath $(AGENT_BIN))/python" \
 		$(GO) test -race -count=1 ./internal/user/delivery/grpc -run '^TestMicroservicesProcesses$$'
 
