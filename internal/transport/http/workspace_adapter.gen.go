@@ -114,3 +114,9 @@ func (h workspaceAdapter) InspectRuntimeVariables(ctx context.Context, req works
 func (h workspaceAdapter) GetRuntimeInspection(ctx context.Context, req workspaceapi.GetRuntimeInspectionRequestObject) (workspaceapi.GetRuntimeInspectionResponseObject, error) {
 	return h.server.GetRuntimeInspection(ctx, api.GetRuntimeInspectionRequestObject{Id: req.Id, ExecutionId: req.ExecutionId, Params: api.GetRuntimeInspectionParams(req.Params)})
 }
+func (h workspaceAdapter) GetSharedNotebook(ctx context.Context, req workspaceapi.GetSharedNotebookRequestObject) (workspaceapi.GetSharedNotebookResponseObject, error) {
+	return h.server.GetSharedNotebook(ctx, api.GetSharedNotebookRequestObject{Token: req.Token, Params: api.GetSharedNotebookParams(req.Params)})
+}
+func (h workspaceAdapter) GetSharedNotebookContent(ctx context.Context, req workspaceapi.GetSharedNotebookContentRequestObject) (workspaceapi.GetSharedNotebookContentResponseObject, error) {
+	return h.server.GetSharedNotebookContent(ctx, api.GetSharedNotebookContentRequestObject{Token: req.Token, Params: api.GetSharedNotebookContentParams(req.Params)})
+}

@@ -46,7 +46,7 @@ type Notebook struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	Cells             []Cell
-	SharingMode       SharingMode
+	LinkToken         *string
 	Access            NotebookAccess
 }
 

@@ -22,6 +22,15 @@ func (h *Handler) GetNotebookContent(ctx context.Context, req api.GetNotebookCon
 	if err != nil {
 		return nil, err
 	}
+	body, err := toAPIContent(result)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetNotebookContent200JSONResponse{Body: body, Headers: api.GetNotebookContent200ResponseHeaders{ETag: quotedETag(result.Hash), CacheControl: noStore()}}, nil
+}
+
+// toAPIContent сохраняет вывод и состояние исполнения в снимке ячеек.
+func toAPIContent(result domain.Content) (api.NotebookContent, error) {
 	cells := make([]api.NotebookContent_Cells_Item, 0, len(result.Cells))
 	for _, cell := range result.Cells {
 		var item api.NotebookContent_Cells_Item
@@ -31,23 +40,23 @@ func (h *Handler) GetNotebookContent(ctx context.Context, req api.GetNotebookCon
 				decoder := json.NewDecoder(bytes.NewReader(cell.Outputs))
 				decoder.UseNumber()
 				if err := decoder.Decode(&outputs); err != nil {
-					return nil, err
+					return api.NotebookContent{}, err
 				}
 			}
 			if outputs == nil {
 				outputs = []map[string]interface{}{}
 			}
 			if err := item.FromNotebookContentCells1(api.NotebookContentCells1{Id: cell.ID, Kind: api.NotebookContentCells1Kind(cell.Kind), Source: cell.Source, Outputs: outputs, ExecutionCount: cell.ExecutionCount, OutputTruncated: cell.OutputTruncated}); err != nil {
-				return nil, err
+				return api.NotebookContent{}, err
 			}
 		} else {
 			if err := item.FromNotebookContentCells0(api.NotebookContentCells0{Id: cell.ID, Kind: api.NotebookContentCells0Kind(cell.Kind), Source: cell.Source}); err != nil {
-				return nil, err
+				return api.NotebookContent{}, err
 			}
 		}
 		cells = append(cells, item)
 	}
-	return api.GetNotebookContent200JSONResponse{Body: api.NotebookContent{Hash: result.Hash, Cells: cells}, Headers: api.GetNotebookContent200ResponseHeaders{ETag: quotedETag(result.Hash), CacheControl: noStore()}}, nil
+	return api.NotebookContent{Hash: result.Hash, Cells: cells}, nil
 }
 
 // parseIfMatch принимает только один непустой сильный ETag; списки и wildcard

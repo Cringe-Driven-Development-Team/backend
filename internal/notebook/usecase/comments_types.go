@@ -36,8 +36,9 @@ type CommentQuery struct {
 
 // CommentRows возвращает страницу и владельца из одной транзакции.
 type CommentRows struct {
-	OwnerID int64
-	Items   []domain.Comment
+	CanComment bool
+	OwnerID    int64
+	Items      []domain.Comment
 }
 
 // CommentRecord возвращает записанное сообщение и владельца блокнота.

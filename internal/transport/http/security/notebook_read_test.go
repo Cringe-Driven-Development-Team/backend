@@ -27,7 +27,7 @@ func TestNotebookReadRejectsSuppliedInvalidAuthorization(t *testing.T) {
 			tokenError, sessionError error
 			status                   int
 		}{
-			{name: "guest", status: 204},
+			{name: "missing bearer", status: 401},
 			{name: "malformed", headers: []string{"Basic xxx"}, status: 401},
 			{name: "empty", headers: []string{""}, status: 401},
 			{name: "duplicate", headers: []string{"Bearer token", "Bearer token"}, status: 401},

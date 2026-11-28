@@ -12,15 +12,11 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
 )
 
-// AuthenticateWorkspace проверяет Bearer в Identity после S2S. Гости допускаются на публичные чтения.
+// AuthenticateWorkspace проверяет Bearer в Identity после S2S.
 func AuthenticateWorkspace(verifier authn.SessionVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			values := r.Header.Values("Authorization")
-			if len(values) == 0 && notebookRead(r) {
-				next.ServeHTTP(w, r.WithContext(authn.WithPrincipal(r.Context(), authn.Principal{Anonymous: true})))
-				return
-			}
 			token := workspaceBearer(values)
 			if token == "" {
 				httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")

@@ -42,8 +42,8 @@ func TestNotebookTransactionsAndResults(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if n.SharingMode != domain.SharingModePrivate {
-		t.Fatalf("created notebook mode: got %q, want private", n.SharingMode)
+	if n.LinkToken != nil {
+		t.Fatalf("created notebook token: got %v, want nil", n.LinkToken)
 	}
 	id := n.Cells[0].ID
 	s, e := uc.Content(ctx, n.ID, 1)
@@ -88,8 +88,8 @@ func TestNotebookTransactionsAndResults(t *testing.T) {
 	if noop.Hash != moved || !got.UpdatedAt.Equal(before) {
 		t.Fatal("no-op changed revision/date")
 	}
-	if got.SharingMode != domain.SharingModePrivate {
-		t.Fatalf("loaded notebook mode: got %q, want private", got.SharingMode)
+	if got.LinkToken != nil {
+		t.Fatalf("loaded notebook token: got %v, want nil", got.LinkToken)
 	}
 	// У двух записей в одну ревизию ноутбука ровно один победитель.
 	var wg sync.WaitGroup
@@ -502,5 +502,25 @@ func TestResultOverwritePreservesAttachments(t *testing.T) {
 	after, err := repo.Get(ctx, n.ID, 1)
 	if err != nil || after.Revision != got.Revision || string(after.Cells[0].Outputs) != string(got.Cells[0].Outputs) {
 		t.Fatal("invalid result changed current data")
+	}
+}
+
+// TestExportSnapshotWithBigintOwner проверяет экспорт для ID за пределами int32.
+func TestExportSnapshotWithBigintOwner(t *testing.T) {
+	repo, pool := testRepository(t)
+	ctx := t.Context()
+	const ownerID int64 = 1 << 40
+	if _, err := pool.Exec(ctx, `INSERT INTO identity.users(id,login,password_hash) OVERRIDING SYSTEM VALUE VALUES($1,'bigint_owner','hash')`, ownerID); err != nil {
+		t.Fatal(err)
+	}
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil)
+	notebook, err := uc.Create(ctx, ownerID, "export")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExportSnapshot(ctx, notebook.ID, ownerID, func(_ domain.Document, stream func(func(domain.Cell) error) error) error {
+		return stream(func(domain.Cell) error { return nil })
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

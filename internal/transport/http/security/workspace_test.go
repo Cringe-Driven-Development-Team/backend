@@ -24,7 +24,7 @@ func TestWorkspaceAuthUsesIdentity(t *testing.T) {
 		anonymous                bool
 	}{
 		{"service key checked first", "GET", "", "Bearer token", nil, 403, 0, false},
-		{"guest", "GET", "key", "", nil, 204, 0, true},
+		{"missing session", "GET", "key", "", nil, 401, 0, false},
 		{"private", "POST", "key", "", nil, 401, 0, false},
 		{"bad bearer on public", "GET", "key", "Bearer x y", nil, 401, 0, false},
 		{"revoked on public", "GET", "key", "Bearer revoked", authn.ErrInvalidSession, 401, 1, false},

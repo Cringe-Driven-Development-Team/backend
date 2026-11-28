@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -23,18 +24,16 @@ func NormalizeName(name string) (string, error) {
 	return name, nil
 }
 
-func ValidateSharing(mode domain.SharingMode, logins []string) error {
-	switch mode {
-	case domain.SharingModePrivate, domain.SharingModePublic:
-		if len(logins) != 0 {
-			return ErrInvalidSharing
-		}
-	case domain.SharingModeRestricted:
-	default:
+// ErrUnknownLogin обозначает отсутствующего адресата.
+var ErrUnknownLogin = errors.New("unknown login")
+
+// ValidateSharing проверяет весь список до разрешения логинов.
+func ValidateSharing(readers []domain.NotebookReader) error {
+	if len(readers) > 100 {
 		return ErrInvalidSharing
 	}
-	for _, login := range logins {
-		if !readerLogin.MatchString(login) {
+	for _, reader := range readers {
+		if !readerLogin.MatchString(reader.Login) || (reader.Role != domain.RoleViewer && reader.Role != domain.RoleCommenter) {
 			return ErrInvalidSharing
 		}
 	}
@@ -69,25 +68,24 @@ func (uc *NotebookUsecase) GetSharing(ctx context.Context, id, ownerID int64) (d
 	return domain.SharingSettings{}, ErrUserDirectoryInconsistent
 }
 
-// PutSharing разрешает логины до транзакции, сохраняя IDs при конкурентном переименовании.
-func (uc *NotebookUsecase) PutSharing(ctx context.Context, id, ownerID int64, mode domain.SharingMode, readerLogins []string) (domain.SharingSettings, error) {
+// PutSharing разрешает логины до записи и сохраняет последнюю роль каждого адресата.
+func (uc *NotebookUsecase) PutSharing(ctx context.Context, id, ownerID int64, link bool, readers []domain.NotebookReader) (domain.SharingSettings, error) {
 	if err := uc.repo.CheckOwner(ctx, id, ownerID); err != nil {
 		return domain.SharingSettings{}, err
 	}
-	if err := ValidateSharing(mode, readerLogins); err != nil {
+	if err := ValidateSharing(readers); err != nil {
 		return domain.SharingSettings{}, err
 	}
-	unique := map[string]bool{}
-	logins := make([]string, 0, len(readerLogins))
-	for _, login := range readerLogins {
-		key := strings.ToLower(login)
-		if !unique[key] {
-			unique[key] = true
-			logins = append(logins, key)
+	logins := make([]string, 0, len(readers))
+	resolvedUsers := make(map[string]domain.NotebookReader, len(readers))
+	for _, reader := range readers {
+		login := strings.ToLower(reader.Login)
+		if _, exists := resolvedUsers[login]; !exists {
+			logins = append(logins, login)
 		}
+		resolvedUsers[login] = domain.NotebookReader{}
 	}
-	ids := make([]int64, 0, len(logins))
-	users := map[int64]domain.NotebookReader{}
+	users := make(map[int64]domain.NotebookReader, len(logins))
 	if len(logins) > 0 {
 		if uc.users == nil {
 			return domain.SharingSettings{}, ErrUserDirectoryUnavailable
@@ -101,18 +99,26 @@ func (uc *NotebookUsecase) PutSharing(ctx context.Context, id, ownerID int64, mo
 		}
 		for i, resolution := range resolved {
 			if !resolution.Found {
-				return domain.SharingSettings{}, ErrInvalidSharing
+				return domain.SharingSettings{}, ErrUnknownLogin
 			}
 			if strings.ToLower(resolution.Login) != logins[i] || resolution.User.ID <= 0 {
 				return domain.SharingSettings{}, ErrUserDirectoryInconsistent
 			}
-			if resolution.User.ID != ownerID {
-				ids = append(ids, resolution.User.ID)
-				users[resolution.User.ID] = resolution.User
-			}
+			resolvedUsers[logins[i]] = resolution.User
 		}
 	}
-	saved, err := uc.repo.PutSharing(ctx, id, ownerID, mode, ids)
+	for _, reader := range readers {
+		user := resolvedUsers[strings.ToLower(reader.Login)]
+		if user.ID != ownerID {
+			user.Role = reader.Role
+			users[user.ID] = user
+		}
+	}
+	grants := make([]domain.NotebookReader, 0, len(users))
+	for _, user := range users {
+		grants = append(grants, user)
+	}
+	saved, err := uc.repo.PutSharing(ctx, id, ownerID, link, grants)
 	if err != nil {
 		return domain.SharingSettings{}, err
 	}
@@ -122,6 +128,12 @@ func (uc *NotebookUsecase) PutSharing(ctx context.Context, id, ownerID int64, mo
 	}
 	return result, nil
 }
+
+// GetShared читает снимок по действующему токену для пользователя с сессией.
+func (uc *NotebookUsecase) GetShared(ctx context.Context, token string, userID int64, includeCommentCounts bool) (domain.Notebook, error) {
+	return uc.repo.GetShared(ctx, token, userID, includeCommentCounts)
+}
+
 func (uc *NotebookUsecase) Clone(ctx context.Context, id, userID int64, name string) (domain.Notebook, error) {
 	if userID <= 0 {
 		return domain.Notebook{}, ErrNotebookNotFound

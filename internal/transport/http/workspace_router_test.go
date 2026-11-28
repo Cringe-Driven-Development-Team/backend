@@ -43,7 +43,7 @@ func TestWorkspaceRouterBoundary(t *testing.T) {
 		reachesFiles                  bool
 	}{
 		{"public missing BFF key", "GET", BaseURL + "/notebooks/invalid", "", "", 403, 0, false},
-		{"public validation", "GET", BaseURL + "/notebooks/invalid", "workspace-test-key", "", 400, 0, false},
+		{"session before validation", "GET", BaseURL + "/notebooks/invalid", "workspace-test-key", "", 401, 0, false},
 		{"files require session", "POST", files + "command", "workspace-test-key", "", 401, 0, false},
 		{"files verified", "POST", files + "command", "workspace-test-key", "Bearer session-token", 200, 1, true},
 		{"unknown file route", "GET", files + "unknown", "workspace-test-key", "Bearer session-token", 404, 1, false},

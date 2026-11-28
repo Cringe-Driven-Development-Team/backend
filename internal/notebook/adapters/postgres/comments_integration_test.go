@@ -22,7 +22,7 @@ func TestCommentRepositoryPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	cell := n.Cells[0].ID
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []int64{2}); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{ID: 2, Role: domain.RoleCommenter}}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := repo.CreateComment(ctx, n.ID, cell, 2, "reader text")
@@ -72,16 +72,16 @@ func TestCommentRepositoryPermissions(t *testing.T) {
 	if err = repo.DeleteComment(ctx, second.ID, second.Cells[0].ID, 1, c.Comment.ID); !errors.Is(err, usecase.ErrCommentNotFound) {
 		t.Fatalf("wrong notebook: %v", err)
 	}
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModePrivate, nil); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = repo.UpdateComment(ctx, n.ID, cell, 2, c.Comment.ID, "x"); !errors.Is(err, usecase.ErrNotebookNotFound) {
 		t.Fatal("revoked author", err)
 	}
-	if _, err = repo.PutSharing(ctx, n.ID, 1, domain.SharingModePublic, nil); err != nil {
+	if _, err = repo.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{ID: 3, Role: domain.RoleCommenter}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = repo.ListComments(ctx, n.ID, cell, 0, usecase.CommentQuery{Limit: 20}); err != nil {
+	if _, err = repo.ListComments(ctx, n.ID, cell, 0, usecase.CommentQuery{Limit: 20}); !errors.Is(err, usecase.ErrNotebookNotFound) {
 		t.Fatal(err)
 	}
 	if _, err = repo.CreateComment(ctx, n.ID, cell, 3, "public"); err != nil {

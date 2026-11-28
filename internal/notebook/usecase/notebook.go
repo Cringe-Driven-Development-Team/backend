@@ -64,14 +64,9 @@ func (uc *NotebookUsecase) Create(ctx context.Context, ownerID int64, name strin
 	return n, nil
 }
 
-// Get читает доступный блокнот; ownerID обозначает посетителя, 0 — анонима.
-func (uc *NotebookUsecase) Get(ctx context.Context, id, ownerID int64) (domain.Notebook, error) {
-	n, err := uc.repo.GetReadable(ctx, id, ownerID, true)
-	if err != nil {
-		return domain.Notebook{}, err
-	}
-	n.Access = domain.AccessFor(n.OwnerID, ownerID)
-	return n, nil
+// Get читает снимок и права посетителя из одной транзакции.
+func (uc *NotebookUsecase) Get(ctx context.Context, id, userID int64) (domain.Notebook, error) {
+	return uc.repo.GetReadable(ctx, id, userID, true)
 }
 
 // Content возвращает согласованный снимок доступного посетителю блокнота.
