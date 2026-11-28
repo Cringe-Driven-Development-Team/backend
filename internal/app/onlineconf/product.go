@@ -31,13 +31,13 @@ func productHandler(sessions identityv1.SessionClient, read func(context.Context
 			return
 		}
 		if err != nil || session.GetUserId() <= 0 {
-			httperr.Write(w, http.StatusServiceUnavailable, "onlineconf_unavailable", "OnlineConf unavailable")
+			httperr.Write(w, http.StatusServiceUnavailable, "dependency_unavailable", "authorization unavailable")
 			return
 		}
 		view, err := read(r.Context())
 		result, ok := effectiveSettings(view, session.GetUserId())
 		if err != nil || !ok {
-			httperr.Write(w, http.StatusServiceUnavailable, "onlineconf_unavailable", "OnlineConf unavailable")
+			httperr.Write(w, http.StatusServiceUnavailable, "onlineconf_unavailable", "onlineconf snapshot unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

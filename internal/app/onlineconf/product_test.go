@@ -25,6 +25,8 @@ func (productSessions) ValidateSession(_ context.Context, r *identityv1.Validate
 	switch r.GetAccessToken() {
 	case "a":
 		return &identityv1.ValidateSessionResponse{UserId: 1}, nil
+	case "unavailable":
+		return nil, status.Error(codes.Unavailable, "dependency unavailable")
 	case "b":
 		return &identityv1.ValidateSessionResponse{UserId: 2}, nil
 	default:
@@ -55,7 +57,8 @@ func TestProductSettings(t *testing.T) {
 		{"excluded at 100 percent", "b", "X-Workspace-Key", "workspace", ProductView{map[string]SnapshotEntry{"bff.notebook_max_cells": config("1001"), "workspace.notebook_run_all": flag("true", "100")}}, 200, `{"notebook_max_cells":1000,"notebook_run_all":false}`},
 		{"disabled for included user", "a", "X-BFF-Key", "bff", ProductView{map[string]SnapshotEntry{"bff.notebook_max_cells": config(`"3"`), "workspace.notebook_run_all": flag("false", "100")}}, 200, `{"notebook_max_cells":1000,"notebook_run_all":false}`},
 		{"missing keys", "a", "X-BFF-Key", "bff", ProductView{map[string]SnapshotEntry{}}, 200, `{"notebook_max_cells":1000,"notebook_run_all":true}`},
-		{"snapshot unavailable", "a", "X-Workspace-Key", "workspace", ProductView{}, 503, `{"code":"onlineconf_unavailable","message":"OnlineConf unavailable"}`},
+		{"snapshot unavailable", "a", "X-Workspace-Key", "workspace", ProductView{}, 503, `{"code":"onlineconf_unavailable","message":"onlineconf snapshot unavailable"}`},
+		{"identity unavailable", "unavailable", "X-BFF-Key", "bff", ProductView{}, 503, `{"code":"dependency_unavailable","message":"authorization unavailable"}`},
 		{"wrong service key", "a", "X-Workspace-Key", "bff", ProductView{}, 403, `{"code":"s2s_forbidden","message":"service access forbidden"}`},
 		{"invalid session", "revoked", "X-BFF-Key", "bff", ProductView{}, 401, `{"code":"unauthorized","message":"authentication required"}`},
 	} {
