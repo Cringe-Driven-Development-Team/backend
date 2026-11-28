@@ -41,13 +41,14 @@ type keysRepository interface {
 
 // keysHandler связывает HTTP-контракт, каталог Identity и хранилище ключей.
 type keysHandler struct {
-	store keysRepository
-	users identityv1.UsersClient
+	store          keysRepository
+	users          identityv1.UsersClient
+	requestRefresh func()
 }
 
 // newKeysHandler регистрирует маршруты внутри защищённой ветки.
-func newKeysHandler(store keysRepository, users identityv1.UsersClient) *http.ServeMux {
-	h := keysHandler{store: store, users: users}
+func newKeysHandler(store keysRepository, users identityv1.UsersClient, requestRefresh func()) *http.ServeMux {
+	h := keysHandler{store: store, users: users, requestRefresh: requestRefresh}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/access", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -171,6 +172,9 @@ func (h keysHandler) create(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		k, err = h.store.create(r.Context(), k)
 	}
+	if err == nil && h.requestRefresh != nil {
+		h.requestRefresh()
+	}
 	writeCard(w, 201, k, err)
 }
 
@@ -247,6 +251,9 @@ func (h keysHandler) update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	k, err = h.store.update(r.Context(), k)
+	if err == nil && h.requestRefresh != nil {
+		h.requestRefresh()
+	}
 	writeCard(w, 200, k, err)
 }
 
@@ -289,6 +296,9 @@ func (h keysHandler) delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.delete(r.Context(), r.PathValue("name")); err != nil {
 		writeKeyError(w, err)
 		return
+	}
+	if h.requestRefresh != nil {
+		h.requestRefresh()
 	}
 	w.WriteHeader(204)
 }
