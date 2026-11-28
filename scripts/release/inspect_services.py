@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-SERVICES = ('identity', 'workspace', 'environments')
+SERVICES = ('identity', 'workspace', 'environments', 'onlineconf')
 
 
 def run(*argv, input_data=None):

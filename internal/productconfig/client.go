@@ -3,6 +3,7 @@ package productconfig
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -36,9 +37,11 @@ func WithBearer(ctx context.Context, token string) context.Context {
 
 // NewReader создаёт клиент для чтения настроек в контексте текущей сессии.
 // baseURL задаёт внутренний адрес OnlineConf, key идентифицирует Workspace.
+// tlsConfig задаёт mTLS-удостоверение Workspace для https-адреса; nil — системные настройки.
 // metrics измеряет HTTP-вызовы зависимости.
-func NewReader(baseURL, key string, metrics *observability.HTTPClientMetrics) func(context.Context) (Settings, error) {
+func NewReader(baseURL, key string, tlsConfig *tls.Config, metrics *observability.HTTPClientMetrics) func(context.Context) (Settings, error) {
 	client := &http.Client{
+		Transport:     &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true},
 		Timeout:       2 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}

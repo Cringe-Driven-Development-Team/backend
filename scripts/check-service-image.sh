@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# != 2 ]]; then
-    echo "Usage: $0 <identity|workspace|environments> <image>" >&2
+    echo "Usage: $0 <identity|workspace|environments|onlineconf> <image>" >&2
     exit 2
 fi
 
@@ -12,6 +12,7 @@ case "$service" in
     identity) startup_error='identity.startup' ;;
     workspace) startup_error='workspace.failed' ;;
     environments) startup_error='environments.failed' ;;
+    onlineconf) startup_error='onlineconf.run' ;;
     *) echo "Unknown service: $service" >&2; exit 2 ;;
 esac
 
@@ -36,7 +37,7 @@ fi
 docker run --rm --network none -i --entrypoint /bin/sh "$image" -eu -s -- "$service" <<'SH'
 test "$(id -u)" != 0
 test -x "/app/$1"
-for binary in identity workspace environments server runtime-smoke; do
+for binary in identity workspace environments onlineconf server runtime-smoke; do
     if [ "$binary" != "$1" ]; then
         test ! -e "/app/$binary"
     fi

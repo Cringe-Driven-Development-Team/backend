@@ -13,7 +13,9 @@ import tempfile
 from artifacts import digest, gh, lookup, output, producer_guard, tag_sha
 from release import GitHub, ReleaseError, REPOSITORY, RUN_ROOT, validate_sha
 
-SERVICES = ('identity', 'workspace', 'environments')
+SERVICES = ('identity', 'workspace', 'environments', 'onlineconf')
+# Сервисы, добавленные после перехода на микросервисы: в старых выпусках их нет (backend#177).
+ADDED = frozenset({'onlineconf'})
 REGISTRY = 'ghcr.io/cringe-driven-development-team'
 SOURCE_URL = 'https://github.com/' + REPOSITORY
 KERNEL_PACKAGE = REGISTRY + '/cellestial-kernel-python'
@@ -56,8 +58,8 @@ def validate_manifest(manifest, tag):
             or not matches(r'[0-9a-f]{40}', manifest.get('protocol_revision'))):
         raise ReleaseError('Invalid microservice release identity or format')
     services = manifest.get('services')
-    if not isinstance(services, dict) or set(services) != set(SERVICES):
-        raise ReleaseError('Release must describe all three backend services')
+    if not isinstance(services, dict) or set(services) not in (set(SERVICES), set(SERVICES) - ADDED):
+        raise ReleaseError('Release must describe all backend services')
     for service, version in services.items():
         if (not isinstance(version, dict) or version.get('source_sha') != source_sha
                 or version.get('platform') != PLATFORM or not matches(DIGEST, version.get('image_id'))
@@ -81,7 +83,8 @@ def archive_metadata(path):
 
 
 def sums(root):
-    return ''.join(f'{digest(root / name)}  {name}\n' for name in FILES[:-1])
+    """Контрольные суммы manifest и архивов, присутствующих в каталоге выпуска."""
+    return ''.join(f'{digest(root / name)}  {name}\n' for name in FILES[:-1] if (root / name).is_file())
 
 
 def write_sums(root):
@@ -119,11 +122,13 @@ def resolve(api, tag):
         raise ReleaseError('Microservice release is missing or not immutable')
     if api.get('/commits/' + tag).get('sha') != sha:
         raise ReleaseError('Microservice release tag does not resolve to its source SHA')
-    if not set(FILES).issubset(asset_names(release)):
+    names = asset_names(release)
+    required = {name for name in FILES if not any(name == archive_name(service) for service in ADDED)}
+    if not required.issubset(names):
         raise ReleaseError('Required microservice release assets are missing')
     with tempfile.TemporaryDirectory(prefix='service-release-') as directory:
         root = Path(directory)
-        download(tag, root, FILES)
+        download(tag, root, tuple(name for name in FILES if name in names))
         return verify_files(root, tag)
 
 
@@ -261,7 +266,8 @@ def check_existing_images(manifest):
 
 def create_draft(api, tag, sha, manifest):
     notes = api.request(api.prefix + '/releases/generate-notes', {'tag_name': tag, 'target_commitish': sha})[0]
-    commands = '\n'.join('docker pull ' + manifest['services'][name]['image_ref'] for name in SERVICES)
+    commands = '\n'.join('docker pull ' + manifest['services'][name]['image_ref'] for name in SERVICES
+                         if name in manifest['services'])
     body = notes['body'] + f'\n\nSource: `{sha}`\n\nCI: {manifest["ci_url"]}\n\n```sh\n{commands}\n```\n'
     return api.request(api.prefix + '/releases', {'tag_name': tag, 'target_commitish': sha,
                        'name': 'Backend ' + tag, 'body': body, 'draft': True})[0]

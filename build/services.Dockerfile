@@ -15,6 +15,9 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/workspace ./cmd/workspace
 FROM go-builder AS environments-builder
 RUN go build -trimpath -ldflags="-s -w" -o /out/environments ./cmd/environments
 
+FROM go-builder AS onlineconf-builder
+RUN go build -trimpath -ldflags="-s -w" -o /out/onlineconf ./cmd/onlineconf
+
 FROM python:3.13-slim-bookworm AS agent-builder
 WORKDIR /src
 COPY runtime-agent/ ./
@@ -41,6 +44,12 @@ COPY --from=workspace-builder /out/workspace ./workspace
 USER app
 EXPOSE 8080 9090 9091
 CMD ["./workspace"]
+
+FROM service-runtime AS onlineconf
+COPY --from=onlineconf-builder /out/onlineconf ./onlineconf
+USER app
+EXPOSE 8080 9091
+CMD ["./onlineconf"]
 
 FROM service-runtime AS environments
 ARG RUNTIME_PYTHON_IMAGE=cellestial-kernel-python:local

@@ -67,13 +67,29 @@ class Reconcile(unittest.TestCase):
         # Прервали после переключения identity: остальные остались на прежних образах и схемах
         self.facts = {'identity': fact(self.desired['identity']),
                       'workspace': fact(self.before['workspace']),
-                      'environments': fact(self.before['environments'])}
+                      'environments': fact(self.before['environments']),
+                      'onlineconf': fact(self.before['onlineconf'])}
         self.interrupted = {'run_id': 5, 'run_attempt': 1, 'before': self.before, 'desired': self.desired}
 
     def test_mixed_versions_are_confirmed_service_by_service(self):
         self.assertEqual(reconciled_inventory(self.facts, self.interrupted), {
             'identity': self.desired['identity'], 'workspace': self.before['workspace'],
-            'environments': self.before['environments']})
+            'environments': self.before['environments'], 'onlineconf': self.before['onlineconf']})
+
+    def test_service_added_later_is_installed_for_the_first_time(self):
+        # Прерванная операция была до OnlineConf: его контейнера нет, остальные подтверждаются
+        older = {key: {name: version for name, version in self.interrupted[key].items() if name != 'onlineconf'}
+                 for key in ('before', 'desired')}
+        facts = {name: value for name, value in self.facts.items() if name != 'onlineconf'}
+        before = reconciled_inventory(facts, {**self.interrupted, **older})
+        self.assertNotIn('onlineconf', before)
+        service_deploy.check_compatibility(before, {**before, **self.target}, list(SERVICES), first=False)
+        with self.assertRaises(ReleaseError):
+            service_deploy.check_compatibility(before, {**before, 'onlineconf': self.target['onlineconf']},
+                                               [name for name in SERVICES if name != 'onlineconf'], first=False)
+        # Запущенный неизвестный OnlineConf не принимается за первую установку
+        with self.assertRaises(ReleaseError):
+            reconciled_inventory({**facts, 'onlineconf': fact(self.target['onlineconf'])}, {**self.interrupted, **older})
 
     def test_discrepancies_stop_with_the_service_name(self):
         cases = {

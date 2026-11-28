@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [identity, workspace, environments]
+        service: [identity, workspace, environments, onlineconf]
     env:
       SERVICE: ${{ matrix.service }}
       IMAGE: cellestial-${{ matrix.service }}:sha-${{ github.sha }}

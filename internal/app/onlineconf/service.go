@@ -3,6 +3,8 @@ package onlineconf
 import (
 	"context"
 	"errors"
+	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,11 +16,13 @@ import (
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/lifecycle"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/migration"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/mtls"
 	rpctransport "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/rpc"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 )
 
 // Run читает настройки процесса из окружения и обслуживает HTTP до отмены ctx.
@@ -35,9 +39,18 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 	if workspaceKey == bffKey {
 		return errors.New("OnlineConf Workspace key must differ from BFF key")
 	}
-	addr := os.Getenv("ONLINECONF_HTTP_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8085"
+	addr := envOr("HTTP_ADDR", ":8080")
+	adminAddr := envOr("ADMIN_ADDR", ":9091")
+	version := os.Getenv("VERSION")
+	tlsConfig := mtls.Config{
+		CertFile: os.Getenv("TLS_CERT_FILE"),
+		KeyFile:  os.Getenv("TLS_KEY_FILE"),
+		CAFile:   os.Getenv("TLS_CA_FILE"),
+	}
+	// HTTP API вызывают только BFF (админка) и Workspace (продуктовые настройки).
+	httpTLS, err := mtls.HTTPServerConfig(tlsConfig, "bff.internal.cellestial.ru", "workspace.internal.cellestial.ru")
+	if err != nil {
+		return err
 	}
 	target := os.Getenv("IDENTITY_GRPC_ADDR")
 	host, port, err := net.SplitHostPort(target)
@@ -45,14 +58,10 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 		return errors.New("invalid IDENTITY_GRPC_ADDR")
 	}
 	options, err := rpctransport.ClientOptions(rpctransport.ClientConfig{
-		TLS: mtls.Config{
-			CertFile: os.Getenv("TLS_CERT_FILE"),
-			KeyFile:  os.Getenv("TLS_KEY_FILE"),
-			CAFile:   os.Getenv("TLS_CA_FILE"),
-		},
+		TLS:        tlsConfig,
 		ServerName: "identity.internal.cellestial.ru",
 		Service:    "onlineconf",
-		Version:    os.Getenv("VERSION"),
+		Version:    version,
 		Logger:     logger,
 		Timeout:    2 * time.Second,
 		Methods: map[string]rpctransport.MethodPolicy{
@@ -92,20 +101,31 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 	admin := newKeysHandler(store, identityv1.NewUsersClient(conn), refresher.RequestRefresh, cache.ProductView)
 	server := &http.Server{
 		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey, productHandler(identityv1.NewSessionClient(conn), cache.ProductView, bffKey, workspaceKey)),
+		TLSConfig:         httpTLS,
+		ErrorLog:          log.New(io.Discard, "", 0),
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
-	return lifecycle.Run(ctx, 5*time.Second, []lifecycle.Endpoint{lifecycle.HTTP(addr, server)}, func() {}, refresher.Run)
+	registry := lifecycle.Registry("onlineconf", version, pool)
+	ready := lifecycle.NewReadiness(health.NewServer())
+	probe := func(ctx context.Context) error {
+		return ready.Poll(ctx, func(check context.Context) bool {
+			return pool.Ping(check) == nil && cacheClient.Ping(check).Err() == nil
+		})
+	}
+	return lifecycle.Run(ctx, 5*time.Second, []lifecycle.Endpoint{
+		lifecycle.HTTP(addr, server), lifecycle.HTTP(adminAddr, lifecycle.Admin(ready, registry, middleware.NewHTTPMetrics(registry))),
+	}, ready.Stop, refresher.Run, probe)
 }
 
 // openKeyPool открывает пул приложения и проверяет миграции без изменения схемы.
 func openKeyPool(ctx context.Context) (*pgxpool.Pool, error) {
-	dsn := os.Getenv("ONLINECONF_DATABASE_URL")
+	dsn := os.Getenv("DATABASE_URL")
 	if strings.TrimSpace(dsn) == "" {
-		return nil, errors.New("missing ONLINECONF_DATABASE_URL")
+		return nil, errors.New("missing DATABASE_URL")
 	}
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -123,4 +143,12 @@ func openKeyPool(ctx context.Context) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 	return pool, nil
+}
+
+// envOr возвращает значение переменной окружения name или fallback, если она пуста.
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }

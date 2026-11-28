@@ -47,3 +47,21 @@ func TestPeerPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTPClientNames(t *testing.T) {
+	cert := &x509.Certificate{DNSNames: []string{"workspace.internal.cellestial.ru"}}
+	verified := tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{cert}}, PeerCertificates: []*x509.Certificate{cert}}
+	allowed := []string{"bff.internal.cellestial.ru", "workspace.internal.cellestial.ru"}
+	if err := verifyAnyDNSName(verified, allowed); err != nil {
+		t.Fatalf("allowed client rejected: %v", err)
+	}
+	if verifyAnyDNSName(verified, allowed[:1]) == nil {
+		t.Fatal("client outside the list accepted")
+	}
+	if verifyAnyDNSName(tls.ConnectionState{PeerCertificates: []*x509.Certificate{cert}}, allowed) == nil {
+		t.Fatal("unverified chain accepted")
+	}
+	if verifyAnyDNSName(verified, nil) == nil {
+		t.Fatal("empty list accepted a client")
+	}
+}

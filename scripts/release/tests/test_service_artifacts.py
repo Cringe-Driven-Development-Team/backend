@@ -20,10 +20,10 @@ TAG = 'release-' + SHA
 REGISTRY = 'ghcr.io/cringe-driven-development-team'
 KERNEL = REGISTRY + '/cellestial-kernel-python@sha256:' + 'c' * 64
 PROTOCOL = 'b' * 40
-NAMES = ('identity', 'workspace', 'environments')
-VERSIONS = {'identity': 1, 'workspace': 5, 'environments': 3}
+NAMES = ('identity', 'workspace', 'environments', 'onlineconf')
+VERSIONS = {'identity': 1, 'workspace': 5, 'environments': 3, 'onlineconf': 2}
 REFS = {name: REGISTRY + '/cellestial-' + name + '@sha256:' + char * 64
-        for name, char in zip(NAMES, 'def')}
+        for name, char in zip(NAMES, 'defa')}
 IMAGE_ID = 'sha256:' + '9' * 64
 
 
@@ -158,8 +158,17 @@ class Publication(unittest.TestCase):
         self.build.reset_mock()
         recovered = services.publish(self.api, TAG, REGISTRY + '/cellestial-kernel-python@sha256:' + '7' * 64)
         self.assertEqual(recovered['services']['environments']['kernel_ref'], KERNEL)
-        self.assertEqual([call.args[0] for call in self.archive.call_args_list], ['workspace', 'environments'])
+        self.assertEqual([call.args[0] for call in self.archive.call_args_list], ['workspace', 'environments', 'onlineconf'])
         self.build.assert_not_called()
+
+    def test_release_before_onlineconf_is_still_valid(self):
+        old = manifest()
+        old['services'].pop('onlineconf')
+        self.assertEqual(services.validate_manifest(old, TAG), old)
+        broken = manifest()
+        broken['services'].pop('workspace')
+        with self.assertRaises(ReleaseError):
+            services.validate_manifest(broken, TAG)
 
     def test_pr_cannot_publish(self):
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'pull_request'}):
