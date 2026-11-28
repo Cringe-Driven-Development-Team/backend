@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const readableCondition = `($2>0 AND (owner_id=$2 OR EXISTS (SELECT 1 FROM workspace.notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
+const readableCondition = `($2::bigint>0 AND (owner_id=$2 OR EXISTS (SELECT 1 FROM workspace.notebook_readers nr WHERE nr.notebook_id=notebooks.id AND nr.user_id=$2)))`
 const selectReadableNotebook = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,link_token FROM workspace.notebooks WHERE id=$1 AND ` + readableCondition
 const selectNotebookForClone = `SELECT id,owner_id,name,revision,cells_count,preview_code,size_bytes,created_at,updated_at,link_token FROM workspace.notebooks WHERE id=$1 FOR UPDATE`
 
