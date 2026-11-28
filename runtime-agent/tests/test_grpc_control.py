@@ -83,7 +83,7 @@ async def test_grpc_assignment_execute_and_recovery_boundary(grpc_agent):
     with pytest.raises(grpc.aio.AioRpcError) as error:
         await stub.Health(pb.Target(session_id=target.session_id, fence=0))
     assert error.value.code() == grpc.StatusCode.ABORTED
-    assert b"runtime_agent_rpc_server_requests_total" in metrics.render()
+    assert b"cellestial_grpc_calls_total" in metrics.render()
 
 
 async def test_grpc_service_identity_and_correlation(grpc_agent):

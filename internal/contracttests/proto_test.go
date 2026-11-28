@@ -85,7 +85,8 @@ func TestProtoSafeBoundary(t *testing.T) {
 		t.Fatal("cleanup acknowledgement must be explicit")
 	}
 	userFields := (&identityv1.User{}).ProtoReflect().Descriptor().Fields()
-	if userFields.Len() != 2 || userFields.ByName("id") == nil || userFields.ByName("login") == nil {
-		t.Fatal("user summary must only contain id/login")
+	if userFields.Len() != 3 || userFields.ByName("id") == nil || userFields.ByName("login") == nil ||
+		userFields.ByName("avatar_url") == nil || userFields.ByName("avatar_url").Kind() != protoreflect.StringKind {
+		t.Fatal("user summary must only contain id, login, and a string avatar_url")
 	}
 }

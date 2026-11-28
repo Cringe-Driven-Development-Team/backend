@@ -21,26 +21,29 @@ type Directory interface {
 // UsersServer выдаёт только публичные поля доверенному Workspace.
 type UsersServer struct {
 	identityv1.UnimplementedUsersServer
-	directory Directory
+	directory     Directory
+	avatarBaseURL string
 }
 
 // NewUsersServer связывает транспорт с прикладным каталогом пользователей.
-func NewUsersServer(d Directory) *UsersServer { return &UsersServer{directory: d} }
+func NewUsersServer(d Directory, avatarBaseURL string) *UsersServer {
+	return &UsersServer{directory: d, avatarBaseURL: avatarBaseURL}
+}
 
 // BatchGetUsers проверяет ID и возвращает найденных пользователей одним batch.
 func (s *UsersServer) BatchGetUsers(ctx context.Context, r *identityv1.BatchGetUsersRequest) (*identityv1.UsersResponse, error) {
 	users, err := s.directory.ByIDs(ctx, r.GetUserIds())
-	return directoryResponse(ctx, users, err, r.GetUserIds(), nil)
+	return s.directoryResponse(ctx, users, err, r.GetUserIds(), nil)
 }
 
 // BatchResolveUsers разрешает логины без учёта регистра.
 func (s *UsersServer) BatchResolveUsers(ctx context.Context, r *identityv1.BatchResolveUsersRequest) (*identityv1.UsersResponse, error) {
 	users, err := s.directory.ByLogins(ctx, r.GetLogins())
-	return directoryResponse(ctx, users, err, nil, r.GetLogins())
+	return s.directoryResponse(ctx, users, err, nil, r.GetLogins())
 }
 
 // directoryResponse скрывает ошибки БД и не превращает отказ зависимости в пустой успех.
-func directoryResponse(ctx context.Context, users []domain.UserSuggestion, err error, ids []int64, logins []string) (*identityv1.UsersResponse, error) {
+func (s *UsersServer) directoryResponse(ctx context.Context, users []domain.UserSuggestion, err error, ids []int64, logins []string) (*identityv1.UsersResponse, error) {
 	if err != nil {
 		switch {
 		case ctx.Err() != nil:
@@ -53,7 +56,7 @@ func directoryResponse(ctx context.Context, users []domain.UserSuggestion, err e
 	}
 	out := &identityv1.UsersResponse{Users: make([]*identityv1.User, 0, len(users))}
 	for _, u := range users {
-		out.Users = append(out.Users, &identityv1.User{Id: u.ID, Login: u.Login})
+		out.Users = append(out.Users, &identityv1.User{Id: u.ID, Login: u.Login, AvatarUrl: domain.PublicAvatarURL(s.avatarBaseURL, u.AvatarKey)})
 	}
 	byID := make(map[int64]*identityv1.User, len(out.Users))
 	byLogin := make(map[string]*identityv1.User, len(out.Users))

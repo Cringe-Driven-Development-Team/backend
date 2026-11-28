@@ -10,8 +10,9 @@ const (
 )
 
 type NotebookReader struct {
-	ID    int64
-	Login string
+	AvatarURL string
+	ID        int64
+	Login     string
 }
 
 // SharingSettings содержит настройки доступа к блокноту.

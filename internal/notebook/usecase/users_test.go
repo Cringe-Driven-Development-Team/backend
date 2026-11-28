@@ -13,9 +13,10 @@ import (
 
 // directoryFake фиксирует количество batch вызовов вместо N+1 чтений авторов.
 type directoryFake struct {
-	calls   int
-	missing bool
-	err     error
+	avatarURL string
+	calls     int
+	missing   bool
+	err       error
 }
 
 func (d *directoryFake) BatchGet(_ context.Context, ids []int64) (map[int64]domain.NotebookReader, error) {
@@ -23,7 +24,7 @@ func (d *directoryFake) BatchGet(_ context.Context, ids []int64) (map[int64]doma
 	out := map[int64]domain.NotebookReader{}
 	for _, id := range ids {
 		if !d.missing {
-			out[id] = domain.NotebookReader{ID: id, Login: "current_login"}
+			out[id] = domain.NotebookReader{ID: id, Login: "current_login", AvatarURL: d.avatarURL}
 		}
 	}
 	return out, d.err
@@ -39,7 +40,7 @@ func TestCommentAuthorsUseOneBatch(t *testing.T) {
 		rows[i] = domain.Comment{ID: int64(100 - i), Author: domain.CommentAuthor{ID: 42}, CreatedAt: time.Now()}
 	}
 	repo := &commentRepo{rows: usecase.CommentRows{OwnerID: 1, Items: rows}}
-	users := &directoryFake{}
+	users := &directoryFake{avatarURL: "https://cdn.example.com/first.png"}
 	uc := usecase.NewNotebookUsecase(repo, nil, nil, usecase.WithUsers(users), usecase.WithCommentCursor(cursor.NewCommentCodec([]byte("key"))))
 	limit := 100
 	page, err := uc.ListComments(t.Context(), 7, "cell", 0, usecase.CommentListInput{Limit: &limit})
@@ -47,8 +48,15 @@ func TestCommentAuthorsUseOneBatch(t *testing.T) {
 		t.Fatalf("batch lookup: %v %d", err, users.calls)
 	}
 	for _, comment := range page.Items {
-		if comment.Author.Login != "current_login" {
+		if comment.Author.Login != "current_login" || comment.Author.AvatarURL != users.avatarURL {
 			t.Fatal("missing current author login")
+		}
+	}
+	for _, url := range []string{"https://cdn.example.com/second.png", ""} {
+		users.avatarURL = url
+		page, err = uc.ListComments(t.Context(), 7, "cell", 0, usecase.CommentListInput{Limit: &limit})
+		if err != nil || len(page.Items) != 100 || page.Items[0].Author.AvatarURL != url {
+			t.Fatalf("updated author avatar %q: %v", url, err)
 		}
 	}
 	users.err = usecase.ErrUserDirectoryUnavailable

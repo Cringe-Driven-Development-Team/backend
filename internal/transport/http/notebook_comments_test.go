@@ -131,3 +131,42 @@ func TestCellCommentsActionErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestCellCommentAuthorAvatarHTTP проверяет наличие nullable поля во всех ответах с комментарием.
+func TestCellCommentAuthorAvatarHTTP(t *testing.T) {
+	const wall = "/api/v1/notebooks/42/content/cells/cell/comments"
+	const avatar = "https://cdn.example.com/avatars/reader.png"
+	for _, method := range []string{"GET", "POST", "PATCH"} {
+		for _, url := range []string{"", avatar} {
+			f := newRouterFixture(t)
+			comment := domain.Comment{ID: 9, NotebookID: 42, CellID: "cell", Text: "ok", Author: domain.CommentAuthor{ID: 1, Login: "reader", AvatarURL: url}}
+			path, body, status := wall, "", 200
+			switch method {
+			case "GET":
+				f.notebooks.EXPECT().ListComments(gomock.Any(), int64(42), "cell", int64(0), notebookusecase.CommentListInput{}).
+					Return(notebookusecase.CommentPage{Items: []domain.Comment{comment}}, nil)
+			case "POST":
+				body, status = `{"text":"ok"}`, 201
+				f.notebooks.EXPECT().CreateComment(gomock.Any(), int64(42), "cell", int64(1), "ok").Return(comment, nil)
+			case "PATCH":
+				path, body = wall+"/9", `{"text":"ok"}`
+				f.notebooks.EXPECT().UpdateComment(gomock.Any(), int64(42), "cell", int64(1), int64(9), "ok").Return(comment, nil)
+			}
+			req := httptest.NewRequest(method, path, strings.NewReader(body))
+			req.Header.Set("X-BFF-Key", "test-key")
+			if body != "" {
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer "+f.access)
+			}
+			rec := httptest.NewRecorder()
+			f.handler.ServeHTTP(rec, req)
+			want := `"avatar_url":null`
+			if url != "" {
+				want = `"avatar_url":"` + url + `"`
+			}
+			if rec.Code != status || !strings.Contains(rec.Body.String(), want) {
+				t.Fatalf("%s: expected status %d and %s, got %d: %s", method, status, want, rec.Code, rec.Body)
+			}
+		}
+	}
+}

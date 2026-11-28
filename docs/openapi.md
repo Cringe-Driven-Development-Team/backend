@@ -71,8 +71,9 @@ Cookie-auth и браузерных параметров в контракте �
 ## Поиск и страницы блокнотов
 
 `GET /api/v1/notebooks` возвращает объект
-`{ items, next_cursor, matched_count, total_count }`. `items` содержит прежние
-`NotebookSummary`, включая `preview_code` и `has_active_session`.
+`{ items, next_cursor, matched_count, total_count }`. `items` содержит
+`NotebookSummary`, включая `preview_code`, `has_active_session` и
+[счётчик комментариев `comments_count`](cell-comments.md#счётчики).
 
 ```bash
 curl --get "$API_URL/api/v1/notebooks" \

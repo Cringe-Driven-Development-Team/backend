@@ -164,8 +164,8 @@ func TestListNotebooks(t *testing.T) {
 		{name: "пустой список — [], а не null", list: nil, want: `{"items":[],"matched_count":0,"next_cursor":null,"total_count":0}`},
 		{
 			name: "один блокнот",
-			list: []domain.NotebookSummary{{ID: 3, Name: "a", CellsCount: 2, UpdatedAt: updated}},
-			want: `{"items":[{"cells_count":2,"has_active_session":false,"id":3,"name":"a","preview_code":"","updated_at":"2026-10-04T12:00:00Z"}],"matched_count":0,"next_cursor":null,"total_count":0}`,
+			list: []domain.NotebookSummary{{ID: 3, Name: "a", CellsCount: 2, CommentsCount: 4, UpdatedAt: updated}},
+			want: `{"items":[{"cells_count":2,"comments_count":4,"has_active_session":false,"id":3,"name":"a","preview_code":"","updated_at":"2026-10-04T12:00:00Z"}],"matched_count":0,"next_cursor":null,"total_count":0}`,
 		},
 	}
 	for _, tt := range tests {
@@ -195,7 +195,8 @@ func TestCreateAndGetNotebook(t *testing.T) {
 	uc.EXPECT().Get(gomock.Any(), int64(3), int64(1)).Return(notebook, nil)
 	want := api.Notebook{
 		Id: 3, Name: "a", CreatedAt: created, UpdatedAt: created,
-		Cells: []api.Cell{{Id: "c1", Kind: api.CellKindCode, Source: ""}},
+		CellCommentsCount: map[string]int64{},
+		Cells:             []api.Cell{{Id: "c1", Kind: api.CellKindCode, Source: ""}},
 	}
 
 	for _, req := range []struct {

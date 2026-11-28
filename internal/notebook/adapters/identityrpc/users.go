@@ -136,7 +136,7 @@ func resolution(result *identityv1.UserResolution) (domain.NotebookReader, bool,
 	switch value := result.Outcome.(type) {
 	case *identityv1.UserResolution_User:
 		if value.User != nil && value.User.Id > 0 && value.User.Login != "" {
-			return domain.NotebookReader{ID: value.User.Id, Login: value.User.Login}, true, true
+			return domain.NotebookReader{ID: value.User.Id, Login: value.User.Login, AvatarURL: value.User.GetAvatarUrl()}, true, true
 		}
 	case *identityv1.UserResolution_NotFound:
 		return domain.NotebookReader{}, false, value.NotFound

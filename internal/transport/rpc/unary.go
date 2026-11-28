@@ -30,13 +30,27 @@ type UnaryConfig struct {
 // ServerOptions ограничивает размер заголовков/сообщений и подключает общую unary-цепочку.
 // TLS credentials задаются отдельно: конфигурация не допускает plaintext fallback.
 func ServerOptions(cfg UnaryConfig) []grpc.ServerOption {
+	stream := StreamServer(cfg)
+	unknown := func(_ any, _ grpc.ServerStream) error {
+		if cfg.Metrics != nil {
+			cfg.Metrics.requests.WithLabelValues("unmatched", "unmatched", "unknown", "server", codes.Unimplemented.String()).Inc()
+		}
+		return status.Error(codes.Unimplemented, "unknown RPC")
+	}
 	return []grpc.ServerOption{
 		grpc.ConnectionTimeout(2 * time.Second),
 		grpc.MaxHeaderListSize(16 << 10),
 		grpc.MaxRecvMsgSize(8 << 20),
 		grpc.MaxSendMsgSize(8 << 20),
 		grpc.ChainUnaryInterceptor(UnaryServer(cfg)),
-		grpc.ChainStreamInterceptor(StreamServer(cfg)),
+		grpc.UnknownServiceHandler(unknown),
+		grpc.ChainStreamInterceptor(func(srv any, call grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			// grpc-go передаёт nil вместо зарегистрированного сервиса только в fallback.
+			if srv == nil {
+				return unknown(srv, call)
+			}
+			return stream(srv, call, info, handler)
+		}),
 	}
 }
 
@@ -57,7 +71,7 @@ func UnaryServer(cfg UnaryConfig) grpc.UnaryServerInterceptor {
 		if _, ok := cfg.AllowedPeers[method]; !ok {
 			method = "unmatched"
 		}
-		finish := cfg.Metrics.begin(method)
+		finish := cfg.Metrics.begin(method, "unary", "server")
 		md, _ := metadata.FromIncomingContext(ctx)
 		id := uuid.NewString()
 		if values := md.Get("x-request-id"); len(values) == 1 && observability.ValidRequestID(values[0]) {
@@ -85,11 +99,7 @@ func UnaryServer(cfg UnaryConfig) grpc.UnaryServerInterceptor {
 		if err = ctx.Err(); err != nil {
 			return nil, status.FromContextError(err).Err()
 		}
-		cfg.Metrics.message(method, "received", req)
 		response, err = handler(ctx, req)
-		if err == nil {
-			cfg.Metrics.message(method, "sent", response)
-		}
 		return response, err
 	}
 }

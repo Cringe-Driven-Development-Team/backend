@@ -1860,6 +1860,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Notebook"
+                },
+                "example": {
+                  "id": 42,
+                  "name": "Блокнот с комментариями",
+                  "cells": [
+                    {
+                      "id": "cell-1",
+                      "kind": "code",
+                      "source": "print(1)"
+                    },
+                    {
+                      "id": "cell-2",
+                      "kind": "markdown",
+                      "source": "# Введение"
+                    }
+                  ],
+                  "created_at": "2026-11-12T10:00:00Z",
+                  "updated_at": "2026-11-12T16:30:00Z",
+                  "access": {
+                    "is_owner": true,
+                    "can_edit": true,
+                    "can_manage_sharing": true,
+                    "can_comment": true,
+                    "can_clone": true
+                  },
+                  "comments_count": 4,
+                  "cell_comments_count": {
+                    "cell-1": 2,
+                    "cell-2": 2
+                  }
                 }
               }
             },
@@ -1994,7 +2024,9 @@
                     "can_manage_sharing": true,
                     "can_comment": true,
                     "can_clone": true
-                  }
+                  },
+                  "comments_count": 0,
+                  "cell_comments_count": {}
                 }
               }
             },
@@ -3330,9 +3362,19 @@
                   "$ref": "#/components/schemas/NotebookListPage"
                 },
                 "example": {
-                  "items": [],
+                  "items": [
+                    {
+                      "id": 42,
+                      "name": "Блокнот с комментариями",
+                      "updated_at": "2026-11-12T16:30:00Z",
+                      "cells_count": 2,
+                      "preview_code": "print(1)",
+                      "has_active_session": false,
+                      "comments_count": 4
+                    }
+                  ],
                   "next_cursor": null,
-                  "matched_count": 0,
+                  "matched_count": 1,
                   "total_count": 7
                 }
               }
@@ -5256,7 +5298,7 @@
     "/shared/{token}": {
       "get": {
         "summary": "Блокнот по публичной ссылке",
-        "description": "Метаданные блокнота по токену публичной ссылки, как GET /notebooks/{id}. Требуется действующая сессия: без Bearer или с невалидным Bearer — 401. Токен проверяется на каждом запросе: удалённая или заменённая ссылка, удалённый блокнот и неизвестный токен дают одинаковый 404. Ссылка даёт только чтение документа: без комментариев, runtime, файлов окружения и клонирования. access отражает фактические права пользователя: у посетителя только по ссылке все флаги false, а /notebooks/{id} даёт ему 404; владелец и адресный читатель получают свои права и выполняют разрешённые действия только через /notebooks/{id}/… по id из ответа — /shared комментариев не отдаёт и не принимает. Посетитель по ссылке не попадает в список читателей. Ответы Cache-Control: no-store.",
+        "description": "Метаданные блокнота по токену публичной ссылки, как GET /notebooks/{id}. Требуется действующая сессия: без Bearer или с невалидным Bearer — 401. Токен проверяется на каждом запросе: удалённая или заменённая ссылка, удалённый блокнот и неизвестный токен дают одинаковый 404. Ссылка даёт только чтение документа: без комментариев, runtime, файлов окружения и клонирования. access отражает фактические права пользователя: у посетителя только по ссылке все флаги false, а /notebooks/{id} даёт ему 404; владелец и адресный читатель получают свои права и выполняют разрешённые действия только через /notebooks/{id}/… по id из ответа — /shared комментариев не отдаёт и не принимает. У посетителя только по ссылке счётчики комментариев возвращаются как comments_count: 0 и cell_comments_count: {}. Посетитель по ссылке не попадает в список читателей. Ответы Cache-Control: no-store.",
         "operationId": "getSharedNotebook",
         "tags": [
           "notebooks"
@@ -5303,7 +5345,9 @@
                     "can_manage_sharing": false,
                     "can_comment": false,
                     "can_clone": false
-                  }
+                  },
+                  "comments_count": 0,
+                  "cell_comments_count": {}
                 }
               }
             },
@@ -5622,7 +5666,9 @@
                     "can_manage_sharing": true,
                     "can_comment": true,
                     "can_clone": true
-                  }
+                  },
+                  "comments_count": 0,
+                  "cell_comments_count": {}
                 }
               }
             },
@@ -6494,7 +6540,8 @@
                       "cell_id": "cell-1",
                       "author": {
                         "id": 2,
-                        "login": "reader"
+                        "login": "reader",
+                        "avatar_url": null
                       },
                       "text": "Комментарий\nк ячейке",
                       "created_at": "2026-11-22T12:00:00.123456Z",
@@ -6754,7 +6801,8 @@
                   "cell_id": "cell-1",
                   "author": {
                     "id": 2,
-                    "login": "reader"
+                    "login": "reader",
+                    "avatar_url": null
                   },
                   "text": "Комментарий\nк ячейке",
                   "created_at": "2026-11-22T12:00:00.123456Z",
@@ -7038,7 +7086,8 @@
                   "cell_id": "cell-1",
                   "author": {
                     "id": 2,
-                    "login": "reader"
+                    "login": "reader",
+                    "avatar_url": null
                   },
                   "text": "Комментарий\nк ячейке",
                   "created_at": "2026-11-22T12:00:00.123456Z",
@@ -7370,6 +7419,21 @@
           },
           "access": {
             "$ref": "#/components/schemas/NotebookAccess"
+          },
+          "comments_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Число всех сообщений в блокноте, включая ответы."
+          },
+          "cell_comments_count": {
+            "type": "object",
+            "description": "Число сообщений по идентификаторам ячеек. Ключи есть только у ячеек с комментариями. Сумма значений равна comments_count.",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
           }
         },
         "required": [
@@ -7378,7 +7442,9 @@
           "cells",
           "created_at",
           "updated_at",
-          "access"
+          "access",
+          "comments_count",
+          "cell_comments_count"
         ],
         "additionalProperties": false
       },
@@ -7408,6 +7474,12 @@
           "has_active_session": {
             "type": "boolean",
             "description": "У текущего пользователя активна runtime-сессия этого блокнота; состояние сервиса сессий, независимо от результатов исполнения."
+          },
+          "comments_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Число всех сообщений в блокноте, включая ответы."
           }
         },
         "required": [
@@ -7416,7 +7488,8 @@
           "updated_at",
           "cells_count",
           "preview_code",
-          "has_active_session"
+          "has_active_session",
+          "comments_count"
         ]
       },
       "Credentials": {
@@ -8856,11 +8929,20 @@
           },
           "login": {
             "type": "string"
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Публичный URL аватара автора, как в GET /users/me. null, если аватар не загружен."
           }
         },
         "required": [
           "id",
-          "login"
+          "login",
+          "avatar_url"
         ],
         "additionalProperties": false
       },

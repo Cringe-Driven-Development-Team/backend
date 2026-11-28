@@ -48,7 +48,7 @@ func (uc *NotebookUsecase) author(ctx context.Context, id int64) (domain.Comment
 	if !ok || user.ID != id || user.Login == "" {
 		return domain.CommentAuthor{}, authn.ErrInvalidSession
 	}
-	return domain.CommentAuthor{ID: id, Login: user.Login}, nil
+	return domain.CommentAuthor{ID: id, Login: user.Login, AvatarURL: user.AvatarURL}, nil
 }
 
 // decorateComments дополняет страницу одним batch; false означает конкурентно удалённого автора.
@@ -80,6 +80,7 @@ func (uc *NotebookUsecase) decorateComments(ctx context.Context, items []domain.
 			return false, nil
 		}
 		items[i].Author.Login = user.Login
+		items[i].Author.AvatarURL = user.AvatarURL
 	}
 	return true, nil
 }
