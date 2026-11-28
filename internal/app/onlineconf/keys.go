@@ -44,11 +44,12 @@ type keysHandler struct {
 	store          keysRepository
 	users          identityv1.UsersClient
 	requestRefresh func()
+	readSnapshot   func(context.Context) (ProductView, error)
 }
 
 // newKeysHandler регистрирует маршруты внутри защищённой ветки.
-func newKeysHandler(store keysRepository, users identityv1.UsersClient, requestRefresh func()) *http.ServeMux {
-	h := keysHandler{store: store, users: users, requestRefresh: requestRefresh}
+func newKeysHandler(store keysRepository, users identityv1.UsersClient, requestRefresh func(), readSnapshot func(context.Context) (ProductView, error)) *http.ServeMux {
+	h := keysHandler{store: store, users: users, requestRefresh: requestRefresh, readSnapshot: readSnapshot}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /admin/access", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -56,10 +57,16 @@ func newKeysHandler(store keysRepository, users identityv1.UsersClient, requestR
 	mux.HandleFunc("GET /admin/keys", h.list)
 	mux.HandleFunc("POST /admin/keys", h.create)
 	mux.HandleFunc("GET /admin/keys/{name}", h.get)
+	mux.HandleFunc("GET /admin/keys/{name}/evaluate", h.evaluate)
 	mux.HandleFunc("PUT /admin/keys/{name}", h.update)
 	mux.HandleFunc("DELETE /admin/keys/{name}", h.delete)
 	mux.HandleFunc("GET /admin/users/resolve", h.resolve)
 	return mux
+}
+
+// validKeyName проверяет полное имя ключа и его принадлежность области.
+func validKeyName(name, scope string) bool {
+	return slices.Contains(keyScopes(), scope) && strings.HasPrefix(name, scope+".") && keyName.MatchString(name)
 }
 
 // validText проверяет текстовые поля перед передачей в PostgreSQL.
@@ -135,7 +142,7 @@ func (h keysHandler) create(w http.ResponseWriter, r *http.Request) {
 	fields, err := readFields(w, r)
 	var k keyRecord
 	if err != nil || !readField(fields, "name", &k.Name) || !readField(fields, "scope", &k.Scope) || !readField(fields, "type", &k.Type) ||
-		!slices.Contains(keyScopes(), k.Scope) || !strings.HasPrefix(k.Name, k.Scope+".") || !keyName.MatchString(k.Name) {
+		!validKeyName(k.Name, k.Scope) {
 		writeKeyError(w, errValidation)
 		return
 	}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
-	"strings"
 	"time"
 )
 
@@ -103,7 +101,7 @@ func (e SnapshotEntry) snapshotRules() (include, exclude []snapshotUser, ok bool
 
 // validName проверяет принадлежность имени к scope.
 func (e SnapshotEntry) validName(name string) bool {
-	return slices.Contains(keyScopes(), e.Scope) && strings.HasPrefix(name, e.Scope+".") && keyName.MatchString(name)
+	return validKeyName(name, e.Scope)
 }
 
 // valid проверяет, что сериализованные данные снимка соответствуют типу настройки.

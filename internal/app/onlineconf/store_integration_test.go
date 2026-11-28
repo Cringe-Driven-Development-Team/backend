@@ -100,7 +100,7 @@ func TestKeysPostgres(t *testing.T) {
 	}
 	directory := &testDirectory{}
 	var refreshes atomic.Int32
-	handler := newRouter(testAdmin{}, newKeysHandler(keyStore{pool}, directory, func() { refreshes.Add(1) }), "test")
+	handler := newRouter(testAdmin{}, newKeysHandler(keyStore{pool}, directory, func() { refreshes.Add(1) }, nil), "test")
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/admin/"+path, strings.NewReader(body))
 		r.Header.Set("X-BFF-Key", "test")
@@ -211,7 +211,7 @@ func TestKeysPostgres(t *testing.T) {
 	check("GET", "users/resolve?id=17", "", 503)
 	directory.unavailable = false
 	pool.Close()
-	handler = newRouter(testAdmin{}, newKeysHandler(keyStore{open()}, directory, nil), "test")
+	handler = newRouter(testAdmin{}, newKeysHandler(keyStore{open()}, directory, nil, nil), "test")
 	if after := check("GET", flag, "", 200); after != before {
 		t.Fatalf("stored flag changed after reconnect: %s", after)
 	}

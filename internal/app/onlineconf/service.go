@@ -89,7 +89,7 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 	store := keyStore{pool: pool}
 	cache := &redisSnapshots{client: cacheClient, prefix: "{onlineconf:v1}"}
 	refresher := newSnapshotRefresher(store, cache, logger)
-	admin := newKeysHandler(store, identityv1.NewUsersClient(conn), refresher.RequestRefresh)
+	admin := newKeysHandler(store, identityv1.NewUsersClient(conn), refresher.RequestRefresh, cache.ProductView)
 	server := &http.Server{
 		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey, productHandler(identityv1.NewSessionClient(conn), cache.ProductView, bffKey, workspaceKey)),
 		ReadHeaderTimeout: 2 * time.Second,

@@ -96,7 +96,7 @@ func TestKeysRefreshAfterCommit(t *testing.T) {
 			if !skipNotification {
 				refresher.RequestRefresh()
 			}
-		})
+		}, nil)
 		handler := newRouter(testAdmin{}, admin, "test")
 		r := httptest.NewRequest(method, "/admin/keys"+name, strings.NewReader(body))
 		r.Header.Set("X-BFF-Key", "test")
