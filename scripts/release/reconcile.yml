@@ -18,10 +18,11 @@
       register: reconcile_facts
       changed_when: false
 
+    # В stdout с become попадают строки sudo (например, «unable to resolve host»): берём только JSON
     - name: Write the controller report
       ansible.builtin.copy:
         dest: "{{ reconcile_result_path }}"
-        content: "{{ reconcile_facts.stdout | from_json | to_json }}\n"
+        content: "{{ reconcile_facts.stdout_lines | select('match', '^[{]') | last | from_json | to_json }}\n"
         mode: "0600"
       delegate_to: localhost
       become: false

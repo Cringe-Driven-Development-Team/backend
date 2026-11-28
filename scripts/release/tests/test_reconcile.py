@@ -107,7 +107,7 @@ class Reconcile(unittest.TestCase):
                 reconciled_inventory({**self.facts, 'identity': fact(self.desired['identity'], **change)},
                                      self.interrupted)
 
-    def run_cd(self, requested_tag, facts, observed):
+    def run_cd(self, requested_tag, facts, observed, reconcile_expected=True):
         """Проходит prepare, begin и reconcile обычного CD после прерванной операции."""
         env = {'GITHUB_RUN_ID': '9', 'GITHUB_RUN_ATTEMPT': '1', 'RELEASE_ACTION': 'deploy', 'RELEASE_SERVICES': 'all',
                'RELEASE_TAG': requested_tag, 'GITHUB_REPOSITORY': service_deploy.REPOSITORY,
@@ -130,6 +130,8 @@ class Reconcile(unittest.TestCase):
             self.assertEqual(execute('init', path), 0)
             self.assertEqual(execute('prepare', path), 0)
             prepared = json.loads(path.read_text())
+            if not reconcile_expected:
+                return 0, prepared, inspect
             self.assertEqual(prepared['desired'], {})
             pathlib.Path(directory, 'copy.json').write_text(path.read_text())
             self.assertEqual(execute('begin', path), 1)
@@ -158,6 +160,17 @@ class Reconcile(unittest.TestCase):
         self.assertEqual(state['desired'], {})
         self.assertIsNone(state['deployment_id'])
         self.assertIn('workspace: контейнер не найден', service_deploy.summary(state))
+
+    def test_first_onlineconf_install_after_a_complete_deployment_needs_no_reconciliation(self):
+        # Последняя успешная выкладка была до OnlineConf: три сервиса, OnlineConf выбран впервые
+        observed = {name: self.before[name] for name in SERVICES if name != 'onlineconf'}
+        self.interrupted = {**self.interrupted, 'before': observed, 'desired': observed}
+        code, state, inspect = self.run_cd('release-' + TARGET, self.facts, observed, reconcile_expected=False)
+        self.assertEqual(code, 0)
+        inspect.assert_not_called()
+        self.assertNotIn('interrupted', state)
+        self.assertEqual(state['before'], observed)
+        self.assertEqual(state['desired'], self.target)
 
     def test_complete_observation_needs_no_vps_reconciliation(self):
         with patch.object(service_deploy, 'inspect_vps') as inspect:

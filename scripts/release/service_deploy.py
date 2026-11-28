@@ -255,7 +255,7 @@ def prepare(api, state):
                     kernel_ref=version.get('kernel_ref'), image_id=version['image_id'])
         if name == 'environments':
             pull_anonymous(version['kernel_ref'])
-    if prior and not first and missing_services(before):
+    if prior and not first and missing_services(before, selected):
         state['interrupted'] = {key: prior[key] for key in ('run_id', 'run_attempt', 'before', 'desired')}
         return
     plan(api, state, before)
