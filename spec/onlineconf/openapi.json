@@ -3,12 +3,16 @@
   "info": {
     "title": "Cellestial OnlineConf API",
     "version": "1.0.0",
-    "description": "Внутренний административный HTTP API OnlineConf. Пути заданы от корня сервиса. Межсервисное подключение использует mTLS. Сервис проверяет X-BFF-Key, затем пользовательский Bearer-токен и роль onlineconf_admin в Identity, затем параметры и тело запроса."
+    "description": "Внутренний административный HTTP API OnlineConf. Пути заданы от корня сервиса. Межсервисное подключение использует mTLS. Сервис проверяет X-BFF-Key, затем пользовательский Bearer-токен и роль onlineconf_admin в Identity, затем параметры и тело запроса. Продуктовый метод /api/v1/onlineconf/me роли не требует (backend#158)."
   },
   "tags": [
     {
       "name": "admin",
       "description": "Проверка доступа и управление ключами OnlineConf."
+    },
+    {
+      "name": "product",
+      "description": "Публичные настройки продукта для пользователя текущей сессии (backend#158)."
     }
   ],
   "security": [
@@ -580,6 +584,44 @@
           }
         ]
       }
+    },
+    "/api/v1/onlineconf/me": {
+      "get": {
+        "summary": "Публичные настройки продукта для текущей сессии",
+        "description": "Продуктовый, не административный метод: роль onlineconf_admin не нужна. Вызывают доверенные BFF (X-BFF-Key) и Workspace с Bearer пользователя; пользователь определяется по сессии в Identity, user_id и параметр экрана не принимаются. Возвращает только два публичных значения — без правил, процентов, списков пользователей и произвольных ключей.",
+        "operationId": "getProductSettings",
+        "tags": [
+          "product"
+        ],
+        "responses": {
+          "200": {
+            "description": "Эффективные значения для пользователя сессии.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSettings"
+                },
+                "example": {
+                  "notebook_max_cells": 500,
+                  "notebook_run_all": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProductForbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SnapshotUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1020,6 +1062,26 @@
             "description": "Все допустимые области."
           }
         }
+      },
+      "ProductSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "notebook_max_cells",
+          "notebook_run_all"
+        ],
+        "properties": {
+          "notebook_max_cells": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Эффективное значение bff.notebook_max_cells, общее для всех. Отсутствие ключа на свежем снимке, неверный тип или значение вне диапазона — 1000."
+          },
+          "notebook_run_all": {
+            "type": "boolean",
+            "description": "Решение флага workspace.notebook_run_all для пользователя сессии по правилам #156. Отсутствие ключа на свежем снимке — true."
+          }
+        }
       }
     },
     "responses": {
@@ -1202,6 +1264,54 @@
                 "value": {
                   "code": "internal_error",
                   "message": "Не удалось выполнить операцию",
+                  "request_id": "onlineconf-example"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProductForbidden": {
+        "description": "Отсутствующий, неверный или повторяющийся ключ доверенного вызывающего сервиса. Роль onlineconf_admin не требуется.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "s2s_forbidden": {
+                "summary": "s2s_forbidden",
+                "value": {
+                  "code": "s2s_forbidden",
+                  "message": "service access forbidden",
+                  "request_id": "onlineconf-example"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SnapshotUnavailable": {
+        "description": "Снимок настроек недоступен или просрочен (#157), либо недоступна проверка сессии в Identity. Значения по умолчанию не подставляются.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "onlineconf_unavailable": {
+                "summary": "onlineconf_unavailable",
+                "value": {
+                  "code": "onlineconf_unavailable",
+                  "message": "onlineconf snapshot unavailable",
+                  "request_id": "onlineconf-example"
+                }
+              },
+              "dependency_unavailable": {
+                "summary": "dependency_unavailable",
+                "value": {
+                  "code": "dependency_unavailable",
+                  "message": "authorization unavailable",
                   "request_id": "onlineconf-example"
                 }
               }
