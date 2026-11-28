@@ -4,13 +4,15 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from service_deploy import (
     ReleaseError, SERVICES, check_compatibility, check_inventory, confirmed_inventory,
-    execute, manifest_versions, parse_selection, report_snapshot, result_outcome, same_inventory,
+    deployment_outcome, execute, manifest_versions, parse_selection, report_snapshot, result_outcome,
+    run_playbook, same_inventory, summary,
 )
 from service_artifacts import validate_manifest
 
@@ -24,7 +26,7 @@ class ServiceDeployment(unittest.TestCase):
         }
         self.desired = {service: dict(version) for service, version in self.before.items()}
         self.desired['identity'].update(image_ref='identity-new', source_sha='c' * 40)
-        self.checks = {'identity': {'image': 'passed', 'ready': 'passed', 'smoke': 'passed'}}
+        self.checks = {'identity': {'image': 'passed', 'ready': 'passed'}}
 
     def test_selection_rejects_duplicates_and_unknown_services(self):
         self.assertEqual(parse_selection('all'), list(SERVICES))
@@ -69,8 +71,44 @@ class ServiceDeployment(unittest.TestCase):
         self.assertEqual(result_outcome(['identity'], self.desired, self.before, self.checks, 0), 'error')
         self.assertEqual(result_outcome(['identity'], self.desired, {}, self.checks, 0), 'error')
         self.assertEqual(result_outcome(['identity'], self.desired, self.desired, self.checks, 1), 'error')
+        self.assertEqual(result_outcome(['identity'], self.desired, self.desired,
+                                        {'identity': {'image': 'passed'}}, 0), 'error')
+        self.assertEqual(result_outcome(['identity'], self.desired, self.desired,
+                                        {**self.checks, 'workspace': {'ready': 'failed'}}, 0), 'success')
         self.checks['identity']['ready'] = 'failed'
         self.assertEqual(result_outcome(['identity'], self.desired, self.desired, self.checks, 1), 'failure')
+
+    def test_deploy_and_rollback_consume_local_ansible_observations(self):
+        fixture = pathlib.Path(__file__).parent / 'fixtures' / 'backend-microservices-contract.json'
+        report = json.loads(fixture.read_text())['result']
+        for action in ('deploy', 'rollback'):
+            for ready, returncode, expected in [
+                ('passed', 0, 'success'), ('failed', 0, 'failure'),
+                (None, 0, 'error'), ('passed', 1, 'error'),
+            ]:
+                with self.subTest(action=action, ready=ready, returncode=returncode):
+                    state = {**report, 'action': action, 'first_cutover': False, 'error_stage': None}
+                    state['checks'] = {name: {'image': 'unknown', 'ready': 'unknown'}
+                                       for name in state['selected_services']}
+                    checks = {name: {'image': 'passed'} for name in state['selected_services']}
+                    if ready is not None:
+                        for service_checks in checks.values():
+                            service_checks['ready'] = ready
+
+                    def ansible(command, **_):
+                        settings = json.loads(pathlib.Path(command[5][1:]).read_text())
+                        self.assertEqual(settings['microservices_action'], action)
+                        pathlib.Path(settings['microservices_result_path']).write_text(json.dumps({
+                            'observed': report['observed'], 'checks': checks,
+                        }))
+                        return SimpleNamespace(returncode=returncode)
+
+                    env = dict(ANSIBLE_DIR='.', DEPLOY_KEY_PATH='key', JUMP_KNOWN_HOSTS='known_hosts')
+                    with patch.dict(os.environ, env), patch('service_deploy.subprocess.run', side_effect=ansible):
+                        run_playbook(state)
+                    self.assertEqual(deployment_outcome(state), expected)
+                    self.assertIn('Образ / readiness', summary(state))
+                    self.assertNotIn('BFF SHA', summary(state))
 
     def test_partial_observation_keeps_verified_runtime_artifact_metadata(self):
         env = self.before['environments']

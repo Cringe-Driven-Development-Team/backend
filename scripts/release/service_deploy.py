@@ -10,7 +10,7 @@ import tempfile
 from release import GitHub, REPOSITORY, RUN_ROOT, ReleaseError, HistoricalRunMissing, md, save, source_guard, validate_sha
 
 SERVICES = ('identity', 'workspace', 'environments')
-CHECKS = ('image', 'ready', 'smoke')
+CHECKS = ('image', 'ready')
 TERMINAL = ('success', 'failure', 'error')
 
 
@@ -79,8 +79,6 @@ def report_snapshot(state):
         'selected_services', 'before', 'desired', 'observed', 'checks',
     )}
     result.update(schema_version=2, source_sha=state['target_sha'])
-    if state.get('bff_version'):
-        result['bff_version'] = state['bff_version']
     return result
 
 
@@ -146,7 +144,7 @@ def read_deployment(api, row):
         check_inventory(result[key])
     checks = result.get('checks')
     if (not isinstance(checks, dict) or set(checks) != set(result['selected_services'])
-            or any(not isinstance(values, dict) or set(values) != set(CHECKS)
+            or any(not isinstance(values, dict) or set(values) - {'smoke'} != set(CHECKS)
                    or any(value not in ('passed', 'failed', 'unknown') for value in values.values())
                    for values in checks.values())):
         raise ReleaseError('Invalid service check observations')
@@ -316,9 +314,6 @@ def run_playbook(state):
                     value = checks.get(name, {}).get(check)
                     if value in ('passed', 'failed'):
                         state['checks'][name][check] = value
-            bff = observed.get('bff_version')
-            if bff:
-                state['bff_version'] = validate_sha(bff)
 
 
 def summary(state):
@@ -326,9 +321,8 @@ def summary(state):
              f'- Операция: {state["action"]}', f'- Выпуск: {md(state.get("release_tag") or "не выбран")}',
              f'- Deployment: {state.get("deployment_id") or "не создан"}',
              f'- Infra SHA: {state.get("infra_sha") or "не определён"}',
-             f'- BFF SHA: {state.get("bff_version") or "не подтверждён"}',
              f'- Записанный результат: {state.get("terminal_status") or "не подтверждён"}', '',
-             '| Сервис | До | Запрошено | Наблюдалось | Образ / readiness / smoke |',
+             '| Сервис | До | Запрошено | Наблюдалось | Образ / readiness |',
              '| --- | --- | --- | --- | --- |']
     if state.get('clean_start'):
         lines.insert(3, '- Первый запуск на отдельной пустой БД')

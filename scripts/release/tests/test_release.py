@@ -40,11 +40,11 @@ class Selection(unittest.TestCase):
         for key in r.CHECKS: state['checks'][key] = 'passed'
         state['ansible_rc'] = 0
         self.assertEqual(r.outcome(state), 'success')
-        state['checks']['external'] = 'failed'
+        state['checks']['ready'] = 'failed'
         self.assertEqual(r.outcome(state), 'failure')
-        state['checks']['external'] = 'unknown'
+        state['checks']['ready'] = 'unknown'
         self.assertEqual(r.outcome(state), 'error')
-        state['checks']['external'] = 'passed'; state['ansible_rc'] = None
+        state['checks']['ready'] = 'passed'; state['ansible_rc'] = None
         self.assertEqual(r.outcome(state), 'error')
 
 if __name__ == '__main__': unittest.main()
@@ -107,11 +107,11 @@ class Producer(unittest.TestCase):
         self.assertFalse(history[0]['trusted'])
         with self.assertRaises(r.ReleaseError):r.select_target(history)
     def test_summary_partial_facts_and_rollback_direction(self):
-        s=self.state();s['checks']['internal']='passed';s['checks']['external']='failed'
+        s=self.state();s['checks']['image']='passed';s['checks']['ready']='failed'
         text=r.summary(s)
         self.assertIn('Снимаемые изменения',text)
-        self.assertIn('Внутренний Go с gateway | passed',text)
-        self.assertIn('Внешний BFF → Go → PostgreSQL | failed',text)
+        self.assertIn('Образ запущенного контейнера | passed',text)
+        self.assertIn('Локальная готовность контейнера | failed',text)
         self.assertIn('История изменений неполная',text)
         self.assertIn('Health Check: ❌',text)
     def test_consumer_fixture_accepted_without_frontend_assets(self):
