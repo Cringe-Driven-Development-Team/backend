@@ -461,6 +461,12 @@ func appDatabase(t *testing.T, db *pgxpool.Pool, schema string) string {
 			t.Fatal(err)
 		}
 	}
+	// Назначения администраторов меняет оператор, а Identity их только читает.
+	if schema == "identity" {
+		if _, err := db.Exec(ctx, "REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON identity.onlineconf_admins FROM "+q); err != nil {
+			t.Fatal(err)
+		}
+	}
 	dsn, err := url.Parse(db.Config().ConnString())
 	if err != nil {
 		t.Fatal(err)
