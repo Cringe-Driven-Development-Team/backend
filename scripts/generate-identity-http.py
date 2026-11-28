@@ -24,12 +24,17 @@ def generate(check=False, service="identity"):
     service_title = service.capitalize()
     api_package = f"{service}api"
     source["info"]["title"] = f"Cellestial {service_title} API"
-    identity_paths = ("/auth/", "/users/")
-    source["paths"] = {
-        p: v for p, v in source["paths"].items()
-        if p.startswith(identity_paths) == (service == "identity")
-        and (service == "identity" or "/files/" not in p)
-    }
+    if service == "identity":
+        source["paths"] = {
+            path: entry for path, entry in source["paths"].items()
+            if path.startswith(("/auth/", "/users/"))
+        }
+    else:
+        source["paths"] = {
+            path: entry for path, entry in source["paths"].items()
+            if (path == "/notebooks" or path.startswith(("/notebooks/", "/runtime-sessions/")))
+            and "/files/" not in path
+        }
     source["components"]["schemas"]["Error"]["properties"]["request_id"] = {"type": "string", "maxLength": 64}
     source["components"]["schemas"]["Error"]["properties"]["code"]["enum"].extend(
         ["dependency_unavailable", "deadline_exceeded"]
