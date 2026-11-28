@@ -92,7 +92,12 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 	agent := environmentsrpc.NewAgent(environmentsv1.NewSessionAgentClient(environments))
 	users := notebookidentity.NewUsers(identityv1.NewUsersClient(identity))
 	verify := sessionidentity.NewSession(identityv1.NewSessionClient(identity))
-	readConfig := productconfig.NewReader(strings.TrimRight(c.OnlineConfURL, "/"), c.OnlineConfKey, observability.NewHTTPClientMetrics(registry))
+	// OnlineConf принимает Workspace по mTLS с сертификатом этого сервиса.
+	onlineConfTLS, err := mtls.ClientConfig(c.TLS, "onlineconf.internal.cellestial.ru")
+	if err != nil {
+		return err
+	}
+	readConfig := productconfig.NewReader(strings.TrimRight(c.OnlineConfURL, "/"), c.OnlineConfKey, onlineConfTLS, observability.NewHTTPClientMetrics(registry))
 	key := []byte(c.CursorKey)
 	books := notebooks.NewNotebookUsecase(notebookpostgres.NewNotebookRepository(pool), store, cursor.New(key),
 		notebooks.WithCellLimit(func(ctx context.Context) (int, error) {

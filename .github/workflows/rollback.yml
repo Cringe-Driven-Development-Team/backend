@@ -9,7 +9,7 @@ on:
         default: ''
         type: string
       services:
-        description: 'all или список identity,workspace,environments через запятую'
+        description: 'all или список identity,workspace,environments,onlineconf через запятую'
         default: all
         type: string
 

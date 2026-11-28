@@ -37,6 +37,12 @@
           "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
           "migration_version": 1
+        },
+        "onlineconf": {
+          "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-onlineconf@sha256:7777777777777777777777777777777777777777777777777777777777777777",
+          "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
+          "migration_version": 1
         }
       },
       "desired": {
@@ -54,6 +60,12 @@
         },
         "environments": {
           "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-environments@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
+          "migration_version": 1
+        },
+        "onlineconf": {
+          "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-onlineconf@sha256:7777777777777777777777777777777777777777777777777777777777777777",
           "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
           "migration_version": 1
@@ -93,6 +105,12 @@
         "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
         "migration_version": 1
+      },
+      "onlineconf": {
+        "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-onlineconf@sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
+        "migration_version": 1
       }
     },
     "desired": {
@@ -110,6 +128,12 @@
       },
       "environments": {
         "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-environments@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
+        "migration_version": 1
+      },
+      "onlineconf": {
+        "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-onlineconf@sha256:7777777777777777777777777777777777777777777777777777777777777777",
         "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
         "migration_version": 1
@@ -134,6 +158,12 @@
       },
       "environments": {
         "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-environments@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
+        "migration_version": 1
+      },
+      "onlineconf": {
+        "image_ref": "ghcr.io/cringe-driven-development-team/cellestial-onlineconf@sha256:7777777777777777777777777777777777777777777777777777777777777777",
         "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_revision": "cccccccccccccccccccccccccccccccccccccccc",
         "migration_version": 1

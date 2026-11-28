@@ -33,7 +33,7 @@ func TestReadSettings(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer server.Close()
-			read := NewReader(server.URL, "workspace", observability.NewHTTPClientMetrics(prometheus.NewRegistry()))
+			read := NewReader(server.URL, "workspace", nil, observability.NewHTTPClientMetrics(prometheus.NewRegistry()))
 			ctx := WithBearer(observability.WithRequestID(t.Context(), "request-1"), "session")
 			if got, err := read(ctx); got != tc.want || !errors.Is(err, tc.wantErr) {
 				t.Fatalf("settings = %+v, %v", got, err)

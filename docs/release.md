@@ -42,10 +42,10 @@ smoke с тестовым mTLS, PostgreSQL и Redis.
 Каждый образ содержит запускаемый сервис и `migrate`. Образ Identity также
 содержит `identity-admin`. В Environments входят provisioning tools,
 wheel агента с checksum и оба systemd unit-файла. Локально на исходниках
-трёх сервисов упаковку можно проверить так:
+четырёх сервисов упаковку можно проверить так:
 
 ```bash
-for service in identity workspace environments; do
+for service in identity workspace environments onlineconf; do
   docker build -f build/services.Dockerfile --target "$service" -t "cellestial-$service:local" .
   bash scripts/check-service-image.sh "$service" "cellestial-$service:local"
 done
@@ -70,10 +70,12 @@ kernel проверяются по конфигурации образа Environ
   `protocol_revision` и картой `services`. Для каждого сервиса указаны digest-ref,
   исходный SHA, платформа, image ID, версия схемы, имя, размер и SHA-256 архива.
   Environments дополнительно фиксирует версию агента и kernel digest-ref.
-- `identity-image.tar.gz`, `workspace-image.tar.gz` и `environments-image.tar.gz`.
+- `identity-image.tar.gz`, `workspace-image.tar.gz`, `environments-image.tar.gz` и
+  `onlineconf-image.tar.gz`. В выпусках до backend#177 архива OnlineConf нет; такой
+  выпуск принимается для операций, где OnlineConf не выбран.
   Перед загрузкой каждого архива CI сверяет image ID после `docker save` и
   `docker load`.
-- `SHA256SUMS` для трёх архивов и точных байтов manifest.
+- `SHA256SUMS` для архивов и точных байтов manifest.
 
 CI сериализует выпуск одного SHA. Draft получает manifest первым. Повтор
 скачивает загруженные файлы и добавляет только отсутствующие. Восстановленный
@@ -86,7 +88,7 @@ CI сериализует выпуск одного SHA. Draft получает 
 ```sh
 gh release download <tag> -R Cringe-Driven-Development-Team/backend
 sha256sum -c SHA256SUMS
-for service in identity workspace environments; do
+for service in identity workspace environments onlineconf; do
   docker load -i "$service-image.tar.gz"
 done
 ```
@@ -207,6 +209,17 @@ Ansible создаст три схемы в отдельной PostgreSQL баз
 `deployment-result.json` в отдельный GitHub artifact и после его загрузки
 обновляет Deployment. В Summary указаны выбранные и наблюдавшиеся версии,
 проверки каждого сервиса и ссылки на сравнение SHA.
+
+#### Первая установка OnlineConf
+
+OnlineConf добавлен после перехода на микросервисы. Первый CD с ним выбирает
+`services=all`: сервис, которого нет в последнем подтверждённом inventory, ставится
+без cutover, если он выбран; иначе CD отклоняется как неполный inventory. Сверка
+VPS2 не считает расхождением отсутствие ещё не устанавливавшегося OnlineConf.
+Rollback выбирает только уже выкаченные сервисы. Пакет
+`ghcr.io/cringe-driven-development-team/cellestial-onlineconf` после первой
+публикации должен стать публичным и связанным с репозиторием: иначе CI выпуска
+остановится на `verify_public_package`.
 
 #### Сверка VPS2 после прерванной операции
 

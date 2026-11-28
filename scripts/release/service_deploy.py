@@ -11,7 +11,14 @@ from release import GitHub, REPOSITORY, RUN_ROOT, SELECTION, ReleaseError, Histo
 
 SOURCE_URL = 'https://github.com/' + REPOSITORY
 
-SERVICES = ('identity', 'workspace', 'environments')
+SERVICES = ('identity', 'workspace', 'environments', 'onlineconf')
+# Сервисы, добавленные после перехода: первая установка идёт без cutover, если сервис выбран (backend#177).
+ADDED = frozenset({'onlineconf'})
+
+
+def missing_services(before, selected=()):
+    """Сервисы, без которых inventory before неполон с учётом первой установки выбранных ADDED."""
+    return set(SERVICES) - set(before) - (ADDED & set(selected))
 CHECKS = ('image', 'ready')
 TERMINAL = ('success', 'failure', 'error')
 
@@ -32,9 +39,10 @@ def check_compatibility(before, desired, selected, *, first):
         if before or selected != list(SERVICES):
             raise ReleaseError('First cutover requires all services and no previous service inventory')
         return
-    if set(before) != set(SERVICES):
+    if missing_services(before, selected):
         raise ReleaseError('Service inventory is incomplete; reconcile it before deployment')
-    if any(desired[service]['migration_version'] < before[service]['migration_version'] for service in selected):
+    if any(service in before and desired[service]['migration_version'] < before[service]['migration_version']
+           for service in selected):
         raise ReleaseError('Target schema is older than a running schema; use the documented restore procedure')
 
 
@@ -220,8 +228,10 @@ def prepare(api, state):
     # The host validates its cutover marker and recovery evidence before changing data.
     before = {} if first else prior.get('observed', {})
     if state['action'] == 'rollback':
-        if first or set(before) != set(SERVICES):
+        if first or missing_services(before):
             raise ReleaseError('First cutover restores the monolith by the backup runbook')
+        if set(selected) - set(before):
+            raise ReleaseError('Rollback can select only services that are deployed; choose them explicitly')
         requested_sha = state['requested_sha']
         target, candidates = choose_rollback(api, rows, before, selected, validate_sha(requested_sha) if requested_sha else '')
         manifest_cache = {}
@@ -245,7 +255,7 @@ def prepare(api, state):
                     kernel_ref=version.get('kernel_ref'), image_id=version['image_id'])
         if name == 'environments':
             pull_anonymous(version['kernel_ref'])
-    if prior and not first and set(before) != set(SERVICES):
+    if prior and not first and missing_services(before):
         state['interrupted'] = {key: prior[key] for key in ('run_id', 'run_attempt', 'before', 'desired')}
         return
     plan(api, state, before)
@@ -298,6 +308,8 @@ def reconciled_inventory(facts, interrupted):
         fact = facts.get(name) if isinstance(facts.get(name), dict) else {}
         options = [version for version in (interrupted['desired'].get(name), interrupted['before'].get(name)) if version]
         matched = [version for version in options if running_version(fact, version)]
+        if not options and name in ADDED and not fact.get('running'):
+            continue  # сервис ещё не устанавливался: следующая операция поставит его впервые
         if not fact.get('running'):
             problems.append(f'{name}: контейнер не найден или не запущен')
         elif not matched:

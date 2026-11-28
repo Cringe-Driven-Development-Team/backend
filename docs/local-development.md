@@ -43,17 +43,21 @@
    `onlineconf.goose_db_version`. Используйте подключение этой роли при запуске:
 
    ```sh
-   ONLINECONF_DATABASE_URL="$ONLINECONF_DATABASE_URL" \
-     ONLINECONF_HTTP_ADDR=127.0.0.1:8085 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
+   DATABASE_URL="$ONLINECONF_DATABASE_URL" \
+     HTTP_ADDR=127.0.0.1:8085 ADMIN_ADDR=127.0.0.1:9095 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
      TLS_CERT_FILE=/path/to/onlineconf.crt TLS_KEY_FILE=/path/to/onlineconf.key \
      TLS_CA_FILE=/path/to/ca.crt BFF_API_KEY="$BFF_API_KEY" go run ./cmd/onlineconf
    ```
 
-3. Проверьте `GET http://127.0.0.1:8085/health` для проверки процесса.
+3. HTTP API OnlineConf работает по mTLS: принимает клиентские сертификаты с DNS SAN
+   `bff.internal.cellestial.ru` и `workspace.internal.cellestial.ru` от того же CA.
+   Готовность — `GET http://127.0.0.1:9095/readyz` (БД и Redis доступны), метрики —
+   `/metrics` там же. В production это `HTTP_ADDR=:8080` и `ADMIN_ADDR=:9091`.
+   Проверьте `GET https://127.0.0.1:8085/health` с клиентским сертификатом BFF.
    Настройте одинаковый непустой `BFF_API_KEY` у OnlineConf и вызывающего BFF.
    Для локального запроса передайте его в `X-BFF-Key`. Получите
    пользовательский access token через Identity и передайте его в
-   `Authorization: Bearer …` на `GET http://127.0.0.1:8085/admin/access`.
+   `Authorization: Bearer …` на `GET https://127.0.0.1:8085/admin/access`.
    Без правильного ключа ответ `403 s2s_forbidden`. С правильным ключом
    без действующей сессии ответ `401 unauthorized`, без роли `403 forbidden`,
    с ролью `204`. Ошибки доступа возвращаются в JSON.
@@ -233,7 +237,9 @@ AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=devkey AWS_SECRET_ACCESS_KEY=devsecret \
 BFF вызывает `GET /api/v1/onlineconf/me` с `X-BFF-Key` и пользовательским
 `Authorization: Bearer …`. Workspace самостоятельно вызывает тот же метод с
 `X-Workspace-Key` и Bearer текущего запроса. Для Workspace задайте
-`ONLINECONF_URL` (внутренний базовый URL OnlineConf) и один и тот же
+`ONLINECONF_URL` (внутренний базовый URL OnlineConf, в production
+`https://onlineconf.internal.cellestial.ru:8080`; Workspace подключается по mTLS
+со своим сертификатом) и один и тот же
 `ONLINECONF_WORKSPACE_KEY` в Workspace и OnlineConf. Используйте отдельный
 сервисный секрет и защищённый внутренний канал между сервисами. Identity
 проверяет действительность сессии по gRPC. Доступ к административным
