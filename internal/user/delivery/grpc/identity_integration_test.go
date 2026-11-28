@@ -286,8 +286,8 @@ func TestIdentityService(t *testing.T) {
 		t.Fatalf("OnlineConf directory lookup by login: %v", lookupErr)
 	}
 
-	if _, callErr := identityv1.NewSessionClient(onlineconfConn).ValidateSession(rpcCtx, roleRequest); status.Code(callErr) != codes.PermissionDenied {
-		t.Fatalf("OnlineConf principal reached Workspace session RPC: %v", callErr)
+	if _, callErr := identityv1.NewSessionClient(onlineconfConn).ValidateSession(rpcCtx, roleRequest); callErr != nil {
+		t.Fatalf("OnlineConf principal could not verify session: %v", callErr)
 	}
 	if _, callErr := onlineconfAccess.Authorize(rpcCtx, &identityv1.ValidateSessionRequest{AccessToken: "invalid"}); status.Code(callErr) != codes.Unauthenticated {
 		t.Fatalf("invalid session result: %v", callErr)

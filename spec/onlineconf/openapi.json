@@ -580,6 +580,84 @@
           }
         ]
       }
+    },
+    "/api/v1/onlineconf/me": {
+      "get": {
+        "operationId": "GetOnlineConfMe",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Получить настройки текущей сессии",
+        "description": "Возвращает оба значения из одного свежего снимка. Роль администратора не требуется.",
+        "security": [
+          {
+            "bffKey": [],
+            "sessionBearer": []
+          },
+          {
+            "workspaceKey": [],
+            "sessionBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Действующие настройки.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSettings"
+                },
+                "example": {
+                  "notebook_max_cells": 500,
+                  "notebook_run_all": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Сессия отсутствует или недействительна.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "unauthorized",
+                  "message": "authentication required"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Сервисный ключ отсутствует или неверен.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "service access forbidden"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Свежий снимок или проверка сессии недоступны.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "onlineconf_unavailable",
+                  "message": "OnlineConf unavailable"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -594,6 +672,17 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Пользовательский access-токен с ролью onlineconf_admin."
+      },
+      "workspaceKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Workspace-Key",
+        "description": "Сервисный ключ Workspace для продуктового метода."
+      },
+      "sessionBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Access-токен текущей пользовательской сессии. Проверяется в Identity."
       }
     },
     "schemas": {
@@ -1018,6 +1107,26 @@
               "$ref": "#/components/schemas/Scope"
             },
             "description": "Все допустимые области."
+          }
+        }
+      },
+      "ProductSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "notebook_max_cells",
+          "notebook_run_all"
+        ],
+        "properties": {
+          "notebook_max_cells": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Действующий лимит из bff.notebook_max_cells. По умолчанию 1000."
+          },
+          "notebook_run_all": {
+            "type": "boolean",
+            "description": "Решение для пользователя по workspace.notebook_run_all. При отсутствии флага true."
           }
         }
       }

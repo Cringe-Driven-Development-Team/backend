@@ -10,6 +10,7 @@ import (
 // NotebookUsecase выполняет пользовательские операции с блокнотами через порты.
 type NotebookUsecase struct {
 	repo          Repository
+	cellLimit     func(context.Context) (int, error)
 	users         Users
 	sessions      ActiveSessions
 	newID         func() string
@@ -31,6 +32,11 @@ func NewNotebookUsecase(repo Repository, sessions ActiveSessions, cursor ListCur
 		option(uc)
 	}
 	return uc
+}
+
+// WithCellLimit задаёт чтение действующего лимита перед вставкой.
+func WithCellLimit(read func(context.Context) (int, error)) Option {
+	return func(uc *NotebookUsecase) { uc.cellLimit = read }
 }
 
 // Create создаёт блокнот с именем name и начальной ячейкой кода для владельца ownerID.

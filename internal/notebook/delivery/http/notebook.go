@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
 )
@@ -73,7 +74,7 @@ func (h *Handler) GetNotebook(ctx context.Context, req api.GetNotebookRequestObj
 	return api.GetNotebook200JSONResponse{Body: toAPINotebook(n), Headers: api.GetNotebook200ResponseHeaders{CacheControl: noStore()}}, nil
 }
 
-// CreateCell отвечает 201 с новым блоком; 409 означает предел блоков.
+// CreateCell отвечает 201 с новым блоком; 413 означает достижение лимита ячеек.
 func (h *Handler) CreateCell(ctx context.Context, req api.CreateCellRequestObject) (api.CreateCellResponseObject, error) {
 	hash, err := parseIfMatch(req.Params.IfMatch)
 	if err != nil {
@@ -88,7 +89,9 @@ func (h *Handler) CreateCell(ctx context.Context, req api.CreateCellRequestObjec
 	case errors.Is(err, usecase.ErrIndexOutOfRange), errors.Is(err, usecase.ErrInvalidHash), errors.Is(err, usecase.ErrInvalidCellKind), errors.Is(err, usecase.ErrInvalidDocument):
 		return api.CreateCell400JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
 	case errors.Is(err, usecase.ErrTooManyCells):
-		return api.CreateCell409JSONResponse{Code: api.NotebookEditingErrorCodeValidationError, Message: err.Error()}, nil
+		return api.CreateCell413JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
+	case errors.Is(err, productconfig.ErrUnavailable):
+		return api.CreateCell503JSONResponse{Code: api.ErrorCodeOnlineconfUnavailable, Message: err.Error()}, nil
 	case err != nil:
 		return nil, err
 	}

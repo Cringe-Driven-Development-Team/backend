@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 )
 
@@ -79,9 +80,6 @@ func editingError(err error) (int, api.NotebookEditingError) {
 	case errors.Is(err, usecase.ErrNotebookConflict):
 		status = http.StatusConflict
 		code = api.NotebookEditingErrorCodeNotebookConflict
-	case errors.Is(err, usecase.ErrTooManyCells):
-		status = http.StatusConflict
-		code = api.NotebookEditingErrorCodeTooManyCells
 	case errors.Is(err, usecase.ErrNotebookNotFound), errors.Is(err, usecase.ErrCellNotFound):
 		status = http.StatusNotFound
 		code = api.NotebookEditingErrorCodeNotFound
@@ -100,6 +98,12 @@ func (h *Handler) AddNotebookCell(ctx context.Context, req api.AddNotebookCellRe
 	}
 	result, err := h.uc.AddCell(ctx, req.Id, userID(ctx), hash, domain.CellKind(req.Body.Kind), req.Body.Source, req.Body.Index)
 	if err != nil {
+		switch {
+		case errors.Is(err, usecase.ErrTooManyCells):
+			return api.AddNotebookCell413JSONResponse{Code: api.ErrorCodeValidationError, Message: err.Error()}, nil
+		case errors.Is(err, productconfig.ErrUnavailable):
+			return api.AddNotebookCell503JSONResponse{Code: api.ErrorCodeOnlineconfUnavailable, Message: err.Error()}, nil
+		}
 		status, body := editingError(err)
 		switch status {
 		case http.StatusBadRequest:

@@ -55,14 +55,15 @@ func (r *NotebookRepository) Apply(ctx context.Context, id, ownerID int64, expec
 	if expected == "" {
 		return usecase.Change{}, usecase.ErrInvalidHash
 	}
+	// Проверяем лимит под той же блокировкой, что и вставку, в том числе при конкурирующих ревизиях.
+	if op.Kind == usecase.Insert && n.CellsCount >= op.CellLimit {
+		return usecase.Change{}, usecase.ErrTooManyCells
+	}
 	if expected != n.Revision {
 		return usecase.Change{}, usecase.ErrNotebookConflict
 	}
 	result := usecase.Change{Hash: n.Revision}
 	if op.Kind == usecase.Insert {
-		if n.CellsCount >= usecase.MaxCells {
-			return result, usecase.ErrTooManyCells
-		}
 		if op.CellKind != domain.CellKindCode && op.CellKind != domain.CellKindMarkdown {
 			return result, usecase.ErrInvalidCellKind
 		}

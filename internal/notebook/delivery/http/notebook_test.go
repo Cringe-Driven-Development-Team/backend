@@ -113,7 +113,7 @@ func TestErrors(t *testing.T) {
 		{name: "index за концом", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"code","index":5}`,
 			err: usecase.ErrIndexOutOfRange, wantStatus: http.StatusBadRequest, wantCode: api.ErrorCodeValidationError},
 		{name: "предел блоков", method: http.MethodPost, path: "/notebooks/1/cells", body: `{"kind":"code"}`,
-			err: usecase.ErrTooManyCells, wantStatus: http.StatusConflict, wantCode: api.ErrorCodeValidationError},
+			err: usecase.ErrTooManyCells, wantStatus: http.StatusRequestEntityTooLarge, wantCode: api.ErrorCodeValidationError},
 		{name: "удаление несуществующего блока", method: http.MethodDelete, path: "/notebooks/1/cells/7",
 			err: usecase.ErrCellNotFound, wantStatus: http.StatusNotFound, wantCode: api.ErrorCodeNotFound},
 		{name: "S3 недоступен", method: http.MethodGet, path: "/notebooks/1",

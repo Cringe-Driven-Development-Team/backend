@@ -24,11 +24,12 @@ const (
 // Operation передаёт только запрошенное изменение; Index выбирает legacy-операции
 // только после проверки ревизии ноутбука под блокировкой его строки.
 type Operation struct {
-	Kind     OperationKind
-	CellID   string
-	CellKind domain.CellKind
-	Source   string
-	Index    *int
+	CellLimit int
+	Kind      OperationKind
+	CellID    string
+	CellKind  domain.CellKind
+	Source    string
+	Index     *int
 }
 
 // Change возвращает новую редакцию и ячейку, если её изменяла операция.

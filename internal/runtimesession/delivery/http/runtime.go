@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	D "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/domain"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
@@ -129,6 +130,10 @@ func failureFor(err error) (*failure, error) {
 		status, code, message = 409, "conflict", "Runtime conflict"
 	case errors.Is(err, D.ErrQueueFull):
 		status, code, message = 429, "queue_full", "Runtime queue is full"
+	case errors.Is(err, productconfig.ErrUnavailable):
+		status, code, message = 503, "onlineconf_unavailable", "OnlineConf unavailable"
+	case errors.Is(err, D.ErrRunAllDisabled):
+		status, code, message = 403, "forbidden", "Batch execution disabled"
 	case errors.Is(err, D.ErrUnavailable):
 		status, code, message = 503, "runtime_unavailable", "Runtime unavailable"
 	default:

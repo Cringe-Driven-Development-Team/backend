@@ -12,6 +12,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// ErrRunAllDisabled означает запрет пакетного запуска для сессии.
+var ErrRunAllDisabled = errors.New("batch execution disabled")
+
 var (
 	// ErrWorkspaceClosed запрещает доступ к файлам завершающегося или закрытого runtime.
 	ErrWorkspaceClosed = errors.New("workspace closed")

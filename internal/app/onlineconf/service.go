@@ -31,6 +31,10 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 	if strings.TrimSpace(bffKey) == "" {
 		return errors.New("missing BFF_API_KEY")
 	}
+	workspaceKey := os.Getenv("ONLINECONF_WORKSPACE_KEY")
+	if workspaceKey == bffKey {
+		return errors.New("OnlineConf Workspace key must differ from BFF key")
+	}
 	addr := os.Getenv("ONLINECONF_HTTP_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8085"
@@ -53,6 +57,7 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 		Timeout:    2 * time.Second,
 		Methods: map[string]rpctransport.MethodPolicy{
 			identityv1.OnlineConfAccess_Authorize_FullMethodName: {},
+			identityv1.Session_ValidateSession_FullMethodName:    {},
 			identityv1.Users_BatchGetUsers_FullMethodName:        {},
 			identityv1.Users_BatchResolveUsers_FullMethodName:    {},
 		},
@@ -86,7 +91,7 @@ func Run(ctx context.Context, logger *slog.Logger) (runErr error) {
 	refresher := newSnapshotRefresher(store, cache, logger)
 	admin := newKeysHandler(store, identityv1.NewUsersClient(conn), refresher.RequestRefresh)
 	server := &http.Server{
-		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey),
+		Handler:           newRouter(identityv1.NewOnlineConfAccessClient(conn), admin, bffKey, productHandler(identityv1.NewSessionClient(conn), cache.ProductView, bffKey, workspaceKey)),
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,

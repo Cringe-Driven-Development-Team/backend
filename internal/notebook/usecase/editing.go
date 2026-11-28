@@ -27,7 +27,15 @@ func (uc *NotebookUsecase) AddCell(ctx context.Context, id, ownerID int64, hash 
 	if kind != domain.CellKindCode && kind != domain.CellKindMarkdown {
 		return domain.CellChange{}, ErrInvalidCellKind
 	}
-	r, err := uc.repo.Apply(ctx, id, ownerID, hash, Operation{Kind: Insert, CellID: uc.newID(), CellKind: kind, Source: source, Index: index})
+	limit := MaxCells
+	if uc.cellLimit != nil {
+		var err error
+		limit, err = uc.cellLimit(ctx)
+		if err != nil {
+			return domain.CellChange{}, err
+		}
+	}
+	r, err := uc.repo.Apply(ctx, id, ownerID, hash, Operation{CellLimit: limit, Kind: Insert, CellID: uc.newID(), CellKind: kind, Source: source, Index: index})
 	return domain.CellChange{Hash: r.Hash, Cell: r.Cell}, err
 }
 

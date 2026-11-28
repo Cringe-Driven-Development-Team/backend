@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,5 +51,29 @@ func TestGetActiveReturnsStoreError(t *testing.T) {
 	_, err := NewService(s, nil).GetActive(context.Background(), 7)
 	if !errors.Is(err, fail) {
 		t.Fatal(err)
+	}
+}
+
+// TestBatchProductFlag проверяет, что отказ OnlineConf и выключенный флаг не меняют очередь.
+func TestBatchProductFlag(t *testing.T) {
+	store := NewMockStore(gomock.NewController(t))
+	id := uuid.New()
+	req := D.BatchRequest{RequestID: "batch-1", TimeoutSeconds: 300, Cells: []D.BatchCell{{CellID: "a", SourceHash: strings.Repeat("a", 64)}}}
+	unavailable := errors.New("OnlineConf unavailable")
+	for _, tc := range []struct {
+		enabled       bool
+		readErr, want error
+	}{
+		{false, nil, D.ErrRunAllDisabled},
+		{false, unavailable, unavailable},
+		{true, nil, nil},
+	} {
+		if tc.enabled {
+			store.EXPECT().AdmitBatch(gomock.Any(), int64(7), id, req).Return(D.Batch{}, nil)
+		}
+		svc := NewService(store, nil).WithRunAll(func(context.Context) (bool, error) { return tc.enabled, tc.readErr })
+		if _, err := svc.ExecuteBatch(t.Context(), 7, id, req); !errors.Is(err, tc.want) {
+			t.Fatalf("enabled = %v, error = %v, want %v", tc.enabled, err, tc.want)
+		}
 	}
 }

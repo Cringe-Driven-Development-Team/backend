@@ -23,6 +23,7 @@ import (
 	notebookdelivery "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/delivery/http"
 	notebooks "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/notebook/usecase"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/observability"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/adapters/environmentsrpc"
 	sessionidentity "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/adapters/identityrpc"
 	sessionpostgres "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/runtimesession/adapters/postgres"
@@ -91,13 +92,21 @@ func Run(ctx context.Context, c Config, logger *slog.Logger) (err error) {
 	agent := environmentsrpc.NewAgent(environmentsv1.NewSessionAgentClient(environments))
 	users := notebookidentity.NewUsers(identityv1.NewUsersClient(identity))
 	verify := sessionidentity.NewSession(identityv1.NewSessionClient(identity))
+	readConfig := productconfig.NewReader(strings.TrimRight(c.OnlineConfURL, "/"), c.OnlineConfKey, observability.NewHTTPClientMetrics(registry))
 	key := []byte(c.CursorKey)
 	books := notebooks.NewNotebookUsecase(notebookpostgres.NewNotebookRepository(pool), store, cursor.New(key),
-		notebooks.WithImportDecoder(ipynb.DecodeImport), notebooks.WithImportStream(ipynb.DecodeImportStream), notebooks.WithExport(ipynb.EncodeDocumentStream), notebooks.WithCommentCursor(cursor.NewCommentCodec(key)), notebooks.WithUsers(users))
+		notebooks.WithCellLimit(func(ctx context.Context) (int, error) {
+			settings, readErr := readConfig(ctx)
+			return settings.MaxCells, readErr
+		}), notebooks.WithImportDecoder(ipynb.DecodeImport), notebooks.WithImportStream(ipynb.DecodeImportStream), notebooks.WithExport(ipynb.EncodeDocumentStream), notebooks.WithCommentCursor(cursor.NewCommentCodec(key)), notebooks.WithUsers(users))
+	runtime := sessions.NewService(store, nil, agent).WithRunAll(func(ctx context.Context) (bool, error) {
+		settings, readErr := readConfig(ctx)
+		return settings.RunAll, readErr
+	})
 	worker := sessions.NewWorker(store, control, agent, nil)
 	api, err := httptransport.NewWorkspaceRouter(httptransport.WorkspaceHandlers{
 		NotebookHandler: notebookdelivery.NewHandler(books),
-		RuntimeHandler:  sessiondelivery.NewHandler(sessions.NewService(store, nil, agent)),
+		RuntimeHandler:  sessiondelivery.NewHandler(runtime),
 		Files:           sessiondelivery.NewWorkspaceFileHandler(sessions.NewWorkspaceFiles(store, environmentsrpc.NewFiles(filesv1.NewFilesClient(environments)))),
 	}, verify, c.BFFKey, httpObserver(registry), httpMetrics)
 	if err != nil {
