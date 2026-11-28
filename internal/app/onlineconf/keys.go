@@ -78,6 +78,8 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 func writeKeyError(w http.ResponseWriter, err error) {
 	var pgErr *pgconn.PgError
 	switch {
+	case errors.Is(err, errRolloutStep):
+		httperr.Write(w, 409, "rollout_step_not_allowed", "Переход на этот процент раскатки пока недоступен")
 	case errors.Is(err, errValidation):
 		httperr.Write(w, 400, "validation_error", "Некорректные поля запроса")
 	case errors.Is(err, pgx.ErrNoRows):
