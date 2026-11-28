@@ -197,7 +197,18 @@
                         "login": "admin"
                       },
                       "include_users": [],
-                      "exclude_users": []
+                      "exclude_users": [],
+                      "rollout_policy": {
+                        "stages": [
+                          0,
+                          10,
+                          25,
+                          50,
+                          100
+                        ],
+                        "next_percent": null,
+                        "next_allowed_at": null
+                      }
                     }
                   }
                 }
@@ -337,7 +348,18 @@
                           "id": 17,
                           "login": "user17"
                         }
-                      ]
+                      ],
+                      "rollout_policy": {
+                        "stages": [
+                          0,
+                          10,
+                          25,
+                          50,
+                          100
+                        ],
+                        "next_percent": 50,
+                        "next_allowed_at": "2026-11-28T10:01:00Z"
+                      }
                     }
                   }
                 }
@@ -425,7 +447,18 @@
                           "id": 17,
                           "login": "user17"
                         }
-                      ]
+                      ],
+                      "rollout_policy": {
+                        "stages": [
+                          0,
+                          10,
+                          25,
+                          50,
+                          100
+                        ],
+                        "next_percent": 50,
+                        "next_allowed_at": "2026-11-28T10:01:00Z"
+                      }
                     }
                   }
                 }
@@ -444,6 +477,21 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "description": "Переход между процентами запрещён. Перечитайте карточку флага.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "rollout_step_not_allowed",
+                  "message": "Переход на этот процент раскатки пока недоступен",
+                  "request_id": "onlineconf-example"
+                }
+              }
+            }
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -451,7 +499,7 @@
             "$ref": "#/components/responses/IdentityUnavailable"
           }
         },
-        "description": "Тело должно соответствовать типу существующего ключа. ID в списках флага должны существовать в Identity. Списки не пересекаются. Повторяющиеся ID внутри одного списка сохраняются один раз.",
+        "description": "Тело должно соответствовать типу существующего ключа. ID в списках флага должны существовать в Identity. Списки не пересекаются. Повторяющиеся ID внутри одного списка сохраняются один раз. Повышение возможно только на ближайшую ступень. Первый шаг с 0% до 10% доступен сразу при включённом флаге, включая включение тем же запросом. Для остальных повышений требуется 60 секунд на текущем включённом проценте.",
         "requestBody": {
           "required": true,
           "content": {
@@ -907,7 +955,8 @@
           "created_by",
           "updated_by",
           "include_users",
-          "exclude_users"
+          "exclude_users",
+          "rollout_policy"
         ],
         "properties": {
           "name": {
@@ -959,6 +1008,9 @@
             "items": {
               "$ref": "#/components/schemas/User"
             }
+          },
+          "rollout_policy": {
+            "$ref": "#/components/schemas/RolloutPolicy"
           }
         }
       },
@@ -1101,6 +1153,55 @@
           "notebook_run_all": {
             "type": "boolean",
             "description": "Решение флага workspace.notebook_run_all для пользователя сессии по правилам #156. Отсутствие ключа на свежем снимке — true."
+          }
+        }
+      },
+      "RolloutPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stages",
+          "next_percent",
+          "next_allowed_at"
+        ],
+        "properties": {
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [
+                0,
+                10,
+                25,
+                50,
+                100
+              ]
+            },
+            "minItems": 5,
+            "maxItems": 5,
+            "description": "Фиксированные ступени в порядке повышения.",
+            "example": [
+              0,
+              10,
+              25,
+              50,
+              100
+            ]
+          },
+          "next_percent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Ближайшая большая ступень. Для выключенного флага и на 100% равно null."
+          },
+          "next_allowed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Начало текущей положительной ступени плюс 60 секунд, в UTC. Равно null на 0% или когда следующей ступени нет."
           }
         }
       }

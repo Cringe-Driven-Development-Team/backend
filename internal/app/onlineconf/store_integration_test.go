@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -98,7 +99,8 @@ func TestKeysPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	directory := &testDirectory{}
-	handler := newRouter(testAdmin{}, newKeysHandler(keyStore{pool}, directory, nil), "test")
+	var refreshes atomic.Int32
+	handler := newRouter(testAdmin{}, newKeysHandler(keyStore{pool}, directory, func() { refreshes.Add(1) }), "test")
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/admin/"+path, strings.NewReader(body))
 		r.Header.Set("X-BFF-Key", "test")
@@ -137,7 +139,31 @@ func TestKeysPostgres(t *testing.T) {
 		}
 	}
 	check("PUT", config, `{"description":"invalid","value":}`, 400)
-	before := check("PUT", flag, `{"description":"off","enabled":false,"rollout_percent":25,"include_user_ids":[42],"exclude_user_ids":[17]}`, 200)
+	check("PUT", flag, `{"description":"jump","enabled":true,"rollout_percent":25,"include_user_ids":[],"exclude_user_ids":[]}`, 409)
+	check("PUT", flag, `{"description":"on","enabled":true,"rollout_percent":10,"include_user_ids":[42],"exclude_user_ids":[17]}`, 200)
+	on := check("GET", flag, "", 200)
+	refreshCount := refreshes.Load()
+	rejected := check("PUT", flag, `{"description":"early","enabled":true,"rollout_percent":25,"include_user_ids":[],"exclude_user_ids":[]}`, 409)
+	if !strings.Contains(rejected, `"code":"rollout_step_not_allowed"`) ||
+		check("GET", flag, "", 200) != on || refreshes.Load() != refreshCount {
+		t.Fatalf("rollout conflict changed state or refresh count: %s", rejected)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE onlineconf.keys SET rollout_started_at = clock_timestamp() - interval '60 seconds' WHERE name = 'workspace.calendar'`); err != nil {
+		t.Fatal(err)
+	}
+	steps := make(chan int, 2)
+	for _, percent := range []int{25, 50} {
+		pending.Go(func() {
+			steps <- request("PUT", flag, fmt.Sprintf(`{"description":"on","enabled":true,"rollout_percent":%d,"include_user_ids":[42],"exclude_user_ids":[17]}`, percent)).Code
+		})
+	}
+	pending.Wait()
+	first, second = <-steps, <-steps
+	if first+second != 200+409 || (first != 200 && first != 409) || refreshes.Load() != refreshCount+1 {
+		t.Fatalf("concurrent rollout status %d, %d", first, second)
+	}
+	check("PUT", flag, `{"description":"lower","enabled":true,"rollout_percent":10,"include_user_ids":[42],"exclude_user_ids":[17]}`, 200)
+	before := check("PUT", flag, `{"description":"off","enabled":false,"rollout_percent":10,"include_user_ids":[42],"exclude_user_ids":[17]}`, 200)
 	for _, body := range []string{
 		`{"description":"bad","enabled":true,"rollout_percent":101,"include_user_ids":[],"exclude_user_ids":[]}`,
 		`{"description":"bad","enabled":true,"rollout_percent":100,"include_user_ids":[42],"exclude_user_ids":[42]}`,
@@ -172,7 +198,7 @@ func TestKeysPostgres(t *testing.T) {
 				t.Fatalf("empty scope: %+v", list.Items)
 			}
 		default:
-			if len(list.Items) != 1 || string(list.Items[0]["name"]) != `"workspace.calendar"` || string(list.Items[0]["rollout_percent"]) != "25" {
+			if len(list.Items) != 1 || string(list.Items[0]["name"]) != `"workspace.calendar"` || string(list.Items[0]["rollout_percent"]) != "10" {
 				t.Fatalf("filtered items: %+v", list.Items)
 			}
 		}

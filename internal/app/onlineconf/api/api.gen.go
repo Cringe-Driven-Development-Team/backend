@@ -130,6 +130,33 @@ func (e OnlineConfFlagItemType) Valid() bool {
 	}
 }
 
+// Defines values for OnlineConfRolloutPolicyStages.
+const (
+	N0   OnlineConfRolloutPolicyStages = 0
+	N10  OnlineConfRolloutPolicyStages = 10
+	N100 OnlineConfRolloutPolicyStages = 100
+	N25  OnlineConfRolloutPolicyStages = 25
+	N50  OnlineConfRolloutPolicyStages = 50
+)
+
+// Valid indicates whether the value is a known member of the OnlineConfRolloutPolicyStages enum.
+func (e OnlineConfRolloutPolicyStages) Valid() bool {
+	switch e {
+	case N0:
+		return true
+	case N10:
+		return true
+	case N100:
+		return true
+	case N25:
+		return true
+	case N50:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OnlineConfScope.
 const (
 	Bff       OnlineConfScope = "bff"
@@ -262,12 +289,13 @@ type OnlineConfFlagCard struct {
 	IncludeUsers []OnlineConfUser `json:"include_users"`
 
 	// Name Полное имя начинается с точного scope и точки.
-	Name           string                 `json:"name"`
-	RolloutPercent int                    `json:"rollout_percent"`
-	Scope          OnlineConfScope        `json:"scope"`
-	Type           OnlineConfFlagCardType `json:"type"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	UpdatedBy      OnlineConfUser         `json:"updated_by"`
+	Name           string                  `json:"name"`
+	RolloutPercent int                     `json:"rollout_percent"`
+	RolloutPolicy  OnlineConfRolloutPolicy `json:"rollout_policy"`
+	Scope          OnlineConfScope         `json:"scope"`
+	Type           OnlineConfFlagCardType  `json:"type"`
+	UpdatedAt      time.Time               `json:"updated_at"`
+	UpdatedBy      OnlineConfUser          `json:"updated_by"`
 }
 
 // OnlineConfFlagCardType defines model for OnlineConfFlagCard.Type.
@@ -322,6 +350,21 @@ type OnlineConfList struct {
 type OnlineConfList_Items_Item struct {
 	union json.RawMessage
 }
+
+// OnlineConfRolloutPolicy defines model for OnlineConfRolloutPolicy.
+type OnlineConfRolloutPolicy struct {
+	// NextAllowedAt Начало текущей положительной ступени плюс 60 секунд, в UTC. Равно null на 0% или когда следующей ступени нет.
+	NextAllowedAt *time.Time `json:"next_allowed_at"`
+
+	// NextPercent Ближайшая большая ступень. Для выключенного флага и на 100% равно null.
+	NextPercent *int `json:"next_percent"`
+
+	// Stages Фиксированные ступени в порядке повышения.
+	Stages []OnlineConfRolloutPolicyStages `json:"stages"`
+}
+
+// OnlineConfRolloutPolicyStages defines model for OnlineConfRolloutPolicy.Stages.
+type OnlineConfRolloutPolicyStages int
 
 // OnlineConfScope defines model for OnlineConfScope.
 type OnlineConfScope string
