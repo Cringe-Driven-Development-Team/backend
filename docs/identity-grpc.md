@@ -89,6 +89,18 @@ API использует другую DB-role: без SUPERUSER/CREATEDB/CREATER
 без CREATE в identity, с USAGE схемы/sequence, SELECT/INSERT/UPDATE/DELETE users
 и SELECT goose_db_version. Запуск с отсутствующей/неподдерживаемой миграцией или
 неподходящей ролью отклоняется. Роль и grants создаёт инфраструктура; они не выдаются API.
+Миграция `00003` создаёт назначения роли `onlineconf_admin`. После обновления
+выдайте роли приложения только `SELECT` на `identity.onlineconf_admins`.
+До выкладки обновите шаблон grants в infra: если он выдаёт права на все
+таблицы схемы, после общих grants выполните
+`REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON identity.onlineconf_admins FROM <identity_app_role>;`.
+Identity отклоняет запуск, если app-роль может менять назначения.
+RPC `OnlineConfAccess.Authorize` доступен mTLS-принципалу
+`onlineconf.internal.cellestial.ru` и проверяет действующую сессию и роль
+при каждом запросе. RPC возвращает подтверждённый `user_id`, который
+OnlineConf передаёт административному обработчику через контекст запроса. Назначение и отзыв описаны в
+[локальной разработке](local-development.md#onlineconf).
+
 Права на чужие schemas не выдаются; межсхемных FK в baseline нет.
 
 ## Health и метрики

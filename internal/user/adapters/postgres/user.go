@@ -158,3 +158,10 @@ func (r *UserRepository) SwapAvatar(ctx context.Context, id int64, newKey string
 	}
 	return u, old, nil
 }
+
+// HasOnlineConfAdmin проверяет текущее назначение роли пользователю userID.
+func (r *UserRepository) HasOnlineConfAdmin(ctx context.Context, userID int64) (bool, error) {
+	var granted bool
+	err := r.db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM identity.onlineconf_admins WHERE user_id = $1)", userID).Scan(&granted)
+	return granted, err
+}

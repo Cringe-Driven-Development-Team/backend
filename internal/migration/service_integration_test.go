@@ -124,6 +124,11 @@ func TestFreshSchemasAndPrivileges(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if s == Identity {
+				if _, err := pool.Exec(ctx, "REVOKE INSERT,UPDATE,DELETE ON identity.onlineconf_admins FROM "+q); err != nil {
+					t.Fatal(err)
+				}
+			}
 			parsed, err := url.Parse(dsn)
 			if err != nil {
 				t.Fatal(err)

@@ -69,3 +69,13 @@ message UserResolution {
   string requested_login = 2;
   oneof outcome { User user = 3; bool not_found = 4; }
 }
+
+// OnlineConfAccess проверяет роль пользователя для доверенного OnlineConf.
+service OnlineConfAccess {
+  rpc Authorize(ValidateSessionRequest) returns (OnlineConfAuthorization);
+}
+
+message OnlineConfAuthorization {
+  // Идентификатор пользователя из проверенной сессии.
+  int64 user_id = 1;
+}

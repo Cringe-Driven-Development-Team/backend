@@ -26,7 +26,7 @@ import (
 // NewSessionRPCServer создаёт только mTLS listener с разрешённым Workspace principal.
 // Ошибки чтения credentials не раскрывают ключи и содержимое файлов.
 func NewSessionRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger *slog.Logger) (*grpc.Server, error) {
-	return newRPCServer(c, verifier, logger, nil, nil, nil, nil)
+	return newRPCServer(c, verifier, logger, nil, nil, nil, nil, nil)
 }
 
 // identityTLS загружает общий сертификат сервера и доверенный клиентский CA.
@@ -35,7 +35,7 @@ func identityTLS(c SessionConfig) (*tls.Config, error) {
 }
 
 // newRPCServer разрешает только зарегистрированные методы заданным service identities.
-func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger *slog.Logger, users *grpcdelivery.UsersServer, healthServer *health.Server, metrics *rpctransport.Metrics, admin grpcdelivery.UserDeletionService) (*grpc.Server, error) {
+func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger *slog.Logger, users *grpcdelivery.UsersServer, healthServer *health.Server, metrics *rpctransport.Metrics, admin grpcdelivery.UserDeletionService, roles grpcdelivery.OnlineConfRoles) (*grpc.Server, error) {
 	tlsConfig, err := identityTLS(c)
 	if err != nil {
 		return nil, err
@@ -54,10 +54,17 @@ func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger
 		allowed[identityv1.UserAdministration_RequestUserDeletion_FullMethodName] = []string{"identity-admin.internal.cellestial.ru"}
 		allowed[identityv1.UserAdministration_GetUserDeletion_FullMethodName] = []string{"identity-admin.internal.cellestial.ru"}
 	}
+	if roles != nil {
+		allowed[identityv1.OnlineConfAccess_Authorize_FullMethodName] = []string{"onlineconf.internal.cellestial.ru"}
+	}
 	options := rpctransport.ServerOptions(rpctransport.UnaryConfig{Logger: logger, Service: "identity", Version: c.Version, Timeout: 2 * time.Second, AllowedPeers: allowed, Metrics: metrics})
 	options = append(options, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	server := grpc.NewServer(options...)
-	identityv1.RegisterSessionServer(server, grpcdelivery.NewSessionServer(verifier))
+	sessions := grpcdelivery.NewSessionServer(verifier)
+	identityv1.RegisterSessionServer(server, sessions)
+	if roles != nil {
+		identityv1.RegisterOnlineConfAccessServer(server, grpcdelivery.NewOnlineConfAccessServer(sessions, roles))
+	}
 	if users != nil {
 		identityv1.RegisterUsersServer(server, users)
 	}

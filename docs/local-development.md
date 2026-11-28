@@ -20,6 +20,48 @@
 3. Для отдельной сборки используйте `make build`. Перед проверкой полного diff
    запустите `make check-fast` и тесты изменённых пакетов.
 
+## OnlineConf
+
+1. Подготовьте PostgreSQL, Redis, S3 и TLS для отдельного Identity по
+   [руководству](identity-grpc.md). Примените миграции от владельца схемы и
+   выдайте app-роли Identity право `SELECT` на `identity.onlineconf_admins`.
+   Запустите полный `go run ./cmd/identity`. Для проверки роли достаточно
+   Identity и его хранилищ, продуктовый API и Workspace можно оставить выключенными.
+2. Выпустите для OnlineConf клиентский сертификат с DNS SAN
+   `onlineconf.internal.cellestial.ru` и EKU ClientAuth от CA, которому доверяет
+   Identity. Сертификат сервера Identity должен содержать DNS SAN
+   `identity.internal.cellestial.ru`. В отдельном терминале укажите пути к
+   клиентским TLS-файлам и запустите процесс:
+
+   ```sh
+   ONLINECONF_HTTP_ADDR=127.0.0.1:8085 IDENTITY_GRPC_ADDR=127.0.0.1:9090 \
+     TLS_CERT_FILE=/path/to/onlineconf.crt TLS_KEY_FILE=/path/to/onlineconf.key \
+     TLS_CA_FILE=/path/to/ca.crt BFF_API_KEY="$BFF_API_KEY" go run ./cmd/onlineconf
+   ```
+
+3. Проверьте `GET http://127.0.0.1:8085/health` для проверки процесса.
+   Настройте одинаковый непустой `BFF_API_KEY` у OnlineConf и вызывающего BFF.
+   Для локального запроса передайте его в `X-BFF-Key`. Получите
+   пользовательский access token через Identity и передайте его в
+   `Authorization: Bearer …` на `GET http://127.0.0.1:8085/admin/access`.
+   Без правильного ключа ответ `403 s2s_forbidden`. С правильным ключом
+   без действующей сессии ответ `401 unauthorized`, без роли `403 forbidden`,
+   с ролью `204`. Ошибки доступа возвращаются в JSON.
+   BFF добавляет ключ на сервере и хранит его вне браузера.
+   При недоступном Identity административный запрос с токеном получает `503`.
+
+Назначение роли `onlineconf_admin` выполняет оператор БД Identity. В `psql`
+установите переменную `user_id` в ID нужного пользователя и выполните:
+
+```sql
+INSERT INTO identity.onlineconf_admins (user_id)
+VALUES (:'user_id') ON CONFLICT DO NOTHING;
+```
+
+Для отзыва выполните
+`DELETE FROM identity.onlineconf_admins WHERE user_id = :'user_id';`.
+Изменение действует на следующий запрос с тем же токеном.
+
 ## Логи
 
 - Go пишет access log и добавляет `request_id` из контекста. Вызовы Go к агенту
