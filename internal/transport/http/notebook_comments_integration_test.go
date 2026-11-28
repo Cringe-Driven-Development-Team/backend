@@ -96,17 +96,17 @@ func TestCellCommentsLifecycle(t *testing.T) {
 	}
 	f.request("POST", f.wall, `{"text":"no"}`, 0, 401)
 	f.request("GET", f.wall, "", 2, 404)
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{Login: "reader", Role: domain.RoleCommenter}}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
 		t.Fatal(err)
 	}
 	c := decodeComment(t, f.request("POST", f.wall, `{"text":"reader"}`, 2, 201))
 	path := fmt.Sprintf("%s/%d", f.wall, c.Id)
 	f.request("PATCH", path, `{"text":"owner may not edit"}`, 1, 403)
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{Login: "reader", Role: domain.RoleCommenter}, {Login: "other", Role: domain.RoleViewer}}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModePublic, nil); err != nil {
 		t.Fatal(err)
 	}
-	f.request("POST", f.wall, `{"text":"viewer"}`, 3, 403)
-	f.request("GET", f.wall, "", 0, 401)
+	f.request("POST", f.wall, `{"text":"public"}`, 3, 201)
+	f.request("GET", f.wall, "", 0, 200)
 	f.request("PATCH", path, `{"text":"not mine"}`, 3, 403)
 	f.request("DELETE", path, "", 3, 403)
 	if _, err := f.pool.Exec(ctx, `UPDATE users SET login='newreader' WHERE id=2`); err != nil {
@@ -116,19 +116,13 @@ func TestCellCommentsLifecycle(t *testing.T) {
 	if c.Author.Login != "newreader" || c.Author.Id != 2 || !c.CanEdit {
 		t.Fatal(c)
 	}
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{Login: "newreader", Role: domain.RoleViewer}}); err != nil {
-		t.Fatal(err)
-	}
-	f.request("GET", f.wall, "", 2, 200)
-	f.request("PATCH", path, `{"text":"viewer cannot edit own comment"}`, 2, 403)
-	f.request("DELETE", path, "", 2, 403)
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, false, nil); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModePrivate, nil); err != nil {
 		t.Fatal(err)
 	}
 	f.request("GET", f.wall, "", 2, 404)
 	f.request("PATCH", path, `{"text":"revoked"}`, 2, 404)
 	f.request("DELETE", path, "", 2, 404)
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{Login: "newreader", Role: domain.RoleCommenter}}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"newreader"}); err != nil {
 		t.Fatal(err)
 	}
 	f.request("PATCH", path, `{"text":"restored"}`, 2, 200)
@@ -239,14 +233,14 @@ func TestCellCommentsCursorTraversalHTTP(t *testing.T) {
 			t.Fatalf("limit=%d: %+v", size, edge)
 		}
 	}
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, true, []domain.NotebookReader{{Login: "reader", Role: domain.RoleViewer}}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModePublic, nil); err != nil {
 		t.Fatal(err)
 	}
 	guestPath := f.wall
 	guestCount := 0
 	for {
 		var guest api.CommentPage
-		if err := json.Unmarshal(f.request("GET", guestPath, "", 2, 200).Body.Bytes(), &guest); err != nil {
+		if err := json.Unmarshal(f.request("GET", guestPath, "", 0, 200).Body.Bytes(), &guest); err != nil {
 			t.Fatal(err)
 		}
 		for _, c := range guest.Items {
@@ -263,7 +257,7 @@ func TestCellCommentsCursorTraversalHTTP(t *testing.T) {
 	if guestCount != 45 {
 		t.Fatalf("anonymous pages: %d", guestCount)
 	}
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{Login: "reader", Role: domain.RoleCommenter}}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
 		t.Fatal(err)
 	}
 	var readerPage api.CommentPage
@@ -273,7 +267,7 @@ func TestCellCommentsCursorTraversalHTTP(t *testing.T) {
 	if readerPage.NextCursor == nil {
 		t.Fatal("reader cursor missing")
 	}
-	if _, err := f.uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{}); err != nil {
+	if _, err := f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{}); err != nil {
 		t.Fatal(err)
 	}
 	f.request("GET", f.wall+"?cursor="+*readerPage.NextCursor, "", 2, 404)
@@ -400,7 +394,7 @@ func TestNotebookCommentCountsHTTP(t *testing.T) {
 	checkBoth(2, 1, oneCell)
 
 	f.request("GET", notebookURL, "", 2, 404)
-	if _, err = f.uc.PutSharing(ctx, n.ID, 1, false, []domain.NotebookReader{{Login: "reader", Role: domain.RoleCommenter}}); err != nil {
+	if _, err = f.uc.PutSharing(ctx, n.ID, 1, domain.SharingModeRestricted, []string{"reader"}); err != nil {
 		t.Fatal(err)
 	}
 	checkNotebook(f.request("GET", notebookURL, "", 2, 200), 2, oneCell)

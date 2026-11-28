@@ -49,8 +49,6 @@ output-options:
     - restartRuntimeKernel
     - stopRuntimeExecutions
     - getNotebookSharing
-    - getSharedNotebook
-    - getSharedNotebookContent
     - putNotebookSharing
     - cloneNotebook
     - suggestUsers

@@ -38,7 +38,6 @@ func TestCommentRepositoryTransactionOrder(t *testing.T) {
 							cell.WillReturnError(failure)
 						} else {
 							cell.WillReturnRows(pgxmock.NewRows([]string{"cell_id"}).AddRow("cell"))
-							db.ExpectQuery(`SELECT role FROM workspace.notebook_readers`).WithArgs(int64(7), int64(2)).WillReturnRows(pgxmock.NewRows([]string{"role"}).AddRow("commenter"))
 							insert := db.ExpectQuery(`INSERT INTO workspace.cell_comments`).WithArgs(int64(7), "cell", int64(2), "text")
 							if stage == "insert" {
 								insert.WillReturnError(failure)

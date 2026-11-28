@@ -36,7 +36,7 @@ func TestCellCommentsMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := repo.Get(ctx, n.ID, 1)
-	if err != nil || got.Revision != n.Revision || !got.UpdatedAt.Equal(n.UpdatedAt) || got.LinkToken != n.LinkToken {
+	if err != nil || got.Revision != n.Revision || !got.UpdatedAt.Equal(n.UpdatedAt) || got.SharingMode != n.SharingMode {
 		t.Fatalf("migration changed notebook: %+v %v", got, err)
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO workspace.cell_comments(notebook_id,cell_id,author_id,text,created_at,updated_at) VALUES($1,$2,1,'ok',now(),now())`, n.ID, n.Cells[0].ID); err != nil {

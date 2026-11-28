@@ -357,7 +357,7 @@
       "get": {
         "summary": "Блокнот",
         "deprecated": false,
-        "description": "\n\nДоступ: владелец и адресные читатели с любой ролью. Требуется действующая сессия: без Bearer или с невалидным, истёкшим или отозванным Bearer — 401. Публичная ссылка через этот путь доступа не даёт: посетитель по ссылке читает GET /shared/{token}. X-BFF-Key обязателен всегда. Чужой закрытый, отсутствующий и удалённый блокнот дают одинаковый 404. Права проверяются до содержимого и любого 304. Чтение не даёт прав изменения документа, управления runtime или доступа к файлам окружения. Ответы Cache-Control: no-store.",
+        "description": "\n\nДоступ: владелец; любой посетитель, включая анонима, для public; только адресные пользователи для restricted. private доступен только владельцу. Bearer можно не передавать; переданный невалидный, истёкший или отозванный Bearer даёт 401. X-BFF-Key обязателен всегда. Чужой закрытый, отсутствующий и удалённый блокнот дают одинаковый 404. Права проверяются до содержимого и любого 304. Чтение не даёт прав изменения документа, управления runtime или доступа к файлам окружения. Ответы Cache-Control: no-store.",
         "operationId": "getNotebook",
         "tags": [
           "notebooks"
@@ -415,7 +415,6 @@
                     "is_owner": true,
                     "can_edit": true,
                     "can_manage_sharing": true,
-                    "can_comment": true,
                     "can_clone": true
                   },
                   "comments_count": 4,
@@ -451,7 +450,7 @@
             "headers": {}
           },
           "401": {
-            "description": "unauthorized: отсутствует действующая сессия либо переданный Bearer недействителен, истёк или отозван.",
+            "description": "Переданный Bearer недействителен, истёк или отозван. Отсутствие Bearer допускается.",
             "content": {
               "application/json": {
                 "schema": {
@@ -522,7 +521,8 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ]
       },
       "patch": {
@@ -575,7 +575,6 @@
                     "is_owner": true,
                     "can_edit": true,
                     "can_manage_sharing": true,
-                    "can_comment": true,
                     "can_clone": true
                   },
                   "comments_count": 0,
@@ -866,7 +865,7 @@
       "get": {
         "summary": "Содержимое блокнота с хешем",
         "deprecated": false,
-        "description": "Возвращает согласованный снимок hash и всех ячеек блокнота текущего пользователя, включая сохранённые nbformat outputs и execution_count кодовых ячеек. У code без результатов outputs: [], execution_count: null. Markdown содержит id/kind/source. Данные доступны без активной runtime-сессии и после удаления VPS. source — обычный текст, MIME/HTML/SVG результатов недоверенные и требуют безопасного отображения. hash — непрозрачная редакция снимка; ETag содержит её в двойных кавычках. Изменение только outputs, execution_count и output_truncated не меняет hash: он отражает исходники и порядок ячеек. Старый результат не применяется к изменённому source. Чтение не создаёт и не продлевает runtime. \n\nКаждая code-ячейка содержит обязательный output_truncated:boolean — сохранённый вместе с outputs и execution_count признак усечения вывода. Он доступен после завершения сессии и удаления VPS. До первого результата false; новый применённый результат заменяет и outputs, и флаг. Значение не накапливается по всем запускам. Результат с конфликтом source не меняет сохранённые outputs и флаг актуальной ячейки.\n\nДоступ: владелец и адресные читатели с любой ролью. Требуется действующая сессия: без Bearer или с невалидным, истёкшим или отозванным Bearer — 401. Публичная ссылка через этот путь доступа не даёт: посетитель по ссылке читает GET /shared/{token}. X-BFF-Key обязателен всегда. Чужой закрытый, отсутствующий и удалённый блокнот дают одинаковый 404. Права проверяются до содержимого и любого 304. Чтение не даёт прав изменения документа, управления runtime или доступа к файлам окружения. Ответы Cache-Control: no-store.",
+        "description": "Возвращает согласованный снимок hash и всех ячеек блокнота текущего пользователя, включая сохранённые nbformat outputs и execution_count кодовых ячеек. У code без результатов outputs: [], execution_count: null. Markdown содержит id/kind/source. Данные доступны без активной runtime-сессии и после удаления VPS. source — обычный текст, MIME/HTML/SVG результатов недоверенные и требуют безопасного отображения. hash — непрозрачная редакция снимка; ETag содержит её в двойных кавычках. Изменение только outputs, execution_count и output_truncated не меняет hash: он отражает исходники и порядок ячеек. Старый результат не применяется к изменённому source. Чтение не создаёт и не продлевает runtime. \n\nКаждая code-ячейка содержит обязательный output_truncated:boolean — сохранённый вместе с outputs и execution_count признак усечения вывода. Он доступен после завершения сессии и удаления VPS. До первого результата false; новый применённый результат заменяет и outputs, и флаг. Значение не накапливается по всем запускам. Результат с конфликтом source не меняет сохранённые outputs и флаг актуальной ячейки.\n\nДоступ: владелец; любой посетитель, включая анонима, для public; только адресные пользователи для restricted. private доступен только владельцу. Bearer можно не передавать; переданный невалидный, истёкший или отозванный Bearer даёт 401. X-BFF-Key обязателен всегда. Чужой закрытый, отсутствующий и удалённый блокнот дают одинаковый 404. Права проверяются до содержимого и любого 304. Чтение не даёт прав изменения документа, управления runtime или доступа к файлам окружения. Ответы Cache-Control: no-store.",
         "operationId": "getNotebookContent",
         "tags": [
           "notebooks"
@@ -998,7 +997,7 @@
             "headers": {}
           },
           "401": {
-            "description": "unauthorized: отсутствует действующая сессия либо переданный Bearer недействителен, истёк или отозван.",
+            "description": "Переданный Bearer недействителен, истёк или отозван. Отсутствие Bearer допускается.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1065,7 +1064,8 @@
         "security": [
           {
             "bearerAuth": []
-          }
+          },
+          {}
         ]
       }
     },
@@ -3883,7 +3883,7 @@
       "get": {
         "operationId": "getNotebookSharing",
         "summary": "Настройки доступа к блокноту",
-        "description": "Только владелец. Возвращает полный список адресатов с ролями и актуальными логинами (разрешения хранятся по user_id) и токен публичной ссылки или null. Чужой, отсутствующий и удалённый блокнот дают одинаковый 404. Ответы Cache-Control: no-store.",
+        "description": "Только владелец. Возвращает полный список адресатов с актуальными логинами; разрешения хранятся по user_id. Чужой, отсутствующий и удалённый блокнот дают одинаковый 404. Ответы Cache-Control: no-store.",
         "tags": [
           "notebooks"
         ],
@@ -3920,19 +3920,13 @@
                   "$ref": "#/components/schemas/NotebookSharing"
                 },
                 "example": {
+                  "mode": "restricted",
                   "readers": [
                     {
                       "id": 2,
-                      "login": "anna_k",
-                      "role": "viewer"
-                    },
-                    {
-                      "id": 3,
-                      "login": "orbit_tutor",
-                      "role": "commenter"
+                      "login": "reader"
                     }
-                  ],
-                  "link_token": "7Kq2xVt9mPa4Lw8RcZ1nYb"
+                  ]
                 }
               }
             },
@@ -3995,7 +3989,7 @@
             "headers": {}
           },
           "404": {
-            "description": "not_found: чужой, отсутствующий или удалённый блокнот; ответы одинаковы, в том числе для адресных читателей — настройки доступа видит только владелец.",
+            "description": "not_found: блокнот отсутствует, удалён или недоступен; ответы одинаковы.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4054,7 +4048,7 @@
       "put": {
         "operationId": "putNotebookSharing",
         "summary": "Заменить настройки доступа",
-        "description": "Только владелец. Атомарно полностью заменяет читателей с ролями и состояние публичной ссылки; список читателей и ссылка независимы. Пустой readers отзывает доступ у всех. Логины разрешаются без учёта регистра; дубликаты по ID сворачиваются (побеждает последняя роль), владелец исключается. link: true сохраняет действующий токен или создаёт новый, false удаляет ссылку; новая ссылка после удаления получает новый токен, старый больше не открывает блокнот. Не более 100 читателей. Сначала проверяется формат: невалидный ввод, в том числе больше 100 читателей, — 400 validation_error; затем логины: неизвестный — 400 unknown_login. Логин владельца в readers ошибкой не считается и молча исключается; прежние настройки сохраняются целиком. Повтор тех же настроек успешен. После отзыва новые запросы проверяют актуальные права; ранее полученные данные и копии сохраняются. Ответы Cache-Control: no-store.",
+        "description": "Только владелец. Атомарно полностью заменяет режим и читателей. restricted допускает пустой список. private/public требуют пустой reader_logins и удаляют прежние разрешения; обратный переход требует явно передать читателей. Логины разрешаются без учёта регистра; дубликаты по ID сворачиваются, владелец исключается. Неизвестный логин или невалидный ввод — 400, прежние настройки сохраняются целиком. Повтор тех же настроек успешен. После отзыва новые запросы проверяют актуальные права; ранее полученные данные и копии сохраняются. Ответы Cache-Control: no-store.",
         "tags": [
           "notebooks"
         ],
@@ -4091,19 +4085,13 @@
                   "$ref": "#/components/schemas/NotebookSharing"
                 },
                 "example": {
+                  "mode": "restricted",
                   "readers": [
                     {
                       "id": 2,
-                      "login": "anna_k",
-                      "role": "viewer"
-                    },
-                    {
-                      "id": 3,
-                      "login": "orbit_tutor",
-                      "role": "commenter"
+                      "login": "reader"
                     }
-                  ],
-                  "link_token": "7Kq2xVt9mPa4Lw8RcZ1nYb"
+                  ]
                 }
               }
             },
@@ -4121,27 +4109,15 @@
             }
           },
           "400": {
-            "description": "unknown_login: логина нет среди пользователей; validation_error: невалидное тело или параметры. Настройки не меняются.",
+            "description": "validation_error: невалидное тело или параметры.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
-                "examples": {
-                  "unknown_login": {
-                    "summary": "Неизвестный логин",
-                    "value": {
-                      "code": "unknown_login",
-                      "message": "пользователь не найден."
-                    }
-                  },
-                  "validation_error": {
-                    "summary": "Невалидное тело",
-                    "value": {
-                      "code": "validation_error",
-                      "message": "невалидное тело или параметры."
-                    }
-                  }
+                "example": {
+                  "code": "validation_error",
+                  "message": "невалидное тело или параметры."
                 }
               }
             },
@@ -4178,7 +4154,7 @@
             "headers": {}
           },
           "404": {
-            "description": "not_found: чужой, отсутствующий или удалённый блокнот; ответы одинаковы, в том числе для адресных читателей — настройки доступа видит только владелец.",
+            "description": "not_found: блокнот отсутствует, удалён или недоступен; ответы одинаковы.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4241,387 +4217,21 @@
                 "$ref": "#/components/schemas/NotebookSharingInput"
               },
               "example": {
-                "readers": [
-                  {
-                    "login": "anna_k",
-                    "role": "viewer"
-                  },
-                  {
-                    "login": "orbit_tutor",
-                    "role": "commenter"
-                  }
-                ],
-                "link": true
+                "mode": "restricted",
+                "reader_logins": [
+                  "reader"
+                ]
               }
             }
           }
         }
       }
     },
-    "/shared/{token}": {
-      "get": {
-        "summary": "Блокнот по публичной ссылке",
-        "description": "Метаданные блокнота по токену публичной ссылки, как GET /notebooks/{id}. Требуется действующая сессия: без Bearer или с невалидным Bearer — 401. Токен проверяется на каждом запросе: удалённая или заменённая ссылка, удалённый блокнот и неизвестный токен дают одинаковый 404. Ссылка даёт только чтение документа: без комментариев, runtime, файлов окружения и клонирования. access отражает фактические права пользователя: у посетителя только по ссылке все флаги false, а /notebooks/{id} даёт ему 404; владелец и адресный читатель получают свои права и выполняют разрешённые действия только через /notebooks/{id}/… по id из ответа — /shared комментариев не отдаёт и не принимает. У посетителя только по ссылке счётчики комментариев возвращаются как comments_count: 0 и cell_comments_count: {}. Посетитель по ссылке не попадает в список читателей. Ответы Cache-Control: no-store.",
-        "operationId": "getSharedNotebook",
-        "tags": [
-          "notebooks"
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "description": "Токен публичной ссылки.",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/PublicLinkToken"
-            }
-          },
-          {
-            "name": "X-BFF-Key",
-            "in": "header",
-            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
-            "required": true,
-            "example": "<bff-key>",
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Блокнот",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Notebook"
-                },
-                "example": {
-                  "id": 42,
-                  "name": "Орбиты планет",
-                  "cells": [],
-                  "created_at": "2026-11-12T10:00:00Z",
-                  "updated_at": "2026-11-12T16:30:00Z",
-                  "access": {
-                    "is_owner": false,
-                    "can_edit": false,
-                    "can_manage_sharing": false,
-                    "can_comment": false,
-                    "can_clone": false
-                  },
-                  "comments_count": 0,
-                  "cell_comments_count": {}
-                }
-              }
-            },
-            "headers": {
-              "Cache-Control": {
-                "description": "Запрещает повторное использование данных и прав общим HTTP-кэшем.",
-                "schema": {
-                  "type": "string",
-                  "enum": [
-                    "no-store"
-                  ]
-                },
-                "example": "no-store"
-              }
-            }
-          },
-          "400": {
-            "description": "validation_error: токен не соответствует формату PublicLinkToken. Токен правильного формата, но без действующей ссылки, даёт 404.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "401": {
-            "description": "unauthorized: отсутствует действующая сессия либо переданный Bearer недействителен, истёк или отозван.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "403": {
-            "description": "s2s_forbidden: X-BFF-Key отсутствует, неверен или повторяется; проверяется до Bearer и валидации. BFF не выполняет refresh и не удаляет сессию.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "code": "s2s_forbidden",
-                  "message": "service access forbidden"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "404": {
-            "description": "not_found: ссылки нет, она удалена или заменена, либо блокнот удалён; ответы одинаковы.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "500": {
-            "description": "internal: внутренняя ошибка.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "503": {
-            "description": "Identity или другая зависимость недоступны",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Истёк срок ожидания зависимости",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/shared/{token}/content": {
-      "get": {
-        "summary": "Содержимое блокнота по публичной ссылке",
-        "description": "Снимок hash и ячеек по токену публичной ссылки, как GET /notebooks/{id}/content, включая сохранённые outputs, execution_count и output_truncated. Требуется действующая сессия: без Bearer или с невалидным Bearer — 401. Токен проверяется на каждом запросе: удалённая или заменённая ссылка, удалённый блокнот и неизвестный токен дают одинаковый 404. Ссылка даёт только чтение документа: без комментариев, runtime, файлов окружения и клонирования. Права посетителя отдаёт GET /shared/{token} в access. Посетитель по ссылке не попадает в список читателей. Ответы Cache-Control: no-store.",
-        "operationId": "getSharedNotebookContent",
-        "tags": [
-          "notebooks"
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "description": "Токен публичной ссылки.",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/PublicLinkToken"
-            }
-          },
-          {
-            "name": "X-BFF-Key",
-            "in": "header",
-            "description": "Обязательный общий секрет BFF и Go API. Принимается единственный текущий ключ. Проверяется до Bearer, разбора тела и валидации. Отсутствующий, неверный или повторяющийся заголовок: 403 s2s_forbidden. Значения ключей и токенов не журналируются.",
-            "required": true,
-            "example": "<bff-key>",
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Успешно",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotebookContent"
-                },
-                "examples": {
-                  "1": {
-                    "summary": "Сохранённый результат и ещё не запущенная ячейка",
-                    "value": {
-                      "hash": "revision-42",
-                      "cells": [
-                        {
-                          "id": "cell-a",
-                          "kind": "code",
-                          "source": "print(42)",
-                          "outputs": [
-                            {
-                              "output_type": "stream",
-                              "name": "stdout",
-                              "text": "42\n"
-                            }
-                          ],
-                          "execution_count": 2,
-                          "output_truncated": false
-                        },
-                        {
-                          "id": "cell-b",
-                          "kind": "markdown",
-                          "source": "Описание"
-                        },
-                        {
-                          "id": "cell-c",
-                          "kind": "code",
-                          "source": "x = 1",
-                          "outputs": [],
-                          "execution_count": null,
-                          "output_truncated": false
-                        }
-                      ]
-                    }
-                  },
-                  "2": {
-                    "summary": "Сохранённый усечённый вывод после завершения сессии",
-                    "value": {
-                      "hash": "revision-truncated",
-                      "cells": [
-                        {
-                          "id": "cell-a",
-                          "kind": "code",
-                          "source": "print(\"large output\")",
-                          "outputs": [
-                            {
-                              "output_type": "stream",
-                              "name": "stdout",
-                              "text": "Сохранённая часть вывода\n"
-                            }
-                          ],
-                          "execution_count": 3,
-                          "output_truncated": true
-                        }
-                      ]
-                    }
-                  }
-                }
-              }
-            },
-            "headers": {
-              "ETag": {
-                "example": "\"h123\"",
-                "required": false,
-                "description": "Сильный ETag: hash из тела ответа в двойных кавычках.",
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "Cache-Control": {
-                "description": "Запрещает повторное использование данных и прав общим HTTP-кэшем.",
-                "schema": {
-                  "type": "string",
-                  "enum": [
-                    "no-store"
-                  ]
-                },
-                "example": "no-store"
-              }
-            }
-          },
-          "400": {
-            "description": "validation_error: токен не соответствует формату PublicLinkToken. Токен правильного формата, но без действующей ссылки, даёт 404.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "401": {
-            "description": "unauthorized: отсутствует действующая сессия либо переданный Bearer недействителен, истёк или отозван.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "403": {
-            "description": "s2s_forbidden: X-BFF-Key отсутствует, неверен или повторяется; проверяется до Bearer и валидации. BFF не выполняет refresh и не удаляет сессию.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "404": {
-            "description": "not_found: ссылки нет, она удалена или заменена, либо блокнот удалён; ответы одинаковы.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "500": {
-            "description": "internal: внутренняя ошибка.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {}
-          },
-          "503": {
-            "description": "Identity или другая зависимость недоступны",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Истёк срок ожидания зависимости",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
     "/notebooks/{id}/clone": {
       "post": {
         "operationId": "cloneNotebook",
         "summary": "Создать независимую копию блокнота",
-        "description": "Действующая сессия обязательна; клонируют владелец и адресные читатели с любой ролью, публичная ссылка права клонирования не даёт. Каждый успешный POST создаёт отдельную копию с новым ID, владельцем из сессии, новыми датами, ревизией и source_version; без читателей и публичной ссылки. Согласованный снимок включает порядок/типы ячеек, source, metadata, дополнительные ipynb-поля, attachments, outputs, execution_count и output_truncated, в том числе raw и пустые документы. Runtime, задания, /workspace, секреты, комментарии и настройки доступа не копируются. Проверка доступа, чтение и запись атомарны и сериализуются с изменением доступа, удалением и правками оригинала. Ошибка откатывает всю копию. Изменение, отзыв доступа и удаление оригинала не затрагивают копию. Одинаковые названия разрешены.",
+        "description": "Действующая сессия и право чтения обязательны; владелец также может клонировать. Каждый успешный POST создаёт отдельную копию с новым ID, владельцем из сессии, новыми датами, ревизией и source_version; режим private, читателей нет. Согласованный снимок включает порядок/типы ячеек, source, metadata, дополнительные ipynb-поля, attachments, outputs, execution_count и output_truncated, в том числе raw и пустые документы. Runtime, задания, /workspace, секреты, комментарии и настройки доступа не копируются. Проверка доступа, чтение и запись атомарны и сериализуются с изменением доступа, удалением и правками оригинала. Ошибка откатывает всю копию. Изменение, отзыв доступа и удаление оригинала не затрагивают копию. Одинаковые названия разрешены.",
         "tags": [
           "notebooks"
         ],
@@ -4667,7 +4277,6 @@
                     "is_owner": true,
                     "can_edit": true,
                     "can_manage_sharing": true,
-                    "can_comment": true,
                     "can_clone": true
                   },
                   "comments_count": 0,
@@ -4812,7 +4421,7 @@
       "get": {
         "operationId": "listCellComments",
         "summary": "Страница комментариев ячейки",
-        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Без доступа владельца или адресного читателя (в том числе с доступом только по ссылке) — 404, даже для автора комментария. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Плоская стена, порядок created_at DESC, id DESC. Keyset-пагинация по более старым сообщениям, редактирование не меняет место. Для неизменной стены обход без дублей; новые сообщения получают повтором первой страницы. Читают владелец и адресные читатели с любой ролью; требуется действующая сессия. Публичная ссылка доступа к комментариям не даёт.",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Плоская стена, порядок created_at DESC, id DESC. Keyset-пагинация по более старым сообщениям, редактирование не меняет место. Для неизменной стены обход без дублей; новые сообщения получают повтором первой страницы. Аноним может читать public без Bearer, но переданный неверный Bearer всегда даёт 401.",
         "tags": [
           "notebooks"
         ],
@@ -4933,7 +4542,7 @@
             }
           },
           "403": {
-            "description": "Неверный X-BFF-Key.",
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -4953,13 +4562,13 @@
                 },
                 "example": {
                   "code": "s2s_forbidden",
-                  "message": "service access forbidden"
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
                 }
               }
             }
           },
           "404": {
-            "description": "not_found: нет доступа владельца или адресного читателя, блокнот, ячейка или комментарий не найдены; ответы одинаковы.",
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5074,6 +4683,7 @@
           }
         },
         "security": [
+          {},
           {
             "bearerAuth": []
           }
@@ -5082,7 +4692,7 @@
       "post": {
         "operationId": "createCellComment",
         "summary": "Создать комментарий ячейки",
-        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Без доступа владельца или адресного читателя (в том числе с доступом только по ссылке) — 404, даже для автора комментария. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Писать могут владелец и адресные читатели с ролью commenter; viewer получает 403 forbidden. Сервер задаёт автора, привязку и даты; updated_at=created_at.",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Владелец, адресный читатель и любой авторизованный посетитель public могут писать. Сервер задаёт автора, привязку и даты; updated_at=created_at.",
         "tags": [
           "notebooks"
         ],
@@ -5178,7 +4788,7 @@
             }
           },
           "403": {
-            "description": "Неверный X-BFF-Key; forbidden — у читателя роль viewer.",
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5196,27 +4806,15 @@
                 "schema": {
                   "$ref": "#/components/schemas/CommentError"
                 },
-                "examples": {
-                  "s2s_forbidden": {
-                    "summary": "Неверный X-BFF-Key",
-                    "value": {
-                      "code": "s2s_forbidden",
-                      "message": "service access forbidden"
-                    }
-                  },
-                  "forbidden": {
-                    "summary": "Нет права действия",
-                    "value": {
-                      "code": "forbidden",
-                      "message": "у читателя роль viewer."
-                    }
-                  }
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
                 }
               }
             }
           },
           "404": {
-            "description": "not_found: нет доступа владельца или адресного читателя, блокнот, ячейка или комментарий не найдены; ответы одинаковы.",
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5375,7 +4973,7 @@
       "patch": {
         "operationId": "updateCellComment",
         "summary": "Изменить собственный комментарий",
-        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Без доступа владельца или адресного читателя (в том числе с доступом только по ссылке) — 404, даже для автора комментария. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Только автор с текущей ролью commenter или владелец-автор; даже владелец не меняет чужой текст. Атомарная запись; каждый успешный PATCH увеличивает updated_at минимум на микросекунду, включая прежний текст. created_at и привязка неизменны.",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Только автор с текущим доступом, даже владелец не меняет чужой текст. Атомарная запись; каждый успешный PATCH увеличивает updated_at минимум на микросекунду, включая прежний текст. created_at и привязка неизменны.",
         "tags": [
           "notebooks"
         ],
@@ -5483,7 +5081,7 @@
             }
           },
           "403": {
-            "description": "Неверный X-BFF-Key; forbidden — чужой комментарий или у автора роль viewer.",
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5501,27 +5099,15 @@
                 "schema": {
                   "$ref": "#/components/schemas/CommentError"
                 },
-                "examples": {
-                  "s2s_forbidden": {
-                    "summary": "Неверный X-BFF-Key",
-                    "value": {
-                      "code": "s2s_forbidden",
-                      "message": "service access forbidden"
-                    }
-                  },
-                  "forbidden": {
-                    "summary": "Нет права действия",
-                    "value": {
-                      "code": "forbidden",
-                      "message": "чужой комментарий или у автора роль viewer."
-                    }
-                  }
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
                 }
               }
             }
           },
           "404": {
-            "description": "not_found: нет доступа владельца или адресного читателя, блокнот, ячейка или комментарий не найдены; ответы одинаковы.",
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5678,7 +5264,7 @@
       "delete": {
         "operationId": "deleteCellComment",
         "summary": "Удалить комментарий автора или владельцем блокнота",
-        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Без доступа владельца или адресного читателя (в том числе с доступом только по ссылке) — 404, даже для автора комментария. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Автор с текущей ролью commenter или владелец блокнота; читатель с ролью viewer не удаляет и свои комментарии. Физическое удаление; повтор возвращает 404.",
+        "description": "Текущий доступ проверяется на каждом запросе по правилам шэринга. Закрытый блокнот даёт 404, в том числе для автора. Комментарии не меняют hash/ETag, source, outputs и даты блокнота; If-Match не нужен. Все ответы no-store. Автор с текущим доступом или владелец блокнота. Физическое удаление; повтор возвращает 404.",
         "tags": [
           "notebooks"
         ],
@@ -5786,7 +5372,7 @@
             }
           },
           "403": {
-            "description": "Неверный X-BFF-Key; forbidden — чужой комментарий не у владельца или у автора роль viewer.",
+            "description": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -5804,27 +5390,15 @@
                 "schema": {
                   "$ref": "#/components/schemas/CommentError"
                 },
-                "examples": {
-                  "s2s_forbidden": {
-                    "summary": "Неверный X-BFF-Key",
-                    "value": {
-                      "code": "s2s_forbidden",
-                      "message": "service access forbidden"
-                    }
-                  },
-                  "forbidden": {
-                    "summary": "Нет права действия",
-                    "value": {
-                      "code": "forbidden",
-                      "message": "чужой комментарий не у владельца или у автора роль viewer."
-                    }
-                  }
+                "example": {
+                  "code": "s2s_forbidden",
+                  "message": "Неверный X-BFF-Key; для PATCH/DELETE также forbidden при чужом комментарии без права действия."
                 }
               }
             }
           },
           "404": {
-            "description": "not_found: нет доступа владельца или адресного читателя, блокнот, ячейка или комментарий не найдены; ответы одинаковы.",
+            "description": "Блокнот закрыт или отсутствует; ячейка/комментарий отсутствует либо принадлежит другой стене.",
             "headers": {
               "Cache-Control": {
                 "description": "Запрет кэширования данных и разрешений, включая ошибки.",
@@ -8394,7 +7968,6 @@
               "invalid_totp",
               "invalid_current_password",
               "rate_limited",
-              "unknown_login",
               "dependency_unavailable",
               "deadline_exceeded",
               "conflict",
@@ -8505,10 +8078,6 @@
             "type": "boolean",
             "description": "Разрешено читать и изменять настройки доступа."
           },
-          "can_comment": {
-            "type": "boolean",
-            "description": "Разрешено писать комментарии, править и удалять свои. Удалять чужие может только владелец."
-          },
           "can_clone": {
             "type": "boolean",
             "description": "Разрешено создать независимую копию."
@@ -8518,21 +8087,21 @@
           "is_owner",
           "can_edit",
           "can_manage_sharing",
-          "can_comment",
           "can_clone"
         ],
         "additionalProperties": false,
-        "description": "Права текущего посетителя: владелец — все true; читатель commenter — can_comment и can_clone; читатель viewer — только can_clone; посетитель только по публичной ссылке — все false."
+        "description": "Права текущего посетителя: владелец — все true; авторизованный читатель — только can_clone; аноним — все false."
       },
-      "ShareRole": {
+      "SharingMode": {
         "type": "string",
         "enum": [
-          "viewer",
-          "commenter"
+          "private",
+          "restricted",
+          "public"
         ],
-        "description": "Роль адресного читателя. viewer («Просмотр») читает блокнот и комментарии; commenter («Комментирование») также пишет комментарии, правит и удаляет свои. Редактирование документа и runtime остаются только у владельца."
+        "description": "Новые и существующие блокноты изначально private."
       },
-      "NotebookReader": {
+      "UserSuggestion": {
         "type": "object",
         "properties": {
           "id": {
@@ -8545,91 +8114,52 @@
             "minLength": 3,
             "maxLength": 32,
             "pattern": "^[a-zA-Z0-9_]+$"
-          },
-          "role": {
-            "$ref": "#/components/schemas/ShareRole"
           }
         },
         "required": [
           "id",
-          "login",
-          "role"
+          "login"
         ],
         "additionalProperties": false
-      },
-      "NotebookReaderInput": {
-        "type": "object",
-        "properties": {
-          "login": {
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 32,
-            "pattern": "^[a-zA-Z0-9_]+$"
-          },
-          "role": {
-            "$ref": "#/components/schemas/ShareRole"
-          }
-        },
-        "required": [
-          "login",
-          "role"
-        ],
-        "additionalProperties": false
-      },
-      "PublicLinkToken": {
-        "type": "string",
-        "minLength": 22,
-        "maxLength": 64,
-        "pattern": "^[A-Za-z0-9_-]+$",
-        "description": "Непрозрачный случайный токен публичной ссылки, не менее 128 бит энтропии. Не выводится из ID блокнота; адрес страницы собирает BFF.",
-        "examples": [
-          "7Kq2xVt9mPa4Lw8RcZ1nYb"
-        ]
       },
       "NotebookSharing": {
         "type": "object",
         "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/SharingMode"
+          },
           "readers": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/NotebookReader"
+              "$ref": "#/components/schemas/UserSuggestion"
             }
-          },
-          "link_token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "minLength": 22,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z0-9_-]+$",
-            "description": "Токен действующей публичной ссылки; null — ссылки нет."
           }
         },
         "required": [
-          "readers",
-          "link_token"
+          "mode",
+          "readers"
         ],
         "additionalProperties": false
       },
       "NotebookSharingInput": {
         "type": "object",
         "properties": {
-          "readers": {
-            "type": "array",
-            "maxItems": 100,
-            "items": {
-              "$ref": "#/components/schemas/NotebookReaderInput"
-            }
+          "mode": {
+            "$ref": "#/components/schemas/SharingMode"
           },
-          "link": {
-            "type": "boolean",
-            "description": "true — ссылка должна существовать (действующий токен сохраняется), false — удалить ссылку."
+          "reader_logins": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            }
           }
         },
         "required": [
-          "readers",
-          "link"
+          "mode",
+          "reader_logins"
         ],
         "additionalProperties": false
       },
@@ -8744,12 +8274,10 @@
             "description": "UTC. Каждый PATCH строго увеличивает дату минимум на микросекунду, даже с прежним текстом."
           },
           "can_edit": {
-            "type": "boolean",
-            "description": "Текущий пользователь — автор и владелец блокнота или читатель commenter. У viewer false, в том числе для своих."
+            "type": "boolean"
           },
           "can_delete": {
-            "type": "boolean",
-            "description": "Текущий пользователь — владелец блокнота либо автор с ролью commenter. У viewer false, в том числе для своих."
+            "type": "boolean"
           }
         },
         "required": [

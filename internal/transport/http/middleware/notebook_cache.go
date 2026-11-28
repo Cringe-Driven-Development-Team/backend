@@ -10,7 +10,7 @@ import (
 func NotebookCachePolicy(prefix string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if commentRoute(r, prefix) || strings.HasPrefix(r.URL.Path, prefix+"/shared/") {
+			if commentRoute(r, prefix) {
 				w.Header().Set("Cache-Control", "no-store")
 			}
 			if strings.HasPrefix(r.URL.Path, prefix+"/notebooks/") {
