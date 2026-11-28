@@ -2243,7 +2243,7 @@
             "headers": {}
           },
           "409": {
-            "description": "Редакция блокнота изменилась: notebook_conflict. Достигнут лимит 1000 блоков: validation_error.",
+            "description": "Редакция блокнота изменилась: notebook_conflict.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2263,6 +2263,34 @@
               }
             },
             "headers": {}
+          },
+          "413": {
+            "description": "Достигнут действующий лимит ячеек. Блокнот не изменён.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "too many cells"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OnlineConf или Identity недоступны. Блокнот не изменён.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "onlineconf_unavailable",
+                  "message": "OnlineConf unavailable"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2606,7 +2634,7 @@
             "headers": {}
           },
           "409": {
-            "description": "Хеш устарел: notebook_conflict, операция не применена. Получить актуальный блокнот через GET content и сверить локальные изменения. Для добавления также too_many_cells при лимите 1000.",
+            "description": "Хеш устарел: notebook_conflict, операция не применена. Получить актуальный блокнот через GET content и сверить локальные изменения.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2630,6 +2658,34 @@
               }
             },
             "headers": {}
+          },
+          "413": {
+            "description": "Достигнут действующий лимит ячеек. Блокнот не изменён.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "validation_error",
+                  "message": "too many cells"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OnlineConf или Identity недоступны. Блокнот не изменён.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "onlineconf_unavailable",
+                  "message": "OnlineConf unavailable"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3719,8 +3775,18 @@
             "description": "Авторизация отсутствует, истекла или отозвана"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden",
-            "description": "Неверный, отсутствующий или повторный X-BFF-Key"
+            "description": "Сервисная авторизация не пройдена или пакетный запуск отключён для пользователя.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeError"
+                },
+                "example": {
+                  "code": "forbidden",
+                  "message": "Batch execution disabled"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NotFound",
@@ -3739,8 +3805,18 @@
             "description": "Внутренняя ошибка, в том числе недоступность auth-хранилища Redis"
           },
           "503": {
-            "$ref": "#/components/responses/RuntimeUnavailable",
-            "description": "Runtime недоступен или создание новых окружений отключено"
+            "description": "Runtime или OnlineConf недоступны. Пакет не принят.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeError"
+                },
+                "example": {
+                  "code": "onlineconf_unavailable",
+                  "message": "OnlineConf unavailable"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -8025,7 +8101,9 @@
               "conflict",
               "queue_full",
               "runtime_unavailable",
-              "internal"
+              "internal",
+              "onlineconf_unavailable",
+              "forbidden"
             ]
           },
           "message": {
@@ -8650,7 +8728,8 @@
               "two_factor_required",
               "invalid_totp",
               "invalid_current_password",
-              "rate_limited"
+              "rate_limited",
+              "onlineconf_unavailable"
             ]
           },
           "message": {

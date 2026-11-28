@@ -3,7 +3,7 @@
   "info": {
     "title": "Cellestial OnlineConf API",
     "version": "1.0.0",
-    "description": "Внутренний административный HTTP API OnlineConf. Пути заданы от корня сервиса. Межсервисное подключение использует mTLS. Сервис проверяет X-BFF-Key, затем пользовательский Bearer-токен и роль onlineconf_admin в Identity, затем параметры и тело запроса. Продуктовый метод /api/v1/onlineconf/me роли не требует (backend#158)."
+    "description": "Внутренний HTTP API OnlineConf. Пути заданы от корня сервиса. Межсервисное подключение использует mTLS. Сервис проверяет X-BFF-Key, затем пользовательский Bearer-токен и роль onlineconf_admin в Identity, затем параметры и тело запроса. Продуктовый метод /api/v1/onlineconf/me роли не требует (backend#158)."
   },
   "tags": [
     {
@@ -588,7 +588,7 @@
     "/api/v1/onlineconf/me": {
       "get": {
         "summary": "Публичные настройки продукта для текущей сессии",
-        "description": "Продуктовый, не административный метод: роль onlineconf_admin не нужна. Вызывают доверенные BFF (X-BFF-Key) и Workspace с Bearer пользователя; пользователь определяется по сессии в Identity, user_id и параметр экрана не принимаются. Возвращает только два публичных значения — без правил, процентов, списков пользователей и произвольных ключей.",
+        "description": "Продуктовый, не административный метод: роль onlineconf_admin не нужна. Вызывают доверенные BFF (X-BFF-Key) и Workspace (X-Workspace-Key) с Bearer пользователя; пользователь определяется по сессии в Identity, user_id и параметр экрана не принимаются. Возвращает только два публичных значения — без правил, процентов, списков пользователей и произвольных ключей.",
         "operationId": "getProductSettings",
         "tags": [
           "product"
@@ -620,7 +620,17 @@
           "503": {
             "$ref": "#/components/responses/SnapshotUnavailable"
           }
-        }
+        },
+        "security": [
+          {
+            "bffKey": [],
+            "sessionBearer": []
+          },
+          {
+            "workspaceKey": [],
+            "sessionBearer": []
+          }
+        ]
       }
     }
   },
@@ -636,6 +646,17 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Пользовательский access-токен с ролью onlineconf_admin."
+      },
+      "workspaceKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Workspace-Key",
+        "description": "Сервисный ключ Workspace для продуктового метода."
+      },
+      "sessionBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Access-токен текущей пользовательской сессии. Проверяется в Identity."
       }
     },
     "schemas": {

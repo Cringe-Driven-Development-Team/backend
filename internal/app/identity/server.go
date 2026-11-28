@@ -40,7 +40,7 @@ func newRPCServer(c SessionConfig, verifier grpcdelivery.SessionVerifier, logger
 	if err != nil {
 		return nil, err
 	}
-	allowed := map[string][]string{identityv1.Session_ValidateSession_FullMethodName: {"workspace.internal.cellestial.ru"}}
+	allowed := map[string][]string{identityv1.Session_ValidateSession_FullMethodName: {"workspace.internal.cellestial.ru", "onlineconf.internal.cellestial.ru"}}
 	if users != nil {
 		allowed[identityv1.Users_BatchGetUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru", "onlineconf.internal.cellestial.ru"}
 		allowed[identityv1.Users_BatchResolveUsers_FullMethodName] = []string{"workspace.internal.cellestial.ru", "onlineconf.internal.cellestial.ru"}

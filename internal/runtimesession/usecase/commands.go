@@ -24,6 +24,15 @@ func (s *Service) ExecuteBatch(ctx context.Context, owner int64, id uuid.UUID, r
 	if err := r.Validate(); err != nil {
 		return D.Batch{}, err
 	}
+	if s.runAll != nil {
+		enabled, err := s.runAll(ctx)
+		if err != nil {
+			return D.Batch{}, err
+		}
+		if !enabled {
+			return D.Batch{}, D.ErrRunAllDisabled
+		}
+	}
 	return s.store.AdmitBatch(ctx, owner, id, r)
 }
 

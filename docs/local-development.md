@@ -209,3 +209,22 @@ AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=devkey AWS_SECRET_ACCESS_KEY=devsecret \
 Для файлового интерфейса нужен дисковый WORKSPACE_PATH из infra #161. Подготовка
 каталогов, контракт и дополнительные проверки описаны в
 [руководстве workspace](workspace-files.md).
+
+### Продуктовые настройки OnlineConf
+
+BFF вызывает `GET /api/v1/onlineconf/me` с `X-BFF-Key` и пользовательским
+`Authorization: Bearer …`. Workspace самостоятельно вызывает тот же метод с
+`X-Workspace-Key` и Bearer текущего запроса. Для Workspace задайте
+`ONLINECONF_URL` (внутренний базовый URL OnlineConf) и один и тот же
+`ONLINECONF_WORKSPACE_KEY` в Workspace и OnlineConf. Используйте отдельный
+сервисный секрет и защищённый внутренний канал между сервисами. Identity
+проверяет действительность сессии по gRPC. Доступ к административным
+методам по-прежнему требует ключа BFF и роли `onlineconf_admin`.
+
+Настройки читаются из одного свежего Redis-снимка OnlineConf. Снижение
+`bff.notebook_max_cells` ограничивает новые вставки, сохраняя существующие
+ячейки. Флаг `workspace.notebook_run_all` управляет приёмом новых пакетов.
+При недоступности снимка или OnlineConf эти операции возвращают
+`503 onlineconf_unavailable`. Для проверки измените оба ключа в админке,
+опросите продуктовый метод под той же сессией и повторите операции Workspace.
+Новые значения должны появиться в течение 60 секунд.

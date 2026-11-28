@@ -15,6 +15,7 @@ import (
 
 // Config содержит только зависимости Workspace и адреса двух удалённых сервисов.
 type Config struct {
+	OnlineConfURL, OnlineConfKey            string
 	HTTPAddr, GRPCAddr, AdminAddr           string
 	IdentityAddr, EnvironmentsAddr          string
 	DatabaseURL, BFFKey, CursorKey, Version string
@@ -35,6 +36,7 @@ func LoadConfig(lookup func(string) (string, bool)) (Config, error) {
 	c := Config{
 		HTTPAddr: get("HTTP_ADDR", ":8080"), GRPCAddr: get("GRPC_ADDR", ":9090"), AdminAddr: get("ADMIN_ADDR", ":9091"),
 		IdentityAddr: get("IDENTITY_GRPC_ADDR", ""), EnvironmentsAddr: get("ENVIRONMENTS_GRPC_ADDR", ""),
+		OnlineConfURL: get("ONLINECONF_URL", ""), OnlineConfKey: get("ONLINECONF_WORKSPACE_KEY", ""),
 		DatabaseURL: get("DATABASE_URL", ""), BFFKey: get("BFF_API_KEY", ""), CursorKey: get("WORKSPACE_CURSOR_KEY", ""), Version: get("VERSION", "local"),
 		TLS: mtls.Config{CertFile: get("TLS_CERT_FILE", ""), KeyFile: get("TLS_KEY_FILE", ""), CAFile: get("TLS_CA_FILE", "")},
 	}

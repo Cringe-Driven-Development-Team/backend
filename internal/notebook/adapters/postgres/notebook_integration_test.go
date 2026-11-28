@@ -504,3 +504,51 @@ func TestResultOverwritePreservesAttachments(t *testing.T) {
 		t.Fatal("invalid result changed current data")
 	}
 }
+
+// TestProductCellLimit проверяет общий лимит для двух путей добавления под блокировкой.
+func TestProductCellLimit(t *testing.T) {
+	repo, _ := testRepository(t)
+	ctx := t.Context()
+	limit := 3
+	uc := usecase.NewNotebookUsecase(repo, usecase.NoActiveSessions{}, nil,
+		usecase.WithCellLimit(func(context.Context) (int, error) { return limit, nil }))
+	book, err := uc.Create(ctx, 1, "limit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := uc.AddCell(ctx, book.ID, 1, book.Revision, domain.CellKindCode, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := make(chan error, 2)
+	go func() {
+		_, createErr := uc.CreateCell(ctx, book.ID, 1, second.Hash, domain.CellKindCode, nil)
+		results <- createErr
+	}()
+	go func() {
+		_, addErr := uc.AddCell(ctx, book.ID, 1, second.Hash, domain.CellKindCode, "", nil)
+		results <- addErr
+	}()
+	a, b := <-results, <-results
+	if b == nil {
+		a, b = b, a
+	}
+	if a != nil || !errors.Is(b, usecase.ErrTooManyCells) {
+		t.Fatalf("concurrent results = %v, %v", a, b)
+	}
+	limit = 2
+	content, err := uc.Content(ctx, book.ID, 1)
+	if err != nil || len(content.Cells) != 3 {
+		t.Fatalf("content = %+v, %v", content, err)
+	}
+	if _, err := uc.CreateCell(ctx, book.ID, 1, content.Hash, domain.CellKindCode, nil); !errors.Is(err, usecase.ErrTooManyCells) {
+		t.Fatal(err)
+	}
+	if _, err := uc.AddCell(ctx, book.ID, 1, content.Hash, domain.CellKindCode, "", nil); !errors.Is(err, usecase.ErrTooManyCells) {
+		t.Fatal(err)
+	}
+	limit = 4
+	if _, err := uc.AddCell(ctx, book.ID, 1, content.Hash, domain.CellKindCode, "", nil); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	identityv1 "github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/gen/cellestial/identity/v1"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/middleware"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
@@ -15,11 +16,14 @@ import (
 )
 
 // newRouter закрывает всю административную ветку проверкой сессии и роли в Identity.
-func newRouter(identity identityv1.OnlineConfAccessClient, admin *http.ServeMux, bffKey string) http.Handler {
+func newRouter(identity identityv1.OnlineConfAccessClient, admin *http.ServeMux, bffKey string, product ...http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	if len(product) > 0 {
+		mux.Handle("GET "+productconfig.Path, product[0])
+	}
 	protected := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		values := r.Header.Values("Authorization")
 		if len(values) != 1 {
@@ -54,7 +58,7 @@ func newRouter(identity identityv1.OnlineConfAccessClient, admin *http.ServeMux,
 	mux.Handle("/admin/", requireAccess)
 	route := func(r *http.Request) string {
 		_, pattern := admin.Handler(r)
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" || r.URL.Path == productconfig.Path {
 			_, pattern = mux.Handler(r)
 		}
 		if pattern == "" {

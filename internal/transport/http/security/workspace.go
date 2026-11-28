@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/authn"
+	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/productconfig"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/api"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/httperr"
 	"github.com/go-park-mail-ru/2026_2_Cringe_Driven_Development/internal/transport/http/principal"
@@ -21,7 +22,7 @@ func AuthenticateWorkspace(verifier authn.SessionVerifier) func(http.Handler) ht
 				next.ServeHTTP(w, r.WithContext(authn.WithPrincipal(r.Context(), authn.Principal{Anonymous: true})))
 				return
 			}
-			token := workspaceBearer(values)
+			token := BearerToken(values)
 			if token == "" {
 				httperr.Write(w, http.StatusUnauthorized, api.ErrorCodeUnauthorized, "authentication required")
 				return
@@ -38,14 +39,14 @@ func AuthenticateWorkspace(verifier authn.SessionVerifier) func(http.Handler) ht
 				httperr.Write(w, http.StatusServiceUnavailable, "dependency_unavailable", "session dependency unavailable")
 			default:
 				ctx := authn.WithPrincipal(r.Context(), p)
-				next.ServeHTTP(w, r.WithContext(principal.WithUserID(ctx, p.UserID)))
+				next.ServeHTTP(w, r.WithContext(principal.WithUserID(productconfig.WithBearer(ctx, token), p.UserID)))
 			}
 		})
 	}
 }
 
-// workspaceBearer принимает ровно один Bearer без встроенных пробельных символов.
-func workspaceBearer(values []string) string {
+// BearerToken принимает ровно один Bearer без встроенных пробельных символов.
+func BearerToken(values []string) string {
 	if len(values) != 1 {
 		return ""
 	}

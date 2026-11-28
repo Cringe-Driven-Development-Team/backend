@@ -71,11 +71,14 @@ gRPC проверяет независимый CA и service identity. На се
 | Семейство | Labels поверх scrape labels |
 | --- | --- |
 | `cellestial_http_requests_total`, `cellestial_http_request_duration_seconds`, `cellestial_http_stream_errors_total` | `method`, `route`, `status_code`. Ошибка после отправки заголовков учитывается в отдельном счётчике с фактическим статусом. |
-| `cellestial_http_client_requests_total`, `cellestial_http_client_request_duration_seconds` | `dependency` (`s3`, `openstack`, `jupyter`), `operation`, `method`, `status_code`. `0` означает транспортную ошибку до получения ответа. |
+| `cellestial_http_client_requests_total`, `cellestial_http_client_request_duration_seconds` | `dependency` (`s3`, `openstack`, `jupyter`, `onlineconf`), `operation`, `method`, `status_code`. `0` означает транспортную ошибку до получения ответа. |
 | `cellestial_http_client_response_body_duration_seconds` | Те же HTTP client labels и `outcome`. Отдельное время от заголовков до EOF, ошибки чтения или закрытия тела. `closed` означает закрытие без наблюдавшегося EOF и само по себе не является ошибкой. Для Jupyter учитывается чтение JSON-ответов, WebSocket остаётся в метриках HTTP handshake. |
 | `cellestial_grpc_calls_total`, `cellestial_grpc_call_duration_seconds`, `cellestial_grpc_stream_duration_seconds` | `grpc_service`, `grpc_method`, `grpc_code`, `rpc_type=unary\|stream`, `rpc_side=client\|server`. Код отмены `Canceled`, успех `OK`. Клиент считает логический вызов целиком, сервер учитывает каждый дошедший вызов. |
 | `cellestial_grpc_active_streams`, `cellestial_grpc_stream_messages_total`, `cellestial_grpc_stream_message_bytes_total` | `grpc_service`, `grpc_method`, `rpc_type`, `rpc_side`. Счётчики сообщений и несжатых protobuf bytes также имеют `direction=sent\|received` относительно процесса. |
 | `cellestial_runtime_target_info` | `server_id`, `state=creating\|warm\|active\|cleanup\|deleting\|failed`. Назначенную VPS показывает только запись окружения. Запись пула в состоянии `CLAIMED` исключена. |
+
+Workspace измеряет чтение настроек OnlineConf с метками `dependency="onlineconf"`
+и `operation="get_settings"`.
 
 HTTP использует шаблон вроде `/api/v1/notebooks/{id}/content`; неизвестный
 путь получает `unmatched`, нестандартный метод — `other`. Для gRPC

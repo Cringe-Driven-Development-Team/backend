@@ -136,7 +136,7 @@ func TestEditingHTTPMapsFailures(t *testing.T) {
 	}
 	f := &editingFake{err: usecase.ErrTooManyCells}
 	rec := editingRequest(t, f, "POST", "/cells", `{"kind":"code","source":""}`, []string{`"hash"`}, true)
-	if rec.Code != 409 || !strings.Contains(rec.Body.String(), `"too_many_cells"`) {
+	if rec.Code != 413 || !strings.Contains(rec.Body.String(), `"validation_error"`) {
 		t.Fatalf("limit: %d %s", rec.Code, rec.Body)
 	}
 	f = &editingFake{err: usecase.ErrNotebookNotFound}

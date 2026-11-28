@@ -16,7 +16,8 @@ type Service struct {
 	// now Подменяемые часы для воспроизводимого поведения.
 	now Clock
 	// agent Внутренний клиент агента.
-	agent SessionAgent
+	agent  SessionAgent
+	runAll func(context.Context) (bool, error)
 }
 
 // NewService собирает сценарии runtime-сессий из портов хранилища, агента и управляемых часов.
@@ -28,7 +29,13 @@ func NewService(s Store, now Clock, agents ...SessionAgent) *Service {
 	if len(agents) > 0 {
 		agent = agents[0]
 	}
-	return &Service{s, now, agent}
+	return &Service{store: s, now: now, agent: agent}
+}
+
+// WithRunAll задаёт чтение флага перед приёмом пакета и возвращает сервис.
+func (s *Service) WithRunAll(read func(context.Context) (bool, error)) *Service {
+	s.runAll = read
+	return s
 }
 
 // Start проверяет параметры и сохраняет намерение запуска пользовательской сессии до подготовки VPS.
