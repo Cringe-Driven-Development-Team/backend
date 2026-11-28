@@ -67,3 +67,44 @@ func TestFlagRollout(t *testing.T) {
 		t.Fatal("bucket for frontend.example and user 2 must be 39")
 	}
 }
+
+func TestEvaluateFlagReasons(t *testing.T) {
+	for _, tc := range []struct {
+		name, enabled, percent string
+		userID                 int64
+		want                   bool
+		reason                 string
+	}{
+		{"disabled overrides inclusion", "false", "100", 1, false, "disabled"},
+		{"excluded at 100 percent", "true", "100", 3, false, "excluded"},
+		{"included at zero percent", "true", "0", 1, true, "included"},
+		{"ordinary at zero percent", "true", "0", 2, false, "rollout"},
+		{"ordinary at 100 percent", "true", "100", 2, true, "rollout"},
+		{"bucket equal to percent", "true", "39", 2, false, "rollout"},
+		{"bucket below percent", "true", "40", 2, true, "rollout"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flag := keyRecord{Name: "frontend.example", Type: "flag", Data: map[string]json.RawMessage{
+				"enabled": json.RawMessage(tc.enabled), "rollout_percent": json.RawMessage(tc.percent),
+				"include_users": json.RawMessage(`[{"id":1}]`), "exclude_users": json.RawMessage(`[{"id":3}]`),
+			}}
+			got, err := flag.evaluateFlag(tc.userID)
+			if err != nil || got.Enabled != tc.want || string(got.Reason) != tc.reason {
+				t.Fatalf("decision = %+v, %v, want %t %s", got, err, tc.want, tc.reason)
+			}
+		})
+	}
+
+	for _, flag := range []keyRecord{
+		{Type: "config"},
+		{Type: "flag", Data: map[string]json.RawMessage{"enabled": json.RawMessage(`"true"`)}},
+		{Type: "flag", Data: map[string]json.RawMessage{
+			"enabled": json.RawMessage("true"), "rollout_percent": json.RawMessage("101"),
+			"exclude_users": json.RawMessage("[]"), "include_users": json.RawMessage("[]"),
+		}},
+	} {
+		if _, err := flag.evaluateFlag(2); err == nil {
+			t.Fatalf("invalid entry accepted: %+v", flag)
+		}
+	}
+}

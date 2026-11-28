@@ -97,7 +97,7 @@ func TestProductSettingsRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	defer cancel()
-	router := newRouter(testAdmin{}, newKeysHandler(store, &testDirectory{}, refresher.RequestRefresh), "bff", product)
+	router := newRouter(testAdmin{}, newKeysHandler(store, &testDirectory{}, refresher.RequestRefresh, cache.ProductView), "bff", product)
 	request := func(method, path, token, header, key, body string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

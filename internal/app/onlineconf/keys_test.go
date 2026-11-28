@@ -8,7 +8,7 @@ import (
 
 // TestUpdateValidation проверяет отклонение запроса до обращения к зависимостям.
 func TestUpdateValidation(t *testing.T) {
-	h := newKeysHandler(nil, nil, nil)
+	h := newKeysHandler(nil, nil, nil, nil)
 	for _, body := range []string{
 		`{"description":"","enabled":true,"rollout_percent":101,"include_user_ids":[],"exclude_user_ids":[]}`,
 		`{"description":"","enabled":true,"rollout_percent":25,"include_user_ids":[42],"exclude_user_ids":[42]}`,
