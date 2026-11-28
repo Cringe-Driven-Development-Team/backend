@@ -171,7 +171,8 @@ workspace-http-check: $(REDOCLY)
 
 contract-generate-services: identity-http workspace-http
 
-contract-check-services: identity-http-check workspace-http-check
+contract-check-services: identity-http-check workspace-http-check $(REDOCLY)
+	$(REDOCLY) lint spec/onlineconf/openapi.json --config spec/redocly.yaml
 	$(GO) test ./internal/contracttests -run TestHTTP -count=1
 
 identity-proto-check:
