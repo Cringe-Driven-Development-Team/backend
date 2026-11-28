@@ -21,6 +21,39 @@ def tag_sha(tag):
     return tag[8:]
 
 
+def first_parent_main(directory='.'):
+    """Возвращает SHA основной цепочки origin/main от новых к старым.
+
+    directory — checkout, в котором CD перед выбором обновил refs/remotes/origin/main.
+    """
+    lines = subprocess.run(['git', 'rev-list', '--first-parent', 'refs/remotes/origin/main'], cwd=directory,
+                           check=True, capture_output=True, text=True, timeout=60).stdout.split()
+    return [validate_sha(sha) for sha in lines]
+
+
+def select_release(api, requested, history=None):
+    """Выбирает SHA выпуска для CD и признак автоматического выбора.
+
+    requested — ввод release_tag: непустой (после обрезки пробелов) задаёт точный тег
+    release-<SHA>; пустой выбирает первый commit основной цепочки main с опубликованным
+    Release. Draft и prerelease не рассматриваются; порядок публикации и отметка Latest
+    не влияют. Проверки самого Release выполняет resolve: повреждённый выбранный выпуск
+    не подменяется более старым.
+    """
+    requested = (requested or '').strip()
+    if requested:
+        return tag_sha(requested), False
+    tags = [row.get('tag_name') for row in api.pages('/releases?per_page=100')
+            if row.get('draft') is False and row.get('prerelease') is False]
+    for sha in (history or first_parent_main)():
+        count = tags.count('release-' + sha)
+        if count > 1:
+            raise ReleaseError(f'Several Releases for {sha}; the latest release is ambiguous')
+        if count:
+            return sha, True
+    raise ReleaseError('No published Release on the first-parent history of main')
+
+
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()

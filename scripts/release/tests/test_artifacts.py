@@ -54,6 +54,63 @@ import os
 import subprocess
 from release import HistoricalRunMissing
 
+class Selection(unittest.TestCase):
+    """Выбор выпуска CD: точный тег или первый опубликованный Release основной цепочки main."""
+
+    def api(self, rows, page_size=2):
+        class Pages:
+            calls = []
+
+            def pages(self, path):
+                self.calls.append(path)
+                # Несколько страниц склеивает GitHub.pages; здесь проверяем, что учтены все строки.
+                return [row for start in range(0, len(rows), page_size) for row in rows[start:start + page_size]]
+        return Pages()
+
+    def release(self, sha, draft=False, prerelease=False):
+        return {'tag_name': 'release-' + sha, 'draft': draft, 'prerelease': prerelease}
+
+    def test_explicit_tag_is_trimmed_and_exact(self):
+        api = self.api([])
+        self.assertEqual(a.select_release(api, '  release-' + SHA + '\n', lambda: []), (SHA, False))
+        for wrong in ['release-' + SHA[:-1], 'main', 'release-' + 'A' * 40]:
+            with self.assertRaises(ReleaseError):
+                a.select_release(api, wrong, lambda: [SHA])
+        self.assertEqual(api.calls, [])
+
+    def test_empty_input_selects_first_published_release_on_the_main_chain(self):
+        head, middle, old, side = 'f' * 40, 'e' * 40, 'c' * 40, 'b' * 40
+        # Старый commit опубликован позже, side — вне первой родительской цепочки, HEAD без Release
+        rows = [self.release(old), self.release(side), self.release(middle, draft=True),
+                self.release(middle, prerelease=True), self.release(head, draft=True), self.release(middle)]
+        for value in ('', '   ', None):
+            with self.subTest(value=value):
+                self.assertEqual(a.select_release(self.api(rows), value, lambda: [head, middle, old]), (middle, True))
+
+    def test_missing_or_ambiguous_release_stops(self):
+        with self.assertRaises(ReleaseError):
+            a.select_release(self.api([self.release(SHA, draft=True)]), '', lambda: [SHA])
+        with self.assertRaises(ReleaseError):
+            a.select_release(self.api([self.release(SHA), self.release(SHA)]), '', lambda: [SHA])
+
+    def test_first_parent_history_skips_merged_branch_commits(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            git = lambda *args: subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *args], cwd=d,
+                                               check=True, capture_output=True, text=True).stdout.strip()
+            git('init', '-q', '-b', 'main')
+            git('commit', '-q', '--allow-empty', '-m', 'base')
+            git('switch', '-q', '-c', 'topic')
+            git('commit', '-q', '--allow-empty', '-m', 'topic')
+            topic = git('rev-parse', 'HEAD')
+            git('switch', '-q', 'main')
+            git('merge', '-q', '--no-ff', '-m', 'merge', 'topic')
+            git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+            chain = a.first_parent_main(d)
+            self.assertEqual(len(chain), 2)
+            self.assertNotIn(topic, chain)
+
+
 class ReleaseAPI:
     prefix = '/repos/' + a.REPOSITORY
     def __init__(self):
