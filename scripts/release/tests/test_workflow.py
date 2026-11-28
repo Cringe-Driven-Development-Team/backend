@@ -194,7 +194,7 @@ git() {
                 self.assertIn('deploy-backend.yml',command)
                 extra=json.loads(Path(command[command.index('-e')+1][1:]).read_text())
                 self.assertEqual(extra['backend_image_ref'],D)
-                current=json.loads(Path(d+'/state').read_text());current['checks']['switch']='passed';r.save(d+'/state',current)
+                current=json.loads(Path(d+'/state').read_text());current['checks']['image']='passed';r.save(d+'/state',current)
                 return subprocess.CompletedProcess(command,0)
             r.save(d+'/state',state)
             with patch.dict(os.environ,env,clear=True),patch.object(r.subprocess,'check_output',side_effect=['b'*40,'c'*40]),patch.object(r.subprocess,'run',side_effect=switch) as process:

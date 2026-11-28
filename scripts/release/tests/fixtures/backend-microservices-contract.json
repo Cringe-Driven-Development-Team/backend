@@ -142,13 +142,11 @@
     "checks": {
       "identity": {
         "image": "passed",
-        "ready": "passed",
-        "smoke": "passed"
+        "ready": "passed"
       },
       "workspace": {
         "image": "passed",
-        "ready": "passed",
-        "smoke": "passed"
+        "ready": "passed"
       }
     }
   },

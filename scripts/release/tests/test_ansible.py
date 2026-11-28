@@ -16,16 +16,20 @@ class RealCallback(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);tasks=root/'roles/app/tasks';tasks.mkdir(parents=True)
             state=root/'state.json';r.save(state,r.initial_state('deploy',10,1))
-            (tasks/'check-backend-image.yml').write_text('- name: Backend image check\n  ansible.builtin.assert:\n    that: true\n')
-            (tasks/'probe-backend.yml').write_text('- name: Backend internal HTTP check\n  ansible.builtin.assert:\n    that: true\n')
-            (tasks/'probe-bff.yml').write_text('- name: Backend external BFF check\n  ansible.builtin.assert:\n    that: false\n')
+            image = 'sha256:' + 'a' * 64
+            (tasks/'check-backend-image.yml').write_text(f'''- name: Read the backend container image and health
+  ansible.builtin.command: "echo {image} true unhealthy"
+- name: Read the local ID of the selected backend digest
+  ansible.builtin.command: "echo {image}"
+- name: Backend image check
+  ansible.builtin.assert:
+    that: false
+''')
             play=root/'play.yml';play.write_text('''- hosts: localhost
   connection: local
   gather_facts: false
   tasks:
     - ansible.builtin.import_tasks: roles/app/tasks/check-backend-image.yml
-    - ansible.builtin.import_tasks: roles/app/tasks/probe-backend.yml
-    - ansible.builtin.import_tasks: roles/app/tasks/probe-bff.yml
 ''')
             env=dict(os.environ,ANSIBLE_LOCAL_TEMP=str(root/'local'),ANSIBLE_REMOTE_TEMP=str(root/'remote'),
                      ANSIBLE_CALLBACK_PLUGINS=str(Path(__file__).resolve().parents[1]/'callback_plugins'),ANSIBLE_CALLBACKS_ENABLED='backend_result',
@@ -33,7 +37,4 @@ class RealCallback(unittest.TestCase):
             result=subprocess.run(['ansible-playbook','-i','localhost,',str(play)],env=env,capture_output=True,timeout=30)
             self.assertNotEqual(result.returncode,0)
             actual=json.loads(state.read_text())
-            self.assertEqual(actual['checks']['switch'],'passed',result.stdout.decode()+result.stderr.decode())
-            self.assertEqual(actual['checks']['internal'],'passed')
-            self.assertEqual(actual['checks']['external'],'failed')
-            self.assertEqual(actual['checks']['routes'],'not_run')
+            self.assertEqual(actual['checks'], {'image': 'passed', 'ready': 'failed'})

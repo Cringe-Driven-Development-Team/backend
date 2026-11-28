@@ -17,7 +17,7 @@ PACKAGE = 'ghcr.io/cringe-driven-development-team/backend'
 RUN_ROOT = f'https://github.com/{REPOSITORY}/actions/runs/'
 if __name__ == '__main__':
     sys.modules['release'] = sys.modules[__name__]
-CHECKS = ('switch', 'image', 'internal', 'external', 'routes')
+CHECKS = ('image', 'ready')
 
 
 class ReleaseError(Exception):
@@ -76,7 +76,7 @@ def initial_state(action, run_id, attempt):
 
 
 def outcome(state):
-    if (state['ansible_rc'] == 0 or state.get('mandatory_complete')) and all(state['checks'].get(x) == 'passed' for x in CHECKS):
+    if state['ansible_rc'] == 0 and all(state['checks'].get(x) == 'passed' for x in CHECKS):
         return 'success'
     if any(value == 'failed' for value in state['checks'].values()):
         return 'failure'
@@ -289,9 +289,9 @@ def summary(state, api=None):
              '- Deployment ID: ' + str(state.get('deployment_id') or 'не создан'),
              '- Записанный terminal status: ' + str(state.get('terminal_status') or 'не подтверждён'),
              '- Ошибка регистрации результата: ' + str(state.get('registration_error') or 'нет'),
-             '- Состояние: ' + ('проверено' if outcome(state) == 'success' else 'выбранная версия запущена на этапе переключения; итоговое состояние неизвестно' if state['checks']['switch'] == 'passed' else 'неизвестно; подтверждённые этапы ниже'),
+             '- Состояние: ' + ('проверено' if outcome(state) == 'success' else 'выбранная версия запущена на этапе переключения; итоговое состояние неизвестно' if state['checks']['image'] == 'passed' else 'неизвестно; подтверждённые этапы ниже'),
              '', '| Проверка | Результат |', '| --- | --- |']
-    labels = {'switch': 'Switch backend', 'image': 'Выбранный образ и healthy контейнер', 'internal': 'Внутренний Go с gateway', 'external': 'Внешний BFF → Go → PostgreSQL', 'routes': 'Закрытость публичных Go-маршрутов'}
+    labels = {'image': 'Образ запущенного контейнера', 'ready': 'Локальная готовность контейнера'}
     lines.extend(f'| {labels[k]} | {state["checks"][k]} |' for k in CHECKS)
     lines += ['', 'Health Check: ' + ('✅' if outcome(state) == 'success' else '❌' if outcome(state) == 'failure' else '⚪'),
               'Не проверяет успешную пользовательскую сессию, Redis или runtime-VPS.', '',
@@ -405,7 +405,9 @@ def main(argv=None):
             if not state.get('started'):
                 raise ReleaseError('Deployment in_progress not confirmed')
             source_guard(state['action'])
-            state['checks']['switch'] = 'unknown'; save(path, state)
+            state['checks'] = dict.fromkeys(CHECKS, 'unknown')
+            for key in ('running_image_id', 'selected_image_id'):
+                state.pop(key, None)
             state['infra_sha'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=os.environ['ANSIBLE_DIR'], text=True).strip()
             save(path, state)
             env = dict(os.environ)
@@ -420,7 +422,7 @@ def main(argv=None):
             state = json.loads(path.read_text())
             state['ansible_rc'] = completed.returncode
             save(path, state)
-            if state['checks']['switch'] != 'passed':
+            if completed.returncode != 0 or state['checks']['image'] != 'passed':
                 raise ReleaseError('Backend switch not confirmed; see Ansible logs')
         elif args.command == 'health':
             if outcome(state) != 'success':
