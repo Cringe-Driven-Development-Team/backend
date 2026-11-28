@@ -71,9 +71,19 @@ AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=devkey AWS_SECRET_ACCESS_KEY=devsecret \
 ```
 
 Подставьте значения своего Compose, если меняли порт, бакет или ключи.
-Проверка записывает небольшой файл, сравнивает байты после чтения и ожидает HTTP 403
-на анонимный GET того же объекта. Объект остаётся под уникальным ключом
-`smoke/private-files/`, который тест печатает. Его можно убрать ключом оператора.
+Проверка загружает JPEG и текстовый файл через подписанный PUT, сверяет размер
+через HEAD и скачивает оригиналы через подписанный GET. Ссылки действуют две минуты.
+Тест проверяет заголовок `Content-Disposition: attachment`, отказ 403 для
+анонимного GET и отдельное JPEG-превью с длинной стороной 512 пикселей.
+Тест печатает ключи объектов под `smoke/private-files/`. Их можно убрать ключом
+оператора.
+
+После выкладки backend и правил CSP/CORS из [infra#195](https://github.com/Cringe-Driven-Development-Team/infra/pull/195)
+проверьте PUT со страницы `https://cellestial.ru` по свежей ссылке, выданной Go.
+Отправляйте запрос с `credentials: "omit"` и `Content-Type: application/octet-stream`.
+В инструментах браузера проверьте, что preflight разрешает PUT и этот заголовок,
+загрузка возвращает 2xx, а origin ссылки — `https://cellestial-private-files-0.s3.ru-7.storage.selcloud.ru`.
+Для отчёта запишите origin и статусы ответов.
 
 ## Агент исполнения Python
 
